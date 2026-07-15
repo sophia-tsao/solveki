@@ -12,6 +12,7 @@ class Course(models.Model):
 class Topic(models.Model):
     topic_name = models.CharField()
     course = models.ForeignKey('Course', blank=True, null=True, on_delete=models.SET_NULL, related_name="topics")
+    is_selected = models.BooleanField(default=False)
 
     def __str__(self):
         return self.topic_name

@@ -55,6 +55,22 @@
     width: fit-content;
 }
 
+/* Right side of header: checkbox + chevron */
+.course-bar-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.course-bar-checkbox {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563eb;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 /* Chevron icon */
 .course-bar-chevron {
     flex-shrink: 0;
@@ -105,18 +121,35 @@
 .course-bar-topics li {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     font-size: 13.5px;
     color: #374151;
+    padding-right: 2px;
 }
 
-.course-bar-topics li::before {
+.topic-name {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.topic-name::before {
     content: '';
     display: inline-block;
     width: 6px;
     height: 6px;
     border-radius: 50%;
     background: #2563eb;
+    flex-shrink: 0;
+}
+
+.topic-checkbox {
+    width: 15px;
+    height: 15px;
+    accent-color: #2563eb;
+    cursor: pointer;
     flex-shrink: 0;
 }
 

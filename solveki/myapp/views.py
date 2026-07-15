@@ -2,8 +2,11 @@ from django.shortcuts import render
 from django.http import HttpResponse
 from .models import Course, Topic
 from django.http import JsonResponse
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from mathgenerator import gen_by_name, get_gen_list
 import random
+import json
 # Create your views here.
 
 def index(request):
@@ -15,6 +18,29 @@ def view_course_topics(request, courseID):
     # Returns topics for specific course
     topics = list(Course.objects.get(id=courseID).topics.all().values())
     return JsonResponse({"topics":topics})
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def toggle_topic(request, topicID):
+    try:
+        topic = Topic.objects.get(id=topicID)
+    except Topic.DoesNotExist:
+        return JsonResponse({"error": "Topic not found"}, status=404)
+    body = json.loads(request.body)
+    topic.is_selected = body["is_selected"]
+    topic.save(update_fields=["is_selected"])
+    return JsonResponse({"id": topic.id, "is_selected": topic.is_selected})
+
+@csrf_exempt
+@require_http_methods(["PATCH"])
+def set_course_topics_selected(request, courseID):
+    try:
+        course = Course.objects.get(id=courseID)
+    except Course.DoesNotExist:
+        return JsonResponse({"error": "Course not found"}, status=404)
+    body = json.loads(request.body)
+    course.topics.all().update(is_selected=body["is_selected"])
+    return JsonResponse({"course_id": courseID, "is_selected": body["is_selected"]})
+
 def generate_problem(request):
     gen_list = get_gen_list()
     name, _ = random.choice(gen_list)

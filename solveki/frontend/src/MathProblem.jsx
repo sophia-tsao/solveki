@@ -25,7 +25,7 @@ function MathProblem() {
   const [error, setError] = useState(null);
   const fetchMathProblem = async () => {
     try {
-      const response = await fetch('/problem/');
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/problem/`);
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
