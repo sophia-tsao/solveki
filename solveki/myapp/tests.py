@@ -20,10 +20,14 @@ class ToggleTopicTests(TestCase):
         self.assertTrue(data["is_selected"])
         self.topic.refresh_from_db()
         self.assertTrue(self.topic.is_selected)
+        self.course.refresh_from_db()
+        self.assertTrue(self.course.is_selected)
 
-    def test_deselect_topic(self):
+    def test_deselect_topic_unchecks_course(self):
         self.topic.is_selected = True
         self.topic.save()
+        self.course.is_selected = True
+        self.course.save()
         response = self.client.patch(
             f"/topics/{self.topic.id}/select",
             data=json.dumps({"is_selected": False}),
@@ -32,6 +36,18 @@ class ToggleTopicTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.topic.refresh_from_db()
         self.assertFalse(self.topic.is_selected)
+        self.course.refresh_from_db()
+        self.assertFalse(self.course.is_selected)
+
+    def test_course_not_selected_when_only_some_topics_selected(self):
+        t2 = Topic.objects.create(topic_name="Quadratics", course=self.course, is_selected=False)
+        self.client.patch(
+            f"/topics/{self.topic.id}/select",
+            data=json.dumps({"is_selected": True}),
+            content_type="application/json",
+        )
+        self.course.refresh_from_db()
+        self.assertFalse(self.course.is_selected)
 
     def test_toggle_nonexistent_topic(self):
         response = self.client.patch(
@@ -60,6 +76,8 @@ class SetCourseTopicsSelectedTests(TestCase):
         self.t2.refresh_from_db()
         self.assertTrue(self.t1.is_selected)
         self.assertTrue(self.t2.is_selected)
+        self.course.refresh_from_db()
+        self.assertTrue(self.course.is_selected)
 
     def test_deselect_all_course_topics(self):
         self.t1.is_selected = True
@@ -76,6 +94,8 @@ class SetCourseTopicsSelectedTests(TestCase):
         self.t2.refresh_from_db()
         self.assertFalse(self.t1.is_selected)
         self.assertFalse(self.t2.is_selected)
+        self.course.refresh_from_db()
+        self.assertFalse(self.course.is_selected)
 
     def test_set_course_selected_nonexistent_course(self):
         response = self.client.patch(

@@ -5,6 +5,7 @@ from django.db import models
 class Course(models.Model):
     course_name = models.CharField()
     grade_level = models.IntegerField()
+    is_selected = models.BooleanField(default=False)
 
     def __str__(self):
         return self.course_name

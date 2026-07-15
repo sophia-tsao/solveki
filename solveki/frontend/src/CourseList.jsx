@@ -48,10 +48,10 @@ function CourseList() {
         body: JSON.stringify({ is_selected: newValue }),
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      setTopicsMap(prev => ({
-        ...prev,
-        [courseID]: prev[courseID].map(t => t.id === topicID ? { ...t, is_selected: newValue } : t),
-      }));
+      const updatedTopics = topicsMap[courseID].map(t => t.id === topicID ? { ...t, is_selected: newValue } : t);
+      const allSelected = updatedTopics.every(t => t.is_selected);
+      setTopicsMap(prev => ({ ...prev, [courseID]: updatedTopics }));
+      setCourses(prev => prev.map(c => c.id === courseID ? { ...c, is_selected: allSelected } : c));
     } catch (err) {
       setError(err.message);
     }
@@ -65,6 +65,7 @@ function CourseList() {
         body: JSON.stringify({ is_selected: newValue }),
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      setCourses(prev => prev.map(c => c.id === courseID ? { ...c, is_selected: newValue } : c));
       if (topicsMap[courseID]) {
         setTopicsMap(prev => ({
           ...prev,
@@ -79,25 +80,20 @@ function CourseList() {
   return (
     <div>
       {error && <p>Error: {error}</p>}
-      {courses.map((course) => {
-        const topics = topicsMap[course.id] ?? [];
-        const isExpanded = expandedCourses.has(course.id);
-        const allSelected = topics.length > 0 && topics.every(t => t.is_selected);
-        return (
-          <CourseBar
-            key={course.id}
-            id={course.id}
-            courseName={course.course_name}
-            gradeLevel={course.grade_level}
-            topics={topics}
-            isOpen={isExpanded}
-            isCourseSelected={allSelected}
-            onItemClick={handleCourseBarClick}
-            onTopicToggle={handleTopicToggle}
-            onCourseToggle={handleCourseToggle}
-          />
-        );
-      })}
+      {courses.map((course) => (
+        <CourseBar
+          key={course.id}
+          id={course.id}
+          courseName={course.course_name}
+          gradeLevel={course.grade_level}
+          topics={topicsMap[course.id] ?? []}
+          isOpen={expandedCourses.has(course.id)}
+          isCourseSelected={course.is_selected}
+          onItemClick={handleCourseBarClick}
+          onTopicToggle={handleTopicToggle}
+          onCourseToggle={handleCourseToggle}
+        />
+      ))}
     </div>
   );
 }

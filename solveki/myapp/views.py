@@ -28,6 +28,10 @@ def toggle_topic(request, topicID):
     body = json.loads(request.body)
     topic.is_selected = body["is_selected"]
     topic.save(update_fields=["is_selected"])
+    if topic.course:
+        all_selected = not topic.course.topics.filter(is_selected=False).exists()
+        topic.course.is_selected = all_selected
+        topic.course.save(update_fields=["is_selected"])
     return JsonResponse({"id": topic.id, "is_selected": topic.is_selected})
 
 @csrf_exempt
@@ -38,8 +42,11 @@ def set_course_topics_selected(request, courseID):
     except Course.DoesNotExist:
         return JsonResponse({"error": "Course not found"}, status=404)
     body = json.loads(request.body)
-    course.topics.all().update(is_selected=body["is_selected"])
-    return JsonResponse({"course_id": courseID, "is_selected": body["is_selected"]})
+    new_value = body["is_selected"]
+    course.topics.all().update(is_selected=new_value)
+    course.is_selected = new_value
+    course.save(update_fields=["is_selected"])
+    return JsonResponse({"course_id": courseID, "is_selected": new_value})
 
 def generate_problem(request):
     gen_list = get_gen_list()
