@@ -15,7 +15,7 @@ function MathProblemResponse(props) {
             console.log('correct response');
             setResponse("");
             setBoxColor('black');
-            props.genNext();
+            props.onCorrect();
         }else{
             console.log('incorrect response');
             console.log(props.solution);

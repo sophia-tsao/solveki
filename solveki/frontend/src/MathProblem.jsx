@@ -23,6 +23,7 @@ function MathProblem() {
   const [problem, setProblem] = useState(null);
   const [solution, setSolution] = useState(null);
   const [error, setError] = useState(null);
+  const [showCorrect, setShowCorrect] = useState(false);
   const fetchMathProblem = async () => {
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/problem/`);
@@ -45,6 +46,14 @@ function MathProblem() {
     fetchMathProblem();
   }, []);
 
+  const handleCorrect = () => {
+    setShowCorrect(true);
+    setTimeout(() => {
+      fetchMathProblem();
+      setShowCorrect(false);
+    }, 900);
+  };
+
   if (error) return <div>Error: {error}</div>;
 
   if (problem === null && solution === null) return null;
@@ -57,10 +66,22 @@ function MathProblem() {
     );
   }
 
+  if (showCorrect) {
+    return (
+      <div className="math-problem-card math-problem-correct">
+        <svg className="math-problem-correct-icon" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="11" stroke="#16a34a" strokeWidth="1.5" />
+          <path d="M7 12.5l3.2 3.2L17 9" stroke="#16a34a" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span className="math-problem-correct-text">Correct!</span>
+      </div>
+    );
+  }
+
   return (
     <div className="math-problem-card">
       <MathProblemDisplay problem={renderMixedLatex(problem)} />
-      <MathProblemResponse solution={solution} genNext={fetchMathProblem} />
+      <MathProblemResponse solution={solution} onCorrect={handleCorrect} />
     </div>
   );
 }
