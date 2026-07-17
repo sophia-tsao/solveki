@@ -733,6 +733,25 @@ def system_of_equations(range_x=10, range_y=10, coeff_mult_range=10):
     # Add random (non-zero) multiple of equations to each other
 
 
+def vertex_form(min_val=-10, max_val=10, min_a=-5, max_a=5):
+    r"""Vertex of a Quadratic in Vertex Form
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Find the coordinates of the vertex of $y=2(x-3)^2+4$ | $(3, 4)$ |
+    """
+    a = random.choice([i for i in range(min_a, max_a + 1) if i != 0])
+    h = random.randint(min_val, max_val)
+    k = random.randint(min_val, max_val)
+
+    h_str = f"x{'+' if -h >= 0 else '-'}{abs(h)}" if h != 0 else "x"
+    a_str = "" if a == 1 else ("-" if a == -1 else str(a))
+
+    problem = f"Find the coordinates of the vertex of $y={a_str}({h_str})^2{'+' if k >= 0 else '-'}{abs(k)}$"
+    solution = f"$({h}, {k})$"
+    return problem, solution
+
+
 def vector_cross(min_val=-20, max_val=20):
     r"""Cross product of 2 vectors
 

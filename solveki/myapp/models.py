@@ -14,6 +14,7 @@ class Topic(models.Model):
     topic_name = models.CharField()
     course = models.ForeignKey('Course', blank=True, null=True, on_delete=models.SET_NULL, related_name="topics")
     is_selected = models.BooleanField(default=False)
+    generator_name = models.CharField(blank=True, null=True)
 
     def __str__(self):
         return self.topic_name
