@@ -1,1 +1,15 @@
+# Python
 **/__pycache__/
+*.py[cod]
+
+# Local environment files (secrets / machine-specific config)
+.env
+*.env
+
+# Django
+# The SQLite dev database is machine-local; don't track it.
+backend/db.sqlite3
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

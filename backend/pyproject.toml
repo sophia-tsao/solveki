@@ -1,0 +1,15 @@
+[project]
+name = "solveki-backend"
+version = "0.1.0"
+description = "Solveki backend: Django REST API for math practice."
+requires-python = ">=3.11"
+dependencies = [
+    "django==6.0.4",
+    "django-cors-headers",
+    "google-auth",
+    "mathgenerator==1.5.0",
+]
+
+[tool.setuptools]
+# This is an application, not an importable library package.
+py-modules = []
