@@ -216,6 +216,8 @@ def _make_problem(user):
     name = random.choice(generators)
     problem, solution = gen_by_name(name)
 
+    # Strip the surrounding LaTeX '$' delimiters so every solution is returned
+    # consistently, whether it's an integer, a decimal, or a symbolic answer.
     sol_str = str(solution).strip().replace('$', '').strip()
     try:
         sol_float = float(sol_str)
@@ -224,11 +226,11 @@ def _make_problem(user):
             rounded_str = str(rounded)
             if rounded_str != sol_str:
                 problem = problem.rstrip() + " Round to the nearest thousandth if necessary."
-            solution = rounded_str
+            sol_str = rounded_str
     except (ValueError, TypeError):
         pass
 
-    return {"problem": problem, "solution": str(solution)}
+    return {"problem": problem, "solution": sol_str}
 
 
 def generate_problem(request):
