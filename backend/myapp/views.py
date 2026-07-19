@@ -8,11 +8,20 @@ from django.utils import timezone
 import mathgenerator
 import random
 import json
+import logging
 
 from .generators import LOCAL_GENERATORS
 
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
+
+logger = logging.getLogger(__name__)
+
+# Google signs tokens against its own clock. A small drift on the server clock
+# is enough to make verify_oauth2_token reject every token with "Token used too
+# early/late". Allow a modest tolerance so ordinary clock skew doesn't lock all
+# users out.
+GOOGLE_CLOCK_SKEW_SECONDS = 10
 
 
 # ---------------------------------------------------------------------------
@@ -55,9 +64,15 @@ def google_login(request):
 
     try:
         idinfo = google_id_token.verify_oauth2_token(
-            token, google_requests.Request(), client_id
+            token,
+            google_requests.Request(),
+            client_id,
+            clock_skew_in_seconds=GOOGLE_CLOCK_SKEW_SECONDS,
         )
-    except ValueError:
+    except ValueError as exc:
+        # Surface the underlying reason (bad audience, expiry, clock skew, ...)
+        # to the logs; the client only gets a generic message.
+        logger.warning("Google token verification failed: %s", exc)
         return JsonResponse({"error": "Invalid Google token"}, status=401)
 
     email = idinfo.get("email")
