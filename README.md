@@ -5,19 +5,22 @@ math problems organized into courses and topics, checks answers, and lets each
 signed-in user pick which topics they want to practice.
 
 Problems are produced by [mathgenerator](https://github.com/lukew3/mathgenerator),
-a library of parameterized math-problem generators, vendored under the backend.
+a library of parameterized math-problem generators (a pip dependency), plus a
+handful of first-party generators under `backend/myapp/generators/`.
 
 ## Repository structure
 
 ```
 solveki/
-├── backend/     Django REST API (problem generation, decks, auth, settings)
+├── backend/     Django JSON API (problem generation, decks, auth, settings)
 │   ├── config/          Django project (settings, URLs, WSGI/ASGI)
-│   ├── myapp/           App: models, views, migrations, seed commands
-│   └── mathgenerator/   Vendored problem-generator library
-├── frontend/    React + Vite single-page app
-└── bruno/       Bruno API collection for exercising the backend
+│   └── myapp/           App: models, views, generators, migrations, seed commands
+├── frontend/    React + Vite single-page app (unit tests + Playwright e2e)
+├── bruno/       Bruno API collection for exercising the backend
+└── .github/     CI workflows
 ```
+
+See [DESIGN.md](DESIGN.md) for the architecture, including the generator system.
 
 ## Prerequisites
 
