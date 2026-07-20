@@ -109,6 +109,55 @@ class GoogleLoginTests(TestCase):
         self.assertEqual(User.objects.filter(username="google-sub-42").count(), 1)
 
 
+class TestLoginTests(TestCase):
+    """The E2E test-login endpoint is invisible unless explicitly enabled."""
+
+    def setUp(self):
+        self.client = Client()
+
+    def test_disabled_by_default(self):
+        # ENABLE_TEST_LOGIN is off by default, so the route 404s.
+        response = self.client.post("/auth/test-login/")
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(self.client.get("/auth/me/").json()["authenticated"])
+
+    @override_settings(ENABLE_TEST_LOGIN=True)
+    def test_logs_in_when_enabled(self):
+        response = self.client.post("/auth/test-login/")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["authenticated"])
+        self.assertEqual(data["user"]["email"], "e2e@example.com")
+        # A real session is established: the follow-up request is authenticated.
+        self.assertTrue(self.client.get("/auth/me/").json()["authenticated"])
+
+    @override_settings(ENABLE_TEST_LOGIN=True)
+    def test_reuses_same_user(self):
+        self.client.post("/auth/test-login/")
+        self.client.post("/auth/test-login/")
+        self.assertEqual(User.objects.filter(username="e2e-user").count(), 1)
+
+    @override_settings(ENABLE_TEST_LOGIN=True)
+    def test_resets_state_on_login(self):
+        from myapp.models import Course, Topic, UserTopicSelection, Settings, DailyDeck
+        from django.utils import timezone
+
+        # First login creates the user; seed some state onto it.
+        self.client.post("/auth/test-login/")
+        user = User.objects.get(username="e2e-user")
+        course = Course.objects.create(course_name="C", grade_level=1)
+        topic = Topic.objects.create(topic_name="T", course=course, generator_name="addition")
+        UserTopicSelection.objects.create(user=user, topic=topic)
+        Settings.objects.update_or_create(user=user, defaults={"questions_per_day": 3})
+        DailyDeck.objects.create(user=user, date=timezone.localdate(), problems=[], current_index=0)
+
+        # A fresh login wipes selections, decks, and settings.
+        self.client.post("/auth/test-login/")
+        self.assertFalse(UserTopicSelection.objects.filter(user=user).exists())
+        self.assertFalse(DailyDeck.objects.filter(user=user).exists())
+        self.assertFalse(Settings.objects.filter(user=user).exists())
+
+
 class LogoutAndDeleteTests(TestCase):
     def setUp(self):
         self.client = Client()

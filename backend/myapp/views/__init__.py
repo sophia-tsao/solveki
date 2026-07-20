@@ -16,6 +16,7 @@ from google.oauth2 import id_token as google_id_token  # noqa: F401
 from .auth import (
     me,
     google_login,
+    test_login,
     logout_view,
     delete_account,
 )
@@ -32,6 +33,7 @@ from .deck import get_deck, advance_deck
 __all__ = [
     "me",
     "google_login",
+    "test_login",
     "logout_view",
     "delete_account",
     "view_courses",

@@ -77,3 +77,40 @@ The backend exposes a small JSON API under the app's URLs, including:
 See [backend/myapp/urls.py](backend/myapp/urls.py) for the full list. The
 [bruno/](bruno/) collection contains ready-to-run requests against these
 endpoints.
+
+## Testing
+
+- **Backend unit tests:** `cd backend && python manage.py test`
+- **Frontend unit tests (Vitest):** `cd frontend && npm test`
+- **End-to-end tests (Playwright):** see below.
+
+### End-to-end tests
+
+Playwright specs in [frontend/e2e/](frontend/e2e/) drive a real browser through
+the full stack — the built React SPA against a live Django API — covering the
+login gate, course/topic selection, the daily deck flow, and settings.
+
+Because sign-in is Google-OAuth-only (which can't run headless), the suite
+authenticates through a **test-only** endpoint, `POST /auth/test-login/`. It
+logs in a fixed test user and is gated behind the `ENABLE_TEST_LOGIN` setting:
+it returns **404 unless `ENABLE_TEST_LOGIN=1`**, so it can never be reached in a
+normal or production run. Each call also resets that user's practice state
+(selections, deck, settings) so tests start from a clean slate.
+
+Run locally:
+
+```bash
+# 1. Backend with the test-login endpoint enabled (after migrate + seed).
+cd backend
+ENABLE_TEST_LOGIN=1 python manage.py runserver 8000
+
+# 2. In another terminal: run the E2E suite. Playwright builds and serves the
+#    SPA on :5173 itself (the origin the backend's CORS allows).
+cd frontend
+npm run test:e2e            # headless
+npm run test:e2e:ui         # interactive UI mode for debugging
+npx playwright show-report  # open the HTML report after a run
+```
+
+The suite runs on every pull request via
+[.github/workflows/e2e-tests.yml](.github/workflows/e2e-tests.yml).
