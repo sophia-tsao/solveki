@@ -28,7 +28,9 @@ _ATTEMPTS = 5
 
 class SeedGeneratorContractTests(TestCase):
     def test_names_exist(self):
-        known = {name for name, _category in mathgenerator.get_gen_list()}
+        # getGenList() entries are [id, title, generator, name, category, params];
+        # the snake_case name at index 3 is what the seed data references.
+        known = {entry[3] for entry in mathgenerator.getGenList()}
         known |= set(LOCAL_GENERATORS)
         seeded = {g for _topic, g in TOPICS if g is not None}
         missing = sorted(seeded - known)
