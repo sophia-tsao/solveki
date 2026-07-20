@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import CourseBar from './CourseBar.jsx';
-import { apiFetch } from './auth.js';
+import { apiFetch, localDay } from './auth.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('courses');
@@ -49,7 +49,9 @@ function CourseList() {
 
   const handleTopicToggle = async (courseID, topicID, newValue) => {
     try {
-      const response = await apiFetch(`/topics/${topicID}/select`, {
+      // Send today so the deck-tail regeneration this triggers targets the
+      // user's local day, matching the deck the practice page shows.
+      const response = await apiFetch(`/topics/${topicID}/select?today=${localDay()}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_selected: newValue }),
@@ -68,7 +70,7 @@ function CourseList() {
 
   const handleCourseToggle = async (courseID, newValue) => {
     try {
-      const response = await apiFetch(`/courses/${courseID}/select`, {
+      const response = await apiFetch(`/courses/${courseID}/select?today=${localDay()}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ is_selected: newValue }),

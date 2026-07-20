@@ -66,7 +66,19 @@ read `backend/.env`.
 
 Deck logic (`_get_or_create_today_deck`, `_build_deck`, `_deck_payload`) builds
 a per-day deck of `questions_per_day` problems and discards stale prior-day
-decks.
+decks. `advance_deck` only ever steps an *existing* deck forward — it never
+builds one. Otherwise a new day's deck (fresh at index 0) could be advanced to
+index 1 without the student answering, stranding them on "2 of N"; this bites
+because the correct-answer handler advances on a 900ms timer, so finishing a
+problem just before midnight fires the advance after the day rolls over.
+
+"The day" is the *user's* local day, not the server's. The server clock is UTC
+(`TIME_ZONE`), so every deck-touching request carries the client's local date
+as `?today=YYYY-MM-DD` (`_client_today`); the deck then resets at the user's
+midnight rather than UTC's. Requests without the param fall back to the server
+date. The SPA also re-fetches the deck when the tab is refocused on a new local
+day, so a page left open overnight rolls over instead of stranding the student
+on yesterday's finished deck.
 
 ## Frontend (React 19 + Vite 8)
 

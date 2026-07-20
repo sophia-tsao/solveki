@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './MathProblem.css';
 import MathProblemDisplay from './MathProblemDisplay.jsx'
 import MathProblemResponse from './MathProblemResponse.jsx'
-import { apiFetch } from './auth.js';
+import { apiFetch, localDay } from './auth.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('deck');
@@ -106,7 +106,9 @@ function MathProblem() {
 
   const fetchDeck = useCallback(async () => {
     try {
-      const response = await apiFetch(`/deck/`);
+      // Pass the client's local day so the deck resets at the user's midnight,
+      // not the server's UTC midnight (the backend clock runs in UTC).
+      const response = await apiFetch(`/deck/?today=${localDay()}`);
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
@@ -119,7 +121,7 @@ function MathProblem() {
 
   const advanceDeck = useCallback(async () => {
     try {
-      const response = await apiFetch(`/deck/advance/`, {
+      const response = await apiFetch(`/deck/advance/?today=${localDay()}`, {
         method: 'POST',
       });
       if (!response.ok) {
@@ -132,9 +134,37 @@ function MathProblem() {
     }
   }, [applyDeck]);
 
-  // Load the deck once on mount.
+  // Load the deck on mount, and remember which local day it was built for.
+  const loadedDay = useRef(localDay());
   useEffect(() => {
+    loadedDay.current = localDay();
     fetchDeck();
+  }, [fetchDeck]);
+
+  // The deck resets at the start of each day, but the SPA can sit open across
+  // midnight (a student leaves the tab up overnight). Fetching only on mount
+  // would leave them staring at yesterday's deck — usually the "come back
+  // tomorrow" completion screen. When the tab is shown again (or refocused),
+  // reload if the local day has rolled over so the backend can hand back the
+  // fresh deck it already builds for the new day.
+  useEffect(() => {
+    const reloadIfNewDay = () => {
+      const today = localDay();
+      if (today !== loadedDay.current) {
+        log.info('Local day rolled over; reloading deck for the new day');
+        loadedDay.current = today;
+        fetchDeck();
+      }
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reloadIfNewDay();
+    };
+    window.addEventListener('focus', reloadIfNewDay);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('focus', reloadIfNewDay);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [fetchDeck]);
 
   const handleCorrect = () => {

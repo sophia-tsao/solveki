@@ -6,6 +6,7 @@ vi.mock('./auth.js', () => ({
   apiFetch: vi.fn(),
   logout: vi.fn(),
   deleteAccount: vi.fn(),
+  localDay: vi.fn(() => '2026-07-20'),
 }));
 
 import { apiFetch, logout, deleteAccount } from './auth.js';

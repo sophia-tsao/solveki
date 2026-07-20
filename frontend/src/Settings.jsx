@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import './Settings.css';
-import { apiFetch, logout, deleteAccount } from './auth.js';
+import { apiFetch, logout, deleteAccount, localDay } from './auth.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('settings');
@@ -45,7 +45,9 @@ function Settings({ onLoggedOut }) {
       return;
     }
     try {
-      const response = await apiFetch(`/settings/`, {
+      // Send today so growing today's deck (on a raised count) targets the
+      // user's local day, matching the deck the practice page shows.
+      const response = await apiFetch(`/settings/?today=${localDay()}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ language, questions_per_day: count }),

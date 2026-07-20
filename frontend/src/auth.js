@@ -9,6 +9,15 @@ const log = createLogger('api');
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+// The client's local calendar day as YYYY-MM-DD. Deck endpoints take this as a
+// `today` query param so the daily deck resets at the user's local midnight,
+// not the server's UTC midnight (the backend clock runs in UTC). Any request
+// that can mutate today's deck (deck load/advance, topic selection, settings)
+// must send it so the whole set agrees on which day's deck it's touching.
+export function localDay() {
+  return new Date().toLocaleDateString('en-CA');
+}
+
 export async function apiFetch(path, options = {}) {
   const method = options.method || 'GET';
   log.debug(`${method} ${path}`);

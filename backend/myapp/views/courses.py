@@ -7,7 +7,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..models import Course, Topic, UserTopicSelection
 from .common import _require_auth
-from .deck import _regenerate_deck_tail
+from .deck import _regenerate_deck_tail, _client_today
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ def toggle_topic(request, topicID):
         "selected" if is_selected else "deselected", topic.id,
     )
     # Apply the topic change to today's deck immediately (see helper docstring).
-    _regenerate_deck_tail(request.user)
+    _regenerate_deck_tail(request.user, _client_today(request))
     return JsonResponse({"id": topic.id, "is_selected": is_selected})
 
 
@@ -105,5 +105,5 @@ def set_course_topics_selected(request, courseID):
         "selected" if new_value else "deselected", len(topics), courseID,
     )
     # Apply the topic change to today's deck immediately (see helper docstring).
-    _regenerate_deck_tail(request.user)
+    _regenerate_deck_tail(request.user, _client_today(request))
     return JsonResponse({"course_id": courseID, "is_selected": new_value})

@@ -3,11 +3,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 // Mock the network layer so the component's fetch/advance calls are scripted.
-vi.mock('./auth.js', () => ({ apiFetch: vi.fn() }));
+// localDay is stubbed to a fixed date so deck-request URLs are deterministic;
+// the day-rollover tests override it via mockReturnValue.
+vi.mock('./auth.js', () => ({
+  apiFetch: vi.fn(),
+  localDay: vi.fn(() => '2026-07-20'),
+}));
 // KaTeX is heavy and irrelevant to behaviour; stub its render to a no-op string.
 vi.mock('katex', () => ({ default: { renderToString: () => '' } }));
 
-import { apiFetch } from './auth.js';
+import { apiFetch, localDay } from './auth.js';
 import MathProblem from './MathProblem.jsx';
 
 // Build a Response-like object from a deck payload.
@@ -24,6 +29,8 @@ const ACTIVE_DECK = {
 
 beforeEach(() => {
   apiFetch.mockReset();
+  localDay.mockReset();
+  localDay.mockReturnValue('2026-07-20');
   localStorage.clear();
 });
 
@@ -33,7 +40,7 @@ describe('MathProblem — initial load', () => {
     render(<MathProblem />);
     await screen.findByText('1 of 3 questions');
     expect(screen.getByText('Attempt 1 of 2')).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledWith('/deck/');
+    expect(apiFetch).toHaveBeenCalledWith('/deck/?today=2026-07-20');
   });
 
   it('shows the no-topics prompt when the deck is empty', async () => {
@@ -61,6 +68,44 @@ describe('MathProblem — initial load', () => {
   });
 });
 
+describe('MathProblem — day rollover', () => {
+  it('reloads the deck when the local day rolls over and the tab is refocused', async () => {
+    // Mounted on the 20th showing yesterday's finished deck, then a fresh deck
+    // for the 21st after midnight.
+    apiFetch
+      .mockResolvedValueOnce(deckResponse({ completed: true, total: 3 }))
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
+
+    render(<MathProblem />);
+    await screen.findByText(/You've finished all 3 questions for today/);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+
+    // Cross midnight into the new local day, then the tab regains focus.
+    localDay.mockReturnValue('2026-07-21');
+    window.dispatchEvent(new Event('focus'));
+
+    await screen.findByText('1 of 3 questions');
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(apiFetch).toHaveBeenLastCalledWith('/deck/?today=2026-07-21');
+  });
+
+  it('does not reload on refocus within the same day', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
+
+    render(<MathProblem />);
+    await screen.findByText('1 of 3 questions');
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+
+    // Same day (localDay unchanged): refocusing must not re-fetch — that would
+    // discard local attempt state.
+    window.dispatchEvent(new Event('focus'));
+
+    // Give any erroneous fetch a chance to fire before asserting it didn't.
+    await Promise.resolve();
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('MathProblem — answering', () => {
   it('advances to the next problem after a correct answer', async () => {
     const user = userEvent.setup();
@@ -81,7 +126,7 @@ describe('MathProblem — answering', () => {
 
     // The advance is triggered by a real 900ms setTimeout, so allow headroom.
     expect(await screen.findByText('2 of 3 questions', {}, { timeout: 2000 })).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledWith('/deck/advance/', { method: 'POST' });
+    expect(apiFetch).toHaveBeenCalledWith('/deck/advance/?today=2026-07-20', { method: 'POST' });
   });
 
   it('bumps the attempt counter on the first wrong answer', async () => {
@@ -115,7 +160,7 @@ describe('MathProblem — answering', () => {
     await user.click(button); // attempt 2 exhausted -> advance
 
     await waitFor(() =>
-      expect(apiFetch).toHaveBeenCalledWith('/deck/advance/', { method: 'POST' }),
+      expect(apiFetch).toHaveBeenCalledWith('/deck/advance/?today=2026-07-20', { method: 'POST' }),
     );
   });
 });

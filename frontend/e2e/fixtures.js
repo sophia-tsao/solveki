@@ -1,5 +1,13 @@
 const API_URL = process.env.E2E_API_URL || 'http://localhost:8000';
 
+// The runner's local calendar day (YYYY-MM-DD). Deck-touching endpoints take
+// this as ?today= so the backend resets on the user's local day rather than the
+// server's UTC day. Fixtures send the same value the app does (auth.localDay)
+// so fixture setup and the UI agree on which day's deck they're acting on.
+function localDay() {
+  return new Date().toLocaleDateString('en-CA');
+}
+
 // All helpers issue requests through `page.request`, which shares the browser
 // context's cookie jar. This matters because Django rotates the session key on
 // every login: a request made through a separate context would strand the
@@ -23,7 +31,7 @@ export async function selectFirstCourse(page) {
   const coursesRes = await page.request.get(`${API_URL}/courses/`);
   const { courses } = await coursesRes.json();
   const courseId = courses[0].id;
-  await page.request.patch(`${API_URL}/courses/${courseId}/select`, {
+  await page.request.patch(`${API_URL}/courses/${courseId}/select?today=${localDay()}`, {
     data: { is_selected: true },
   });
   const topicsRes = await page.request.get(`${API_URL}/courses/${courseId}/topics`);
@@ -34,7 +42,7 @@ export async function selectFirstCourse(page) {
 // Set the user's questions-per-day via the API. Handy for making the deck
 // short enough to complete within a test.
 export async function setQuestionsPerDay(page, count) {
-  await page.request.patch(`${API_URL}/settings/`, {
+  await page.request.patch(`${API_URL}/settings/?today=${localDay()}`, {
     data: { questions_per_day: count },
   });
 }

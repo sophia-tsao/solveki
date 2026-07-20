@@ -1,3 +1,4 @@
+import datetime
 import logging
 
 from django.http import JsonResponse
@@ -10,6 +11,30 @@ from .common import _require_auth
 from .problems import _make_problem
 
 logger = logging.getLogger(__name__)
+
+
+def _client_today(request):
+    """The calendar day to treat as "today" for the requesting client.
+
+    The deck resets at the start of each day, but "the day" means the user's
+    local day — not the server's. The server clock runs in UTC (see
+    settings.TIME_ZONE), so relying on `timezone.localdate()` would only roll
+    the deck over at UTC midnight; a user ahead of UTC would keep seeing
+    yesterday's (often finished) deck through their whole morning.
+
+    The client sends its local date as `?today=YYYY-MM-DD`. We trust it: the
+    only thing a user can affect by lying is when their own practice deck
+    resets, which is harmless. If it's missing or malformed we fall back to the
+    server's date so the endpoint still works (and existing callers/tests that
+    don't send it keep their behaviour).
+    """
+    raw = request.GET.get("today")
+    if raw:
+        try:
+            return datetime.date.fromisoformat(raw)
+        except ValueError:
+            logger.warning("Ignoring malformed 'today' param: %r", raw)
+    return timezone.localdate()
 
 
 def _build_deck(user, count):
@@ -30,8 +55,11 @@ def _has_topics(user):
     ).exists()
 
 
-def _get_or_create_today_deck(user):
+def _get_or_create_today_deck(user, today):
     """Return the user's deck for today, creating a fresh one if none exists.
+
+    `today` is the client's local calendar day (see `_client_today`), so the
+    deck resets at the user's midnight rather than the server's UTC midnight.
 
     Any deck from a previous day (for this user) is discarded so a new day
     yields new problems. An existing deck that is shorter than the target
@@ -41,7 +69,6 @@ def _get_or_create_today_deck(user):
     the day — the latter is why the deck must never be reported as "finished"
     at a smaller size than the user's setting.
     """
-    today = timezone.localdate()
     deck = DailyDeck.objects.filter(user=user, date=today).first()
     settings = Settings.load(user)
     if deck is None:
@@ -68,7 +95,7 @@ def _get_or_create_today_deck(user):
     return deck
 
 
-def _grow_today_deck(user, count):
+def _grow_today_deck(user, count, today):
     """Grow today's deck to `count` problems if it's currently smaller.
 
     Appends freshly generated problems to the end so the student's progress
@@ -77,7 +104,6 @@ def _grow_today_deck(user, count):
     is built. Does nothing if there's no deck for today yet — that deck will be
     built at the new count on first access.
     """
-    today = timezone.localdate()
     deck = DailyDeck.objects.filter(user=user, date=today).first()
     if deck is None:
         return
@@ -94,7 +120,7 @@ def _grow_today_deck(user, count):
         )
 
 
-def _regenerate_deck_tail(user):
+def _regenerate_deck_tail(user, today):
     """Rebuild today's not-yet-answered problems from the current topic set.
 
     Problems the student has already worked through (everything before
@@ -118,7 +144,6 @@ def _regenerate_deck_tail(user):
     on an already-"finished" deck. Leaving the deck untouched lets the
     following selection rebuild the tail properly.
     """
-    today = timezone.localdate()
     deck = DailyDeck.objects.filter(user=user, date=today).first()
     if deck is None:
         return
@@ -178,19 +203,34 @@ def get_deck(request):
     auth = _require_auth(request)
     if auth:
         return auth
-    deck = _get_or_create_today_deck(request.user)
+    deck = _get_or_create_today_deck(request.user, _client_today(request))
     return JsonResponse(_deck_payload(request.user, deck))
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def advance_deck(request):
-    """Move to the next problem in today's deck."""
+    """Move to the next problem in today's deck.
+
+    Advancing only ever steps an *existing* deck forward — it must never build
+    one. If we created-then-advanced here, a new day's deck (fresh at index 0)
+    would be pushed to index 1 without the student answering anything, leaving
+    them stranded on "2 of N" instead of card 1. This happens for real: the
+    "correct answer" handler advances on a 900ms timer, so finishing a problem
+    right before midnight fires the advance after the day has rolled over,
+    making the day's first backend call an advance rather than a load.
+
+    When there's no deck for today yet, treat the advance as a no-op and just
+    report the freshly-built deck (get_or_create at index 0), so that stray
+    advance lands the student on card 1.
+    """
     auth = _require_auth(request)
     if auth:
         return auth
-    deck = _get_or_create_today_deck(request.user)
-    if deck.current_index < len(deck.problems):
+    today = _client_today(request)
+    existing = DailyDeck.objects.filter(user=request.user, date=today).first()
+    deck = _get_or_create_today_deck(request.user, today)
+    if existing is not None and deck.current_index < len(deck.problems):
         deck.current_index += 1
         deck.save(update_fields=["current_index"])
         logger.debug(

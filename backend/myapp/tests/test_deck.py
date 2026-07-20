@@ -125,6 +125,72 @@ class DeckTests(TestCase):
         self.assertEqual(len(deck.problems), 2)
 
     @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_advance_on_new_day_does_not_skip_past_card_one(self, mock_gen):
+        # Regression: advancing must never *build* a deck. The "correct answer"
+        # handler advances on a timer, so finishing a problem just before
+        # midnight can make the day's first backend call an advance. If advance
+        # created-then-stepped the new day's deck, the student would land on
+        # "2 of N" having answered nothing today. It must leave them on card 1.
+        select(self.user, self.topic)
+        Settings.objects.update_or_create(
+            user=self.user, defaults={"questions_per_day": 3}
+        )
+        # Finish yesterday's deck.
+        self.client.get("/deck/?today=2026-07-19")
+        for _ in range(3):
+            self.client.post("/deck/advance/?today=2026-07-19")
+        # New day, first call is an advance (no deck exists yet for today).
+        data = self.client.post("/deck/advance/?today=2026-07-20").json()
+        self.assertFalse(data.get("completed"))
+        self.assertEqual(data["current_number"], 1)
+        self.assertEqual(data["total"], 3)
+        deck = DailyDeck.objects.get(user=self.user, date=datetime.date(2026, 7, 20))
+        self.assertEqual(deck.current_index, 0)
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_deck_resets_on_client_local_day_not_server_utc_day(self, mock_gen):
+        # The server clock is UTC, but the deck must reset at the *user's* local
+        # midnight. A user ahead of UTC can be a calendar day ahead of the
+        # server; the client sends that day as ?today=. Yesterday's finished
+        # deck must not be what they see on their new morning.
+        select(self.user, self.topic)
+        Settings.objects.update_or_create(
+            user=self.user, defaults={"questions_per_day": 2}
+        )
+        # A completed deck dated to the server's current day.
+        from django.utils import timezone
+        server_today = timezone.localdate()
+        DailyDeck.objects.create(
+            user=self.user,
+            date=server_today,
+            problems=[{"problem": "old", "solution": "1"}],
+            current_index=1,  # finished
+        )
+        # The client is already on the next calendar day.
+        client_tomorrow = server_today + datetime.timedelta(days=1)
+        data = self.client.get(f"/deck/?today={client_tomorrow.isoformat()}").json()
+
+        # A fresh deck for the client's day — on card 1, not the finished deck.
+        self.assertFalse(data.get("completed"))
+        self.assertEqual(data["current_number"], 1)
+        self.assertEqual(data["total"], 2)
+        # The stale server-day deck is discarded.
+        self.assertFalse(
+            DailyDeck.objects.filter(user=self.user, date=server_today).exists()
+        )
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_malformed_today_param_falls_back_to_server_date(self, mock_gen):
+        select(self.user, self.topic)
+        Settings.objects.update_or_create(
+            user=self.user, defaults={"questions_per_day": 2}
+        )
+        # A garbage ?today= must not 500; it falls back to the server date.
+        data = self.client.get("/deck/?today=not-a-date").json()
+        self.assertEqual(data["current_number"], 1)
+        self.assertEqual(data["total"], 2)
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
     def test_empty_deck_rebuilt_once_topics_selected(self, mock_gen):
         # First visit with no topics yields an empty deck for today.
         self.client.get("/deck/")

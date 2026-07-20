@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-vi.mock('./auth.js', () => ({ apiFetch: vi.fn() }));
+vi.mock('./auth.js', () => ({ apiFetch: vi.fn(), localDay: vi.fn(() => '2026-07-20') }));
 
 import { apiFetch } from './auth.js';
 import CourseList from './CourseList.jsx';
@@ -80,7 +80,7 @@ describe('CourseList', () => {
     // Verify the PATCH went to the topic-select endpoint.
     await waitFor(() =>
       expect(apiFetch).toHaveBeenCalledWith(
-        '/topics/10/select',
+        '/topics/10/select?today=2026-07-20',
         expect.objectContaining({ method: 'PATCH' }),
       ),
     );
