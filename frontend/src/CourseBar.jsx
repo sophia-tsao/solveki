@@ -1,14 +1,25 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import './CourseBar.css';
 
 function CourseBar(props) {
   const [displayedTopics, setDisplayedTopics] = useState(props.topics);
+  const topicsInnerRef = useRef(null);
+  const [topicsHeight, setTopicsHeight] = useState(0);
 
   useEffect(() => {
     if (props.topics.length > 0) {
       setDisplayedTopics(props.topics);
     }
   }, [props.topics]);
+
+  // Drive the expand/collapse height from the actual content so every topic
+  // is visible no matter how many there are (a fixed max-height clips long
+  // lists). Re-measure whenever the open state or topics change.
+  useLayoutEffect(() => {
+    if (topicsInnerRef.current) {
+      setTopicsHeight(topicsInnerRef.current.scrollHeight);
+    }
+  }, [props.isOpen, displayedTopics]);
 
   const handleCourseCheckbox = (e) => {
     e.stopPropagation();
@@ -44,8 +55,11 @@ function CourseBar(props) {
         </div>
       </div>
 
-      <div className="course-bar-topics">
-        <div className="course-bar-topics-inner">
+      <div
+        className="course-bar-topics"
+        style={{ maxHeight: props.isOpen ? topicsHeight : 0 }}
+      >
+        <div className="course-bar-topics-inner" ref={topicsInnerRef}>
           <ul>
             {displayedTopics.map((topic) => (
               <li key={topic.id}>
