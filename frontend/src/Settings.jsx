@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import './Settings.css';
 import { apiFetch, logout, deleteAccount } from './auth.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('settings');
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -26,6 +29,7 @@ function Settings({ onLoggedOut }) {
         setLanguage(result.language);
         setQuestionsPerDay(result.questions_per_day);
       } catch (err) {
+        log.error('Failed to load settings:', err.message);
         setError(err.message);
       }
     };
@@ -48,10 +52,12 @@ function Settings({ onLoggedOut }) {
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const result = await response.json();
+      log.info(`Settings saved (language=${result.language}, questions_per_day=${result.questions_per_day})`);
       setLanguage(result.language);
       setQuestionsPerDay(result.questions_per_day);
       setStatus('Settings saved.');
     } catch (err) {
+      log.error('Failed to save settings:', err.message);
       setError(err.message);
     }
   };
@@ -62,6 +68,7 @@ function Settings({ onLoggedOut }) {
       await logout();
       onLoggedOut();
     } catch (err) {
+      log.error('Logout failed:', err.message);
       setError(err.message);
     }
   };
@@ -72,6 +79,7 @@ function Settings({ onLoggedOut }) {
       await deleteAccount();
       onLoggedOut();
     } catch (err) {
+      log.error('Account deletion failed:', err.message);
       setError(err.message);
     }
   };

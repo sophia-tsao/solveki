@@ -1,4 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
+import { createLogger } from './logger.js';
+
+const log = createLogger('answer');
 
 function MathProblemResponse(props) {
     const [response, setResponse] = useState("");
@@ -22,13 +25,12 @@ function MathProblemResponse(props) {
         const isCorrect = response === props.solution ||
             (!isNaN(numResponse) && !isNaN(numSolution) && numResponse === numSolution);
         if(isCorrect){
-            console.log('correct response');
+            log.debug('Correct answer submitted');
             setResponse("");
             setBoxColor('black');
             props.onCorrect();
         }else{
-            console.log('incorrect response');
-            console.log(props.solution);
+            log.debug('Incorrect answer submitted; expected solution:', props.solution);
             setResponse("");
             setBoxColor('red');
             setShowIncorrect(true);

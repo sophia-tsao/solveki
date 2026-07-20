@@ -5,6 +5,9 @@ import './MathProblem.css';
 import MathProblemDisplay from './MathProblemDisplay.jsx'
 import MathProblemResponse from './MathProblemResponse.jsx'
 import { apiFetch } from './auth.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('deck');
 
 function InlineMath({ math }) {
   const html = katex.renderToString(math, { throwOnError: false });
@@ -80,15 +83,18 @@ function MathProblem() {
 
   const applyDeck = (result) => {
     if (result.no_topics) {
+      log.debug('Deck has no selected topics');
       setStatus('no_topics');
       return;
     }
     if (result.completed) {
+      log.info(`Deck completed (${result.total ?? total} questions)`);
       setTotal(result.total ?? total);
       setStatus('completed');
       maybeCelebrate();
       return;
     }
+    log.debug(`Showing question ${result.current_number} of ${result.total}`);
     setProblem(result.problem);
     setSolution(result.solution?.replace(/\$/g, ''));
     setCurrentNumber(result.current_number);
@@ -105,6 +111,7 @@ function MathProblem() {
       }
       applyDeck(await response.json());
     } catch (err) {
+      log.error('Failed to load deck:', err.message);
       setError(err.message);
     }
   };
@@ -119,6 +126,7 @@ function MathProblem() {
       }
       applyDeck(await response.json());
     } catch (err) {
+      log.error('Failed to advance deck:', err.message);
       setError(err.message);
     }
   };

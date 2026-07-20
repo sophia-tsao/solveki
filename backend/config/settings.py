@@ -159,3 +159,40 @@ SESSION_COOKIE_HTTPONLY = True
 # Google OAuth client ID (from Google Cloud Console). Loaded from .env or env.
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
 
+
+# Logging
+# https://docs.djangoproject.com/en/6.0/topics/logging/
+#
+# Console logging with a timestamped format. The app's own logger (`myapp`)
+# level is driven by the LOG_LEVEL env var (DEBUG in dev, INFO in prod is a
+# reasonable default), so instrumentation can be dialled up without code edits.
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'DEBUG' if DEBUG else 'INFO')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{asctime} {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'myapp': {
+            'handlers': ['console'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+    },
+}
+

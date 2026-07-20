@@ -77,6 +77,7 @@ def google_login(request):
 
     email = idinfo.get("email")
     if not email or not idinfo.get("email_verified", False):
+        logger.warning("Rejected Google login: email missing or unverified")
         return JsonResponse({"error": "Google account email is not verified"}, status=401)
 
     User = get_user_model()
@@ -96,13 +97,19 @@ def google_login(request):
         user.save(update_fields=["email"])
 
     login(request, user)
+    logger.info(
+        "Google login succeeded for user %s (%s account)",
+        user.id, "new" if created else "existing",
+    )
     return JsonResponse({"authenticated": True, "user": _serialize_user(user)})
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
 def logout_view(request):
+    user_id = request.user.id if request.user.is_authenticated else None
     logout(request)
+    logger.info("User %s logged out", user_id)
     return JsonResponse({"ok": True})
 
 
@@ -112,8 +119,10 @@ def delete_account(request):
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Not authenticated"}, status=401)
     user = request.user
+    user_id = user.id
     logout(request)
     user.delete()  # Cascades to selections, settings, and decks.
+    logger.info("Deleted account for user %s and all associated data", user_id)
     return JsonResponse({"ok": True})
 
 
@@ -187,6 +196,10 @@ def toggle_topic(request, topicID):
         UserTopicSelection.objects.get_or_create(user=request.user, topic=topic)
     else:
         UserTopicSelection.objects.filter(user=request.user, topic=topic).delete()
+    logger.info(
+        "User %s %s topic %s", request.user.id,
+        "selected" if is_selected else "deselected", topic.id,
+    )
     # Apply the topic change to today's deck immediately (see helper docstring).
     _regenerate_deck_tail(request.user)
     return JsonResponse({"id": topic.id, "is_selected": is_selected})
@@ -212,6 +225,10 @@ def set_course_topics_selected(request, courseID):
         )
     else:
         UserTopicSelection.objects.filter(user=request.user, topic__in=topics).delete()
+    logger.info(
+        "User %s %s all %d topics in course %s", request.user.id,
+        "selected" if new_value else "deselected", len(topics), courseID,
+    )
     # Apply the topic change to today's deck immediately (see helper docstring).
     _regenerate_deck_tail(request.user)
     return JsonResponse({"course_id": courseID, "is_selected": new_value})
@@ -242,6 +259,7 @@ def _make_problem(user):
         # removed by a library upgrade). Treat it as "no problem available"
         # rather than 500-ing the student. The contract test in
         # test_generators.py exists to catch this before it ships.
+        logger.warning("No generator found for name %r; skipping problem", name)
         return None
     problem, solution = generator()
 
@@ -300,6 +318,10 @@ def settings_view(request):
                 return JsonResponse({"error": "questions_per_day must be at least 1"}, status=400)
             settings.questions_per_day = count
         settings.save()
+        logger.info(
+            "User %s updated settings (language=%s, questions_per_day=%d)",
+            request.user.id, settings.language, settings.questions_per_day,
+        )
         # Apply a larger card count to today's deck immediately so the change
         # takes effect on save, not just tomorrow. We only ever grow the deck:
         # problems the student has already worked through stay put, and a
@@ -323,30 +345,48 @@ def _build_deck(user, count):
     return problems
 
 
+def _has_topics(user):
+    """True if the user currently has at least one usable topic selected."""
+    return Topic.objects.filter(
+        selections__user=user, generator_name__isnull=False
+    ).exists()
+
+
 def _get_or_create_today_deck(user):
     """Return the user's deck for today, creating a fresh one if none exists.
 
     Any deck from a previous day (for this user) is discarded so a new day
-    yields new problems.
+    yields new problems. An existing deck that is shorter than the target
+    `questions_per_day` is topped up (appending only, so progress is
+    preserved). This heals a deck that was built before any topics were
+    selected (empty) as well as one left short by a topic change earlier in
+    the day — the latter is why the deck must never be reported as "finished"
+    at a smaller size than the user's setting.
     """
     today = timezone.localdate()
     deck = DailyDeck.objects.filter(user=user, date=today).first()
+    settings = Settings.load(user)
     if deck is None:
         # A new day: clear out this user's stale decks and build a fresh one.
         DailyDeck.objects.filter(user=user).exclude(date=today).delete()
-        settings = Settings.load(user)
         problems = _build_deck(user, settings.questions_per_day)
-        deck = DailyDeck.objects.create(user=user, date=today, problems=problems, current_index=0)
-    elif not deck.problems:
-        # Today's deck is empty, which happens when the user visited Practice
-        # before selecting any topics. Try to build it now in case topics have
-        # since been selected.
-        settings = Settings.load(user)
-        problems = _build_deck(user, settings.questions_per_day)
-        if problems:
-            deck.problems = problems
-            deck.current_index = 0
-            deck.save(update_fields=["problems", "current_index"])
+        logger.info(
+            "Built new deck for user %s with %d/%d problems",
+            user.id, len(problems), settings.questions_per_day,
+        )
+        return DailyDeck.objects.create(
+            user=user, date=today, problems=problems, current_index=0
+        )
+    missing = settings.questions_per_day - len(deck.problems)
+    if missing > 0:
+        extra = _build_deck(user, missing)
+        if extra:
+            deck.problems = deck.problems + extra
+            deck.save(update_fields=["problems"])
+            logger.info(
+                "Topped up deck for user %s by %d problems (now %d)",
+                user.id, len(extra), len(deck.problems),
+            )
     return deck
 
 
@@ -370,6 +410,10 @@ def _grow_today_deck(user, count):
     if extra:
         deck.problems = deck.problems + extra
         deck.save(update_fields=["problems"])
+        logger.info(
+            "Grew deck for user %s to %d problems (target %d)",
+            user.id, len(deck.problems), count,
+        )
 
 
 def _regenerate_deck_tail(user):
@@ -409,12 +453,25 @@ def _regenerate_deck_tail(user):
     if not new_tail:
         # No topics currently selected — can't regenerate. Preserve the deck
         # rather than truncating away its unanswered tail.
+        logger.debug(
+            "Skipped deck tail regeneration for user %s: no problems generated",
+            user.id,
+        )
         return
     deck.problems = deck.problems[:answered] + new_tail
     deck.save(update_fields=["problems"])
+    logger.info(
+        "Regenerated deck tail for user %s: kept %d answered, %d new",
+        user.id, answered, len(new_tail),
+    )
 
 
-def _deck_payload(deck):
+def _deck_payload(user, deck):
+    # "No topics" is driven by the live selection, not the deck contents, so
+    # deselecting every topic shows the "pick a topic" screen immediately even
+    # if the deck still holds problems from before the change.
+    if not _has_topics(user):
+        return {"no_topics": True}
     total = len(deck.problems)
     if total == 0:
         return {"no_topics": True}
@@ -436,7 +493,7 @@ def get_deck(request):
     if auth:
         return auth
     deck = _get_or_create_today_deck(request.user)
-    return JsonResponse(_deck_payload(deck))
+    return JsonResponse(_deck_payload(request.user, deck))
 
 
 @csrf_exempt
@@ -450,4 +507,8 @@ def advance_deck(request):
     if deck.current_index < len(deck.problems):
         deck.current_index += 1
         deck.save(update_fields=["current_index"])
-    return JsonResponse(_deck_payload(deck))
+        logger.debug(
+            "User %s advanced deck to %d/%d",
+            request.user.id, deck.current_index, len(deck.problems),
+        )
+    return JsonResponse(_deck_payload(request.user, deck))

@@ -3,10 +3,27 @@
 // All requests use `credentials: 'include'` so the Django session cookie is
 // sent cross-origin (Vite dev server on :5173 -> Django on :8000).
 
+import { createLogger } from './logger.js';
+
+const log = createLogger('api');
+
 const API_URL = import.meta.env.VITE_API_URL;
 
-export function apiFetch(path, options = {}) {
-  return fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
+export async function apiFetch(path, options = {}) {
+  const method = options.method || 'GET';
+  log.debug(`${method} ${path}`);
+  try {
+    const res = await fetch(`${API_URL}${path}`, { credentials: 'include', ...options });
+    if (!res.ok) {
+      log.warn(`${method} ${path} -> ${res.status}`);
+    }
+    return res;
+  } catch (err) {
+    // Network-level failure (server down, CORS, offline) — never reaches the
+    // status check above, so log it here.
+    log.error(`${method} ${path} failed:`, err.message);
+    throw err;
+  }
 }
 
 export async function fetchMe() {
@@ -22,18 +39,24 @@ export async function loginWithGoogle(credential) {
     body: JSON.stringify({ credential }),
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP error! Status: ${res.status}`);
+  if (!res.ok) {
+    log.error('Google login failed:', data.error || res.status);
+    throw new Error(data.error || `HTTP error! Status: ${res.status}`);
+  }
+  log.info('Google login succeeded');
   return data;
 }
 
 export async function logout() {
   const res = await apiFetch('/auth/logout/', { method: 'POST' });
   if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+  log.info('Logged out');
   return res.json();
 }
 
 export async function deleteAccount() {
   const res = await apiFetch('/auth/delete/', { method: 'DELETE' });
   if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
+  log.info('Account deleted');
   return res.json();
 }

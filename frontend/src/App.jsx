@@ -5,6 +5,9 @@ import Header from './Header.jsx';
 import Settings from './Settings.jsx';
 import LoginPage from './LoginPage.jsx';
 import { fetchMe } from './auth.js';
+import { createLogger } from './logger.js';
+
+const log = createLogger('app');
 
 const PAGES = ["math", "courses", "settings"];
 
@@ -20,8 +23,14 @@ function App() {
 
   useEffect(() => {
     fetchMe()
-      .then((data) => setUser(data.authenticated ? data.user : null))
-      .catch(() => setUser(null))
+      .then((data) => {
+        log.info(data.authenticated ? 'Session restored' : 'No active session');
+        setUser(data.authenticated ? data.user : null);
+      })
+      .catch((err) => {
+        log.error('Failed to check session:', err.message);
+        setUser(null);
+      })
       .finally(() => setAuthLoading(false));
   }, []);
 

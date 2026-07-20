@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { loginWithGoogle } from './auth.js';
+import { createLogger } from './logger.js';
 import './LoginPage.css';
+
+const log = createLogger('login');
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
@@ -48,6 +51,7 @@ function LoginPage({ onLoggedIn }) {
               const data = await loginWithGoogle(response.credential);
               onLoggedIn(data.user);
             } catch (err) {
+              log.error('Sign-in failed:', err.message);
               setError(err.message);
             }
           },
@@ -60,6 +64,7 @@ function LoginPage({ onLoggedIn }) {
         });
       })
       .catch((err) => {
+        log.error('Google sign-in failed to initialize:', err.message);
         if (!cancelled) setError(err.message);
       });
 
