@@ -13,6 +13,21 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+# Verify TLS against the operating system's trust store instead of the CA
+# bundle vendored by certifi/requests. This matters when something on the host
+# intercepts HTTPS (corporate proxies, or antivirus "web shields" like Avast)
+# and re-signs traffic with a locally-trusted root: that root lives in the OS
+# store but not in certifi, so certifi-based verification fails with
+# CERTIFICATE_VERIFY_FAILED — which is what breaks Google token verification in
+# auth.google_login. Injecting truststore here (before any TLS client is
+# created) fixes it process-wide for every entry point that imports settings.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    # Optional: environments without HTTPS interception work fine on certifi.
+    pass
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -158,6 +173,12 @@ SESSION_COOKIE_HTTPONLY = True
 
 # Google OAuth client ID (from Google Cloud Console). Loaded from .env or env.
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')
+
+# Enables the test-only login endpoint (auth/test-login/) used by the end-to-end
+# suite to obtain a real session without Google OAuth. OFF by default; the
+# endpoint 404s unless this is set, so it can never be reached in production.
+# The E2E run sets ENABLE_TEST_LOGIN=1 in the environment.
+ENABLE_TEST_LOGIN = os.environ.get('ENABLE_TEST_LOGIN', '') == '1'
 
 
 # Logging

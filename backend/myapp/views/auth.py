@@ -1,7 +1,7 @@
 import json
 import logging
 
-from django.http import JsonResponse
+from django.http import JsonResponse, Http404
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings as django_settings
@@ -9,6 +9,9 @@ from django.contrib.auth import login, logout, get_user_model
 
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
+from google.auth.exceptions import GoogleAuthError
+
+from ..models import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,16 @@ def google_login(request):
         # to the logs; the client only gets a generic message.
         logger.warning("Google token verification failed: %s", exc)
         return JsonResponse({"error": "Invalid Google token"}, status=401)
+    except GoogleAuthError as exc:
+        # verify_oauth2_token first fetches Google's signing certs over HTTPS.
+        # A transport/SSL failure there raises GoogleAuthError (not ValueError),
+        # which is a server-side problem, not a bad token. Return JSON 502 so the
+        # client shows a real message instead of choking on an HTML 500 page.
+        logger.error("Could not verify Google token (transport error): %s", exc)
+        return JsonResponse(
+            {"error": "Could not reach Google to verify sign-in. Please try again."},
+            status=502,
+        )
 
     email = idinfo.get("email")
     if not email or not idinfo.get("email_verified", False):
@@ -92,6 +105,40 @@ def google_login(request):
         "Google login succeeded for user %s (%s account)",
         user.id, "new" if created else "existing",
     )
+    return JsonResponse({"authenticated": True, "user": _serialize_user(user)})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def test_login(request):
+    """Log in a fixed test user with a clean slate, for the E2E suite.
+
+    Guarded by ENABLE_TEST_LOGIN: when the flag is off (the default, and always
+    in production) this returns 404 so the route is invisible. The end-to-end
+    run sets ENABLE_TEST_LOGIN=1 so Playwright can obtain a real session cookie.
+
+    Each call resets the test user's practice state — topic selections, daily
+    decks, and settings — so a test can call it (e.g. in beforeEach) to start
+    from a known-clean state regardless of what earlier tests did. The single
+    shared user means tests can't rely on the database for isolation otherwise.
+    """
+    if not getattr(django_settings, "ENABLE_TEST_LOGIN", False):
+        raise Http404()
+    User = get_user_model()
+    user, _ = User.objects.get_or_create(
+        username="e2e-user",
+        defaults={
+            "email": "e2e@example.com",
+            "first_name": "E2E",
+            "last_name": "User",
+        },
+    )
+    # Reset to a clean slate: no selected topics, no deck, default settings.
+    user.topic_selections.all().delete()
+    user.decks.all().delete()
+    Settings.objects.filter(user=user).delete()
+    login(request, user)
+    logger.info("Test login for user %s (ENABLE_TEST_LOGIN is on)", user.id)
     return JsonResponse({"authenticated": True, "user": _serialize_user(user)})
 
 

@@ -8,6 +8,10 @@ dependencies = [
     "django-cors-headers",
     "google-auth[requests]",
     "mathgenerator==1.5.0",
+    # Verify TLS against the OS trust store so HTTPS-intercepting antivirus /
+    # proxies (whose re-signing root is trusted by the OS but not by certifi)
+    # don't break outbound calls like Google token verification. See settings.py.
+    "truststore",
 ]
 
 [tool.setuptools]
