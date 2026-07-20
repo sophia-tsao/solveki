@@ -35,8 +35,8 @@ python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e .                   # installs deps from pyproject.toml
 python manage.py migrate
-python manage.py seed_courses      # load courses
 python manage.py seed_topics       # load topics
+python manage.py seed_courses      # create courses and link the topics to them
 python manage.py runserver
 ```
 

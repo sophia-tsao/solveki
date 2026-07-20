@@ -40,8 +40,10 @@ jobs:
         working-directory: backend
         run: |
           python manage.py migrate
-          python manage.py seed_courses
+          # seed_topics must run first: it creates the Topic rows, and
+          # seed_courses then links those existing topics to their courses.
           python manage.py seed_topics
+          python manage.py seed_courses
 
       - name: Start backend
         working-directory: backend
