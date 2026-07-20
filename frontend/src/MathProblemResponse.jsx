@@ -20,6 +20,10 @@ function MathProblemResponse(props) {
         setResponse(event.target.value);
     }
     function submitResponse() {
+        // Ignore blank or whitespace-only submissions; they are neither correct nor incorrect.
+        if (response.trim() === "") {
+            return;
+        }
         const numResponse = parseFloat(response);
         const numSolution = parseFloat(props.solution);
         const isCorrect = response === props.solution ||
@@ -55,6 +59,7 @@ function MathProblemResponse(props) {
             <button
                 className={`math-problem-submit${showIncorrect ? ' math-problem-submit-incorrect' : ''}`}
                 onClick={submitResponse}
+                disabled={response.trim() === ""}
             >
                 {showIncorrect ? 'Incorrect!' : 'Submit'}
             </button>

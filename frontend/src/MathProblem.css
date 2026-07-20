@@ -138,9 +138,14 @@
     flex-shrink: 0;
 }
 
-.math-problem-submit:hover {
+.math-problem-submit:hover:not(:disabled) {
     background: #1d4ed8;
     box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+}
+
+.math-problem-submit:disabled {
+    background: #94a3b8;
+    cursor: not-allowed;
 }
 
 .math-problem-submit-incorrect {

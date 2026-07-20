@@ -57,6 +57,22 @@ describe('MathProblemResponse', () => {
     expect(input).toHaveValue('');
   });
 
+  it('ignores a blank submission (neither correct nor incorrect)', async () => {
+    const { onCorrect, onIncorrect, user } = setup();
+    await user.click(screen.getByRole('button'));
+    expect(onCorrect).not.toHaveBeenCalled();
+    expect(onIncorrect).not.toHaveBeenCalled();
+    expect(screen.getByRole('button')).toHaveTextContent('Submit');
+  });
+
+  it('ignores a whitespace-only submission', async () => {
+    const { onCorrect, onIncorrect, user } = setup();
+    await user.type(screen.getByRole('textbox'), '   ');
+    await user.click(screen.getByRole('button'));
+    expect(onCorrect).not.toHaveBeenCalled();
+    expect(onIncorrect).not.toHaveBeenCalled();
+  });
+
   it('does not require an onIncorrect handler', async () => {
     const { user } = setup({ onIncorrect: undefined });
     await user.type(screen.getByRole('textbox'), '7');
