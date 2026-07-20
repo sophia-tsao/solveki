@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
     "django==6.0.4",
     "django-cors-headers",
-    "google-auth",
+    "google-auth[requests]",
     "mathgenerator==1.5.0",
 ]
 
