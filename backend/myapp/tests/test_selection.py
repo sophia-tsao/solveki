@@ -1,9 +1,10 @@
 """Tests for course/topic listing and per-user topic selection."""
 import json
+from unittest import mock
 
 from django.test import TestCase, Client
 
-from myapp.models import UserTopicSelection
+from myapp.models import UserTopicSelection, Settings, DailyDeck
 from .factories import make_user, make_course, make_topic, select
 
 
@@ -139,3 +140,101 @@ class SetCourseTopicsSelectedTests(TestCase):
     def test_nonexistent_course(self):
         response = self._set(99999, True)
         self.assertEqual(response.status_code, 404)
+
+
+class TopicToggleDeckRegenerationTests(TestCase):
+    """Toggling a topic regenerates today's unanswered cards immediately.
+
+    Two topics use distinct generators so a regenerated tail is recognisable
+    by which generator produced its problems.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.user = make_user()
+        self.client.force_login(self.user)
+        self.course = make_course()
+        self.add_topic = make_topic(self.course, generator_name="addition")
+        self.sub_topic = make_topic(self.course, generator_name="subtraction")
+        Settings.objects.update_or_create(
+            user=self.user, defaults={"questions_per_day": 4}
+        )
+
+    def _toggle(self, topic_id, is_selected):
+        return self.client.patch(
+            f"/topics/{topic_id}/select",
+            data=json.dumps({"is_selected": is_selected}),
+            content_type="application/json",
+        )
+
+    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_selecting_topic_builds_tail_from_new_set(self, mock_add, mock_sub):
+        # Deck starts built from addition only.
+        select(self.user, self.add_topic)
+        self.client.get("/deck/")
+        deck = DailyDeck.objects.get(user=self.user)
+        self.assertTrue(all(p["solution"] == "2" for p in deck.problems))
+
+        # Advance one, then add subtraction: the unanswered tail is regenerated
+        # and can now include subtraction problems.
+        self.client.post("/deck/advance/")
+        self._toggle(self.sub_topic.id, True)
+
+        deck.refresh_from_db()
+        self.assertEqual(len(deck.problems), 4)  # total preserved
+        self.assertEqual(deck.current_index, 1)  # progress preserved
+        self.assertEqual(deck.problems[0]["solution"], "2")  # answered card kept
+
+    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_deselecting_topic_purges_it_from_unanswered_tail(self, mock_add, mock_sub):
+        select(self.user, self.add_topic)
+        select(self.user, self.sub_topic)
+        self.client.get("/deck/")
+
+        # Remove subtraction; the regenerated tail must contain only addition.
+        self._toggle(self.sub_topic.id, False)
+
+        deck = DailyDeck.objects.get(user=self.user)
+        self.assertEqual(len(deck.problems), 4)
+        self.assertTrue(all(p["solution"] == "2" for p in deck.problems))
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_no_deck_yet_is_a_noop(self, mock_add):
+        # No deck for today: toggling shouldn't create one.
+        self._toggle(self.add_topic.id, True)
+        self.assertFalse(DailyDeck.objects.filter(user=self.user).exists())
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_finished_deck_is_left_alone(self, mock_add):
+        select(self.user, self.add_topic)
+        self.client.get("/deck/")
+        for _ in range(4):
+            self.client.post("/deck/advance/")  # finish the deck
+        deck = DailyDeck.objects.get(user=self.user)
+        self.assertEqual(deck.current_index, 4)
+
+        self._toggle(self.sub_topic.id, True)
+
+        deck.refresh_from_db()
+        self.assertEqual(deck.current_index, 4)
+        self.assertEqual(len(deck.problems), 4)
+
+    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_course_level_toggle_regenerates_tail(self, mock_add, mock_sub):
+        select(self.user, self.add_topic)
+        self.client.get("/deck/")
+        self.client.post("/deck/advance/")
+
+        # Select the whole course (adds subtraction).
+        self.client.patch(
+            f"/courses/{self.course.id}/select",
+            data=json.dumps({"is_selected": True}),
+            content_type="application/json",
+        )
+
+        deck = DailyDeck.objects.get(user=self.user)
+        self.assertEqual(len(deck.problems), 4)
+        self.assertEqual(deck.current_index, 1)

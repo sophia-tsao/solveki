@@ -187,6 +187,8 @@ def toggle_topic(request, topicID):
         UserTopicSelection.objects.get_or_create(user=request.user, topic=topic)
     else:
         UserTopicSelection.objects.filter(user=request.user, topic=topic).delete()
+    # Apply the topic change to today's deck immediately (see helper docstring).
+    _regenerate_deck_tail(request.user)
     return JsonResponse({"id": topic.id, "is_selected": is_selected})
 
 
@@ -210,6 +212,8 @@ def set_course_topics_selected(request, courseID):
         )
     else:
         UserTopicSelection.objects.filter(user=request.user, topic__in=topics).delete()
+    # Apply the topic change to today's deck immediately (see helper docstring).
+    _regenerate_deck_tail(request.user)
     return JsonResponse({"course_id": courseID, "is_selected": new_value})
 
 
@@ -366,6 +370,34 @@ def _grow_today_deck(user, count):
     if extra:
         deck.problems = deck.problems + extra
         deck.save(update_fields=["problems"])
+
+
+def _regenerate_deck_tail(user):
+    """Rebuild today's not-yet-answered problems from the current topic set.
+
+    Problems the student has already worked through (everything before
+    `current_index`) are kept; the remaining cards are regenerated from the
+    topics currently selected, preserving the deck's total size and the
+    student's position. This lets a topic toggle take effect immediately —
+    stored problems only carry their text/solution, not the topic they came
+    from, so an individual topic's cards can't be surgically removed; we
+    regenerate the tail instead.
+
+    Does nothing if there's no deck for today yet (it'll be built from the
+    current topics on first access) or if the student has already finished
+    today's deck.
+    """
+    today = timezone.localdate()
+    deck = DailyDeck.objects.filter(user=user, date=today).first()
+    if deck is None:
+        return
+    answered = deck.current_index
+    remaining = len(deck.problems) - answered
+    if remaining <= 0:
+        return
+    new_tail = _build_deck(user, remaining)
+    deck.problems = deck.problems[:answered] + new_tail
+    deck.save(update_fields=["problems"])
 
 
 def _deck_payload(deck):
