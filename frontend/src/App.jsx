@@ -6,8 +6,15 @@ import Settings from './Settings.jsx';
 import LoginPage from './LoginPage.jsx';
 import { fetchMe } from './auth.js';
 
+const PAGES = ["math", "courses", "settings"];
+
+function pageFromHash() {
+  const page = window.location.hash.replace(/^#\/?/, "");
+  return PAGES.includes(page) ? page : "math";
+}
+
 function App() {
-  const [currentPage, setCurrentPage]=useState("math");
+  const [currentPage, setCurrentPage]=useState(pageFromHash);
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -18,14 +25,22 @@ function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
+  useEffect(() => {
+    const onHashChange = () => setCurrentPage(pageFromHash());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
   function changeVisibility(page){
-    if(page==="math" || page==="courses" || page==="settings"){
+    if(PAGES.includes(page)){
+      window.location.hash = `#/${page}`;
       setCurrentPage(page);
     }
   }
 
   function handleLoggedOut() {
     setUser(null);
+    window.location.hash = "#/math";
     setCurrentPage("math");
   }
 
@@ -37,7 +52,7 @@ function App() {
 
   return(
     <div>
-      <Header linkClicked={(page)=>changeVisibility(page)}/>
+      <Header currentPage={currentPage} linkClicked={(page)=>changeVisibility(page)}/>
       <div style={{paddingTop: '32px'}}>
         {currentPage==="math" && <MathProblem />}
         {currentPage==="courses" && <CourseList />}
