@@ -216,9 +216,12 @@ class TopicToggleDeckRegenerationTests(TestCase):
 
         self._toggle(self.add_topic.id, False)  # now nothing selected
         deck = DailyDeck.objects.get(user=self.user)
-        # Tail can't be generated, but the deck isn't permanently shrunk below
-        # what a later reselection can refill.
+        # The deselect must NOT truncate the deck to the answered cards; the
+        # unanswered tail is preserved until a topic is reselected.
+        self.assertEqual(len(deck.problems), 4)
         self.assertEqual(deck.current_index, 2)
+        # Viewing now, mid-swap, must not read as "finished".
+        self.assertFalse(self.client.get("/deck/").json().get("completed"))
 
         self._toggle(self.sub_topic.id, True)  # pick the new topic
 

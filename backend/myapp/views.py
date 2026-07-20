@@ -384,13 +384,17 @@ def _regenerate_deck_tail(user):
     cards can't be surgically removed; we regenerate the tail instead.
 
     The tail size is derived from the target count rather than the current
-    deck length: a temporary "no topics selected" state (e.g. mid-way through
-    swapping courses) generates an empty tail, and sizing off the shrunken
-    deck would strand the student on a short, already-"finished" deck.
+    deck length, so refilling always aims for `questions_per_day`.
 
     Does nothing if there's no deck for today yet (it'll be built from the
-    current topics on first access) or if the student has already answered at
-    least the target number of problems today.
+    current topics on first access), if the student has already answered at
+    least the target number of problems today, or if no topics are currently
+    selected. That last case matters: swapping topic sets is two steps
+    (deselect the old, select the new), and in between nothing is selected.
+    Regenerating then would produce an empty tail; writing it back would
+    truncate the deck down to just the answered cards and strand the student
+    on an already-"finished" deck. Leaving the deck untouched lets the
+    following selection rebuild the tail properly.
     """
     today = timezone.localdate()
     deck = DailyDeck.objects.filter(user=user, date=today).first()
@@ -402,6 +406,10 @@ def _regenerate_deck_tail(user):
     if remaining <= 0:
         return
     new_tail = _build_deck(user, remaining)
+    if not new_tail:
+        # No topics currently selected — can't regenerate. Preserve the deck
+        # rather than truncating away its unanswered tail.
+        return
     deck.problems = deck.problems[:answered] + new_tail
     deck.save(update_fields=["problems"])
 
