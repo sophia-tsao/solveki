@@ -233,7 +233,14 @@ describe('MathProblem — answering', () => {
   });
 });
 
-const CONFETTI_KEY = 'solveki-confetti-2026-07-20';
+// Finish the single-card deck currently showing by answering it correctly.
+// Assumes the next queued apiFetch response is the advance result.
+async function finishSingleCardDeck(user) {
+  await screen.findByText('1 of 1 questions');
+  await user.type(screen.getByRole('textbox'), '4');
+  await user.click(screen.getByRole('button'));
+  await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
+}
 
 describe('MathProblem — completion confetti', () => {
   it('fires confetti when the student answers the last card', async () => {
@@ -243,80 +250,72 @@ describe('MathProblem — completion confetti', () => {
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container } = render(<MathProblem />);
-    await screen.findByText('1 of 1 questions');
+    await finishSingleCardDeck(user);
 
-    await user.type(screen.getByRole('textbox'), '4');
-    await user.click(screen.getByRole('button'));
-
-    await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
     expect(container.querySelector('.confetti')).toBeInTheDocument();
   });
 
-  // Regression: maybeCelebrate ran on *every* transition into `completed`,
-  // including a passive load that lands on an already-finished deck (the mount
-  // fetch, or the day-rollover refetch on refocus). That silently burned the
-  // once-per-day localStorage token, so the student's genuine finish later that
-  // day showed no confetti. A passive completed-load must neither celebrate nor
-  // consume the token.
-  it('does not fire — or burn the daily token — on a passive completed-load', async () => {
+  // A passive load must never celebrate: only the genuine finish transition
+  // (answering the last card, via advanceDeck) fires confetti. The mount fetch,
+  // the day-rollover refetch on refocus, a reload of the completed screen, and
+  // a topic-change refetch all route through fetchDeck, which never celebrates.
+  it('does not fire when a completed deck is loaded passively (mount / reload)', async () => {
     apiFetch.mockResolvedValueOnce(deckResponse({ completed: true, total: 3 }));
 
     const { container } = render(<MathProblem />);
     await screen.findByText(/You've finished all 3 questions/);
 
     expect(container.querySelector('.confetti')).not.toBeInTheDocument();
-    // The token is untouched, so a real finish later today can still celebrate.
-    expect(localStorage.getItem(CONFETTI_KEY)).toBeNull();
   });
 
-  it('still celebrates a genuine finish after a passive completed-load earlier that day', async () => {
+  // The core scenario: a student finishes their deck (confetti), raises their
+  // questions-per-day, and finishes the newly added cards the SAME day. Each
+  // genuine completion must celebrate — there is deliberately no once-per-day
+  // suppression, which previously ate the second celebration.
+  it('celebrates every genuine finish, including a second one the same day', async () => {
     const user = userEvent.setup();
-    // First: a passive load onto a finished deck (must not consume the token)...
-    apiFetch
-      .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }))
-      // ...then the student works and finishes a fresh deck.
-      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
-      .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
-    const { container, unmount } = render(<MathProblem />);
-    await screen.findByText(/You've finished all 1 question/);
-    expect(container.querySelector('.confetti')).not.toBeInTheDocument();
-    unmount();
-
-    const { container: c2 } = render(<MathProblem />);
-    await screen.findByText('1 of 1 questions');
-    await user.type(screen.getByRole('textbox'), '4');
-    await user.click(screen.getByRole('button'));
-
-    await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
-    expect(c2.querySelector('.confetti')).toBeInTheDocument();
-  });
-
-  it('fires confetti at most once per day', async () => {
-    const user = userEvent.setup();
-    // A genuine finish that celebrates and sets the token...
+    // First finish: the original deck.
     apiFetch
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container, unmount } = render(<MathProblem />);
-    await screen.findByText('1 of 1 questions');
-    await user.type(screen.getByRole('textbox'), '4');
-    await user.click(screen.getByRole('button'));
-    await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
+    await finishSingleCardDeck(user);
     expect(container.querySelector('.confetti')).toBeInTheDocument();
     unmount();
 
-    // ...a second finish the same day must not celebrate again.
+    // Same day: questions-per-day raised, the student finishes the new cards.
     apiFetch
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container: c2 } = render(<MathProblem />);
-    await screen.findByText('1 of 1 questions');
-    await user.type(screen.getByRole('textbox'), '4');
-    await user.click(screen.getByRole('button'));
-    await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
+    await finishSingleCardDeck(user);
+    expect(c2.querySelector('.confetti')).toBeInTheDocument();
+  });
+
+  // Full user scenario end to end: reloading (or changing topics) after a
+  // celebrated finish reloads the completed deck via fetchDeck, which must stay
+  // quiet — the confetti already played on the finish itself.
+  it('stays quiet when the completed deck is reopened after celebrating', async () => {
+    const user = userEvent.setup();
+
+    // Genuine finish → confetti.
+    apiFetch
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
+      .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
+
+    const { container, unmount } = render(<MathProblem />);
+    await finishSingleCardDeck(user);
+    expect(container.querySelector('.confetti')).toBeInTheDocument();
+    unmount();
+
+    // Reload / topic change: the deck comes back already completed via fetchDeck.
+    apiFetch.mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
+
+    const { container: c2 } = render(<MathProblem />);
+    await screen.findByText(/You've finished all 1 question/);
     expect(c2.querySelector('.confetti')).not.toBeInTheDocument();
   });
 });

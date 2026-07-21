@@ -74,21 +74,21 @@ function MathProblem() {
   const [showConfetti, setShowConfetti] = useState(false);
   const MAX_ATTEMPTS = 2;
 
-  // Fire confetti at most once per day, the first time the deck is completed.
-  const maybeCelebrate = useCallback(() => {
-    const key = `solveki-confetti-${new Date().toLocaleDateString('en-CA')}`;
-    if (localStorage.getItem(key)) return;
-    localStorage.setItem(key, '1');
+  // Fire confetti. Celebration is gated entirely by the `celebrate` flag below
+  // (see applyDeck), not by a per-day token: a student who finishes their deck,
+  // raises their questions-per-day, and finishes the new cards should be
+  // celebrated each time they genuinely complete the deck — even twice in a day.
+  const celebrate = useCallback(() => {
     setShowConfetti(true);
     setTimeout(() => setShowConfetti(false), 3500);
   }, []);
 
   // `celebrate` gates the confetti: only the genuine finish transition (the
-  // student answering the last card, via advanceDeck) should celebrate. A
-  // passive load that happens to land on an already-completed deck — the mount
-  // fetch, or the day-rollover refetch on refocus — must not, or it would burn
-  // the once-per-day confetti token and leave the real finish silent.
-  const applyDeck = useCallback((result, { celebrate = false } = {}) => {
+  // student answering the last card, via advanceDeck) should fire it. A passive
+  // load that happens to land on an already-completed deck — the mount fetch,
+  // the day-rollover refetch on refocus, a reload of the completed screen, or a
+  // topic change — must not, so reopening a finished deck stays quiet.
+  const applyDeck = useCallback((result, { celebrating = false } = {}) => {
     if (result.no_topics) {
       log.debug('Deck has no selected topics');
       setStatus('no_topics');
@@ -99,7 +99,7 @@ function MathProblem() {
       setTotal((prev) => result.total ?? prev);
       setStatus('completed');
       log.info('Deck completed');
-      if (celebrate) maybeCelebrate();
+      if (celebrating) celebrate();
       return;
     }
     log.debug(`Showing question ${result.current_number} of ${result.total}`);
@@ -110,7 +110,7 @@ function MathProblem() {
     setAttempt(1);
     setFlipped(false);
     setStatus('active');
-  }, [maybeCelebrate]);
+  }, [celebrate]);
 
   const fetchDeck = useCallback(async () => {
     try {
@@ -137,7 +137,7 @@ function MathProblem() {
       }
       // Reaching `completed` here means the student just answered the last
       // card — the one moment worth celebrating.
-      applyDeck(await response.json(), { celebrate: true });
+      applyDeck(await response.json(), { celebrating: true });
     } catch (err) {
       log.error('Failed to advance deck:', err.message);
       setError(err.message);
