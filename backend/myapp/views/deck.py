@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from ..models import Topic, Settings, DailyDeck, TopicReview
 from .common import _require_auth
-from .problems import _make_problem
+from .problems import _make_problem_for_topic
 
 logger = logging.getLogger(__name__)
 
@@ -37,17 +37,6 @@ def _client_today(request):
     return timezone.localdate()
 
 
-def _build_deck(user, count):
-    """Generate up to `count` problems. Returns a list (possibly empty)."""
-    problems = []
-    for _ in range(count):
-        problem = _make_problem(user)
-        if problem is None:
-            break
-        problems.append(problem)
-    return problems
-
-
 def _has_topics(user):
     """True if the user currently has at least one usable topic selected."""
     return Topic.objects.filter(
@@ -55,38 +44,28 @@ def _has_topics(user):
     ).exists()
 
 
-def _select_deck_topics(user, today, count, exclude=()):
-    """Pick up to `count` topics for today's deck, ordered by spaced repetition.
+def _ordered_topics(user, today):
+    """The user's selected, usable topics ordered by spaced-repetition priority.
 
-    This is the one place that decides *which* topics a deck is built from; the
-    deck helpers all route through it so the ordering and de-duplication rules
-    live in a single, testable spot. It reads the SM-2 schedule (each topic's
+    This is the one place that decides the *order* topics are reviewed in; the
+    deck helpers route through it so the ordering rule lives in a single,
+    testable spot. It reads the SM-2 schedule (each topic's
     `TopicReview.due_date`, written by the grading step) but never computes it —
     scheduling math lives in myapp.srs.
 
-    Ordering combines two rules with a single sort on the effective due date:
+    A single sort on each topic's effective due date yields the whole policy:
 
     - Due first, most overdue first (Option A). A topic never reviewed has no
-      `TopicReview` row; it's treated as due today (sorts alongside today's due
-      topics), so new topics enter the rotation promptly.
-    - Top up with the next-soonest (Option 2). When fewer topics are due than
-      `count`, not-yet-due topics fill the remaining slots, soonest first —
-      their future `due_date` sorts after everything already due, so they're
-      only pulled in to avoid a short deck.
+      `TopicReview` row; it's treated as due today, so new topics enter the
+      rotation promptly rather than being deferred.
+    - Next-soonest after that (Option 2). Not-yet-due topics have a future
+      `due_date`, so they sort after everything already due — they're only
+      reached once the due topics run out.
 
-    `exclude` is a set/iterable of topic ids already in the deck; they're left
-    out so top-up and tail-regeneration can't duplicate a topic (each topic
-    appears at most once per day).
-
-    Returns a list of Topic objects (length 0..count). It is empty *only* when
-    the user has no usable topic selected outside `exclude` — never merely
-    because nothing is due yet (the top-up guarantees a full deck while any
-    topic is selected). Callers rely on that: an empty result means "no topics",
-    not "nothing to review today".
+    Ties break by topic id for a stable, deterministic order (no reliance on DB
+    row order). Returns every usable selected topic (a Topic list, possibly
+    empty); callers slice or cycle it to the size they need.
     """
-    if count <= 0:
-        return []
-    exclude = set(exclude)
     topics = list(
         Topic.objects.filter(selections__user=user, generator_name__isnull=False)
     )
@@ -103,11 +82,77 @@ def _select_deck_topics(user, today, count, exclude=()):
             return today
         return review.due_date
 
-    candidates = [t for t in topics if t.id not in exclude]
-    # Sort by effective due date; ties broken by id for a stable, deterministic
-    # order (no reliance on DB row order).
-    candidates.sort(key=lambda t: (effective_due(t), t.id))
-    return candidates[:count]
+    topics.sort(key=lambda t: (effective_due(t), t.id))
+    return topics
+
+
+def _select_deck_topics(user, today, count, exclude=()):
+    """The next `count` distinct topics to review, in due order, skipping `exclude`.
+
+    A thin slice over `_ordered_topics`. `exclude` is a set/iterable of topic
+    ids already in the deck, so callers topping up a deck get *fresh* topics
+    first (variety before repeats). Returns 0..count Topic objects; empty only
+    when the user has no usable topic selected outside `exclude`.
+    """
+    if count <= 0:
+        return []
+    exclude = set(exclude)
+    return [t for t in _ordered_topics(user, today) if t.id not in exclude][:count]
+
+
+def _deck_topic_ids(deck):
+    """Source topic ids of a deck's stored problems, skipping any that lack one.
+
+    Problems stored before topic attribution was added (or by a client that
+    predates it) have no `topic_id`; they're simply omitted rather than crashing
+    a top-up. The result is used only to prefer fresh topics when topping up, so
+    a missing id degrades to "might repeat this topic", never an error.
+    """
+    return [p["topic_id"] for p in deck.problems if "topic_id" in p]
+
+
+def _generate_problems(user, count, today, existing=()):
+    """Generate exactly `count` problems for the deck, filling by due order.
+
+    Distinct topics come first, most-due first (so a fresh or topped-up deck has
+    as much variety as the user's topic set allows). When there are fewer usable
+    topics than `count`, topics repeat — cycling in the same due order — so the
+    deck always reaches `questions_per_day` regardless of how many topics are
+    selected. `existing` is the topic ids already in the deck; those topics are
+    placed last within a cycle, so a top-up adds new topics before repeating any.
+
+    Each problem records its source topic id (see `_make_problem_for_topic`), so
+    a repeated topic yields a different generated problem but is still
+    attributable for scheduling. Returns a list of up to `count` problems; fewer
+    only if no topics are usable (empty) or every candidate topic's generator is
+    broken.
+    """
+    if count <= 0:
+        return []
+    ordered = _ordered_topics(user, today)
+    if not ordered:
+        return []
+    # Prefer topics not already in the deck, preserving due order within each
+    # group, so top-ups add variety before repeating.
+    existing = set(existing)
+    fresh = [t for t in ordered if t.id not in existing]
+    repeats = [t for t in ordered if t.id in existing]
+    rotation = fresh + repeats
+
+    problems = []
+    i = 0
+    # Cap total attempts so a topic set whose generators are all broken can't
+    # loop forever; 2x gives every topic a couple of tries.
+    max_attempts = max(count, len(rotation)) * 2
+    attempts = 0
+    while len(problems) < count and attempts < max_attempts:
+        topic = rotation[i % len(rotation)]
+        i += 1
+        attempts += 1
+        problem = _make_problem_for_topic(topic)
+        if problem is not None:
+            problems.append(problem)
+    return problems
 
 
 def _get_or_create_today_deck(user, today):
@@ -129,7 +174,7 @@ def _get_or_create_today_deck(user, today):
     if deck is None:
         # A new day: clear out this user's stale decks and build a fresh one.
         DailyDeck.objects.filter(user=user).exclude(date=today).delete()
-        problems = _build_deck(user, settings.questions_per_day)
+        problems = _generate_problems(user, settings.questions_per_day, today)
         logger.info(
             "Built new deck for user %s with %d/%d problems",
             user.id, len(problems), settings.questions_per_day,
@@ -139,7 +184,8 @@ def _get_or_create_today_deck(user, today):
         )
     missing = settings.questions_per_day - len(deck.problems)
     if missing > 0:
-        extra = _build_deck(user, missing)
+        existing = _deck_topic_ids(deck)
+        extra = _generate_problems(user, missing, today, existing=existing)
         if extra:
             deck.problems = deck.problems + extra
             deck.save(update_fields=["problems"])
@@ -165,7 +211,8 @@ def _grow_today_deck(user, count, today):
     missing = count - len(deck.problems)
     if missing <= 0:
         return
-    extra = _build_deck(user, missing)
+    existing = _deck_topic_ids(deck)
+    extra = _generate_problems(user, missing, today, existing=existing)
     if extra:
         deck.problems = deck.problems + extra
         deck.save(update_fields=["problems"])
@@ -207,7 +254,7 @@ def _regenerate_deck_tail(user, today):
     remaining = target - answered
     if remaining <= 0:
         return
-    new_tail = _build_deck(user, remaining)
+    new_tail = _generate_problems(user, remaining, today)
     if not new_tail:
         # No topics currently selected — can't regenerate. Preserve the deck
         # rather than truncating away its unanswered tail.

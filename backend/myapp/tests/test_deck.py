@@ -11,7 +11,7 @@ from django.test import TestCase, Client
 
 from myapp.models import DailyDeck, Settings, TopicReview
 from myapp import views
-from myapp.views.deck import _select_deck_topics
+from myapp.views.deck import _select_deck_topics, _generate_problems
 from .factories import make_user, make_course, make_topic, select
 
 
@@ -130,6 +130,23 @@ class DeckTests(TestCase):
         self.assertTrue(all(p["topic_id"] == self.topic.id for p in deck.problems))
 
     @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_legacy_deck_without_topic_id_tops_up_without_error(self, mock_gen):
+        # A deck persisted before topic attribution existed has entries with no
+        # topic_id. Topping it up must not crash reading the in-deck topic ids.
+        select(self.user, self.topic)
+        Settings.objects.update_or_create(
+            user=self.user, defaults={"questions_per_day": 3}
+        )
+        DailyDeck.objects.create(
+            user=self.user,
+            date=datetime.date(2026, 7, 21),
+            problems=[{"problem": "old", "solution": "1"}],  # no topic_id
+            current_index=0,
+        )
+        data = self.client.get("/deck/?today=2026-07-21").json()
+        self.assertEqual(data["total"], 3)
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
     def test_new_day_rebuilds_deck(self, mock_gen):
         select(self.user, self.topic)
         Settings.objects.update_or_create(
@@ -228,10 +245,7 @@ class DeckTests(TestCase):
 
 
 class SelectDeckTopicsTests(TestCase):
-    """The spaced-repetition topic selector (Option A due order + Option 2 fill).
-
-    Tests the selector in isolation; it is not yet wired into deck building.
-    """
+    """The spaced-repetition topic selector (Option A due order + Option 2 fill)."""
 
     def setUp(self):
         self.user = make_user()
@@ -324,3 +338,69 @@ class SelectDeckTopicsTests(TestCase):
         select(other, theirs)
         result = _select_deck_topics(self.user, self.today, 5)
         self.assertEqual(result, [mine])
+
+
+class GenerateProblemsTests(TestCase):
+    """Filling a deck to exactly `count`: distinct topics first, then repeats.
+
+    The `addition` generator echoes its topic id back as the problem text so a
+    generated problem can be traced to its source topic without a real generator.
+    """
+
+    def setUp(self):
+        self.user = make_user()
+        self.course = make_course()
+        self.today = datetime.date(2026, 7, 21)
+
+    def _topic(self, name, generator_name="addition"):
+        topic = make_topic(self.course, topic_name=name, generator_name=generator_name)
+        select(self.user, topic)
+        return topic
+
+    def _review(self, topic, due_date):
+        return TopicReview.objects.create(user=self.user, topic=topic, due_date=due_date)
+
+    def test_empty_when_no_topics(self):
+        self.assertEqual(_generate_problems(self.user, 5, self.today), [])
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "1"))
+    def test_distinct_topics_used_before_repeating(self, mock_gen):
+        # Three topics, count 3 -> each appears exactly once.
+        topics = [self._topic(f"T{i}") for i in range(3)]
+        problems = _generate_problems(self.user, 3, self.today)
+        self.assertEqual(len(problems), 3)
+        self.assertEqual(
+            sorted(p["topic_id"] for p in problems),
+            sorted(t.id for t in topics),
+        )
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "1"))
+    def test_repeats_to_fill_when_fewer_topics_than_count(self, mock_gen):
+        # One topic, count 3 -> the deck still reaches 3, repeating that topic.
+        topic = self._topic("Only")
+        problems = _generate_problems(self.user, 3, self.today)
+        self.assertEqual(len(problems), 3)
+        self.assertTrue(all(p["topic_id"] == topic.id for p in problems))
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "1"))
+    def test_fills_in_due_order_most_overdue_first(self, mock_gen):
+        old = self._topic("Old")
+        recent = self._topic("Recent")
+        self._review(old, self.today - datetime.timedelta(days=10))
+        self._review(recent, self.today - datetime.timedelta(days=1))
+        problems = _generate_problems(self.user, 2, self.today)
+        self.assertEqual([p["topic_id"] for p in problems], [old.id, recent.id])
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "1"))
+    def test_topup_adds_fresh_topic_before_repeating(self, mock_gen):
+        # A deck already holding topic A, topped up by 2, with topics A and B
+        # selected: B (fresh) comes before A repeats.
+        a = self._topic("A")
+        b = self._topic("B")
+        extra = _generate_problems(self.user, 2, self.today, existing=[a.id])
+        self.assertEqual([p["topic_id"] for p in extra], [b.id, a.id])
+
+    def test_broken_generator_does_not_loop_forever(self):
+        # An unresolvable generator name yields no problems rather than hanging.
+        self._topic("Broken", generator_name="not_a_real_generator")
+        self.assertEqual(_generate_problems(self.user, 3, self.today), [])
