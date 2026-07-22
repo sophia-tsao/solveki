@@ -13,6 +13,17 @@ from ._registry import LOCAL_GENERATORS, register  # noqa: F401
 
 # Import each category module for its @register side effects. Add new modules
 # here as you create them (e.g. calculus, geometry).
-from . import algebra, geometry  # noqa: F401,E402
+from . import (  # noqa: F401,E402
+    algebra,
+    algebra1,
+    algebra2,
+    arithmetic,
+    calculus,
+    geometry,
+    geometry_hs,
+    prealgebra,
+    precalculus,
+    statistics_gen,
+)
 
 __all__ = ["LOCAL_GENERATORS", "register"]
