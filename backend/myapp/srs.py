@@ -21,6 +21,13 @@ MIN_EASE = 1.3   # ease floor: below this, intervals stop growing ("ease hell")
 INITIAL_EASE = 2.5
 PASSING_GRADE = 3  # quality >= this counts as a successful recall
 
+# Maximum interval, in days. SM-2 itself has no cap; this borrows Anki's notion
+# of a maximum interval, but not its value: Anki defaults to ~100 years, which
+# for a math-practice app would let a mastered topic vanish for good. A 1-year
+# cap keeps even well-known topics resurfacing at least annually so the skill is
+# refreshed rather than forgotten. Tunable in one place.
+MAX_INTERVAL = 365
+
 
 def update_ease(ease, quality):
     """Return the new ease factor after a review graded `quality` (0-5).
@@ -41,10 +48,10 @@ def update(ease, interval, repetitions, quality):
 
     On a successful recall (`quality >= 3`) the interval grows: the first success
     schedules 1 day out, the second 6 days, and thereafter the previous interval
-    times the ease factor (rounded). On a lapse (`quality < 3`) the item is reset
-    to be relearned — repetitions to 0 and interval to 1 day (due tomorrow) — so a
-    topic answered wrong resurfaces quickly. The ease factor is updated in both
-    cases.
+    times the ease factor (rounded), capped at `MAX_INTERVAL` so a mastered topic
+    still resurfaces. On a lapse (`quality < 3`) the item is reset to be
+    relearned — repetitions to 0 and interval to 1 day (due tomorrow) — so a topic
+    answered wrong resurfaces quickly. The ease factor is updated in both cases.
     """
     new_ease = update_ease(ease, quality)
     if quality >= PASSING_GRADE:
@@ -54,6 +61,7 @@ def update(ease, interval, repetitions, quality):
             new_interval = 6
         else:
             new_interval = round(interval * new_ease)
+        new_interval = min(new_interval, MAX_INTERVAL)
         new_repetitions = repetitions + 1
     else:
         new_interval = 1

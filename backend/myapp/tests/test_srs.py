@@ -54,6 +54,18 @@ class UpdateTests(SimpleTestCase):
         ease, interval, reps = srs.update(1.3, 30, 5, 0)
         self.assertEqual(ease, srs.MIN_EASE)
 
+    def test_interval_capped_at_max(self):
+        # A success on an already-huge interval is clamped, not multiplied past
+        # the cap, so a mastered topic still resurfaces.
+        ease, interval, reps = srs.update(2.5, srs.MAX_INTERVAL, 10, 5)
+        self.assertEqual(interval, srs.MAX_INTERVAL)
+
+    def test_interval_just_below_cap_does_not_exceed_it(self):
+        # round(interval * ease) would overshoot; the cap holds it at MAX_INTERVAL.
+        big = srs.MAX_INTERVAL - 1
+        ease, interval, reps = srs.update(2.5, big, 10, 5)
+        self.assertLessEqual(interval, srs.MAX_INTERVAL)
+
     def test_inputs_not_mutated(self):
         # Pure function: returns new values, leaves the caller's state alone.
         args = (2.5, 6, 2)
