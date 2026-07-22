@@ -42,9 +42,20 @@ read `backend/.env`.
   generator system.
 - **UserTopicSelection** — per-user selection row (user, topic), unique
   together; row existence means "selected".
+- **TopicReview** — per (user, topic) SM-2 scheduling state: `ease`, `interval`,
+  `repetitions`, `due_date`. Solveki schedules *topics*, not individual problems
+  (every problem is freshly generated), so the schedulable unit is the user's
+  mastery of a topic. Kept separate from `UserTopicSelection` on purpose:
+  deselecting a topic drops the selection row but preserves its review state for
+  when it's selected again. A null `due_date` means "never practiced → due now".
+- **DailyTopicGrade** — per (user, topic, date), supports the once-per-day
+  grading rule (see below). Stores a snapshot of the topic's SM-2 state *before*
+  the day's first grade plus the worst quality seen so far today, so repeated
+  answers recompute from a fixed base instead of compounding.
 - **Settings** — one-to-one per user; `language`, `questions_per_day`.
-- **DailyDeck** — per user + date; `problems` (JSON list of `{problem,
-  solution}`) and `current_index`.
+- **DailyDeck** — per user + date; `problems` (JSON list of `{problem, solution,
+  topic_id}`) and `current_index`. `topic_id` attributes each stored problem
+  back to its source topic so an answer can be graded against that topic.
 
 ### Endpoints (`backend/myapp/urls.py`)
 
@@ -64,13 +75,25 @@ read `backend/.env`.
 | PATCH | `courses/<id>/select` | `set_course_topics_selected` |
 | PATCH | `topics/<id>/select` | `toggle_topic` |
 
-Deck logic (`_get_or_create_today_deck`, `_build_deck`, `_deck_payload`) builds
-a per-day deck of `questions_per_day` problems and discards stale prior-day
-decks. `advance_deck` only ever steps an *existing* deck forward — it never
-builds one. Otherwise a new day's deck (fresh at index 0) could be advanced to
-index 1 without the student answering, stranding them on "2 of N"; this bites
-because the correct-answer handler advances on a 900ms timer, so finishing a
-problem just before midnight fires the advance after the day rolls over.
+Deck logic (`_get_or_create_today_deck`, `_generate_problems`, `_deck_payload`)
+builds a per-day deck of `questions_per_day` problems and discards stale
+prior-day decks. Problems are chosen by spaced-repetition due order
+(`_ordered_topics`): most-overdue topics first, never-practiced topics treated
+as due today, not-yet-due topics only once the due ones run out (ties break by
+topic id for a deterministic order). Distinct topics fill the deck first for
+variety; when fewer topics are selected than `questions_per_day`, topics repeat
+by cycling the same due order. `advance_deck` only ever steps an *existing* deck
+forward — it never builds one. Otherwise a new day's deck (fresh at index 0)
+could be advanced to index 1 without the student answering, stranding them on
+"2 of N"; this bites because the correct-answer handler advances on a timer, so
+finishing a problem just before midnight fires the advance after the day rolls
+over.
+
+When the student advances past a card, the client reports how it was answered
+(`correct_first` / `correct_second` / `incorrect`) in the advance body; the
+deck layer maps that outcome to an SM-2 quality grade and updates the card's
+topic schedule (`_grade_topic`). The outcome is optional, so a stray advance
+with no answer (the midnight-rollover case) simply doesn't grade.
 
 "The day" is the *user's* local day, not the server's. The server clock is UTC
 (`TIME_ZONE`), so every deck-touching request carries the client's local date
@@ -79,6 +102,48 @@ midnight rather than UTC's. Requests without the param fall back to the server
 date. The SPA also re-fetches the deck when the tab is refocused on a new local
 day, so a page left open overnight rolls over instead of stranding the student
 on yesterday's finished deck.
+
+## Spaced repetition (SM-2)
+
+Solveki schedules practice with SuperMemo-2. The design splits cleanly into
+*pure scheduling math* and *stateful application*:
+
+- **`backend/myapp/srs.py`** is the whole SM-2 algorithm and nothing else: pure
+  functions with no database, request, or clock access. It maps
+  `(ease, interval, repetitions, quality) -> (ease, interval, repetitions)` and
+  can be reasoned about and unit-tested in isolation. State is the SM-2 triple:
+  `ease` (interval multiplier, starts 2.5, floored at 1.3), `interval` (days to
+  the next review), and `repetitions` (consecutive successful recalls, reset on
+  a lapse). A successful recall (`quality >= 3`) grows the interval — 1 day, then
+  6, then `interval * ease` — capped at `MAX_INTERVAL` (365 days, borrowed from
+  Anki's notion of a max interval but tuned so a mastered topic still resurfaces
+  at least yearly). A lapse resets `repetitions` to 0 and `interval` to 1 day.
+- **The deck layer owns persistence, dates, and grade derivation.**
+  `_grade_topic` (in `views/deck.py`) turns an answer outcome into a quality
+  grade (`correct_first` → 5, `correct_second` → 3, `incorrect` → 1), calls
+  `srs.update`, and writes the topic's `TopicReview` (including its new
+  `due_date = today + interval`). `_ordered_topics` reads those `due_date`s to
+  order the deck but never computes them.
+
+### The once-per-day grading rule
+
+A topic can appear more than once in a day's deck (the deck repeats topics when
+few are selected). The rule: **the first answer for a topic each day sets its
+schedule; later repeats may only pull it down** — a second miss re-grades as a
+lapse, but a later success can't raise a schedule the student already got wrong.
+
+To apply that without compounding (repeated misses must not drop ease over and
+over), `DailyTopicGrade` snapshots the topic's SM-2 state *before* the day's
+first grade and records the worst quality applied so far today. Each occurrence
+recomputes the `TopicReview` from that fixed snapshot using
+`min(applied_quality, this_quality)`, so the day's net effect is always "one
+SM-2 update from a single base", never a chain of them.
+
+### Tests
+
+`tests/test_srs.py` unit-tests the pure algorithm (including grade boundaries);
+`tests/test_srs_integration.py` covers the deck-layer wiring (due ordering,
+grading, the once-per-day rule) end to end.
 
 ## Frontend (React 19 + Vite 8)
 
