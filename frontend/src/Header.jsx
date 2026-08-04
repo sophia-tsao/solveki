@@ -7,6 +7,7 @@ function Header(props) {
             <span className="header-logo">Solveki</span>
             <nav className="header-nav">
                 <button className={currentPage === "math" ? "active" : ""} onClick={() => props.linkClicked("math")}>Practice</button>
+                <button className={currentPage === "dashboard" ? "active" : ""} onClick={() => props.linkClicked("dashboard")}>Dashboard</button>
                 <button className={currentPage === "courses" ? "active" : ""} onClick={() => props.linkClicked("courses")}>Available Courses</button>
                 <button className={currentPage === "settings" ? "active" : ""} onClick={() => props.linkClicked("settings")}>Settings</button>
             </nav>

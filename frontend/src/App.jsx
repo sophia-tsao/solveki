@@ -3,13 +3,14 @@ import CourseList from './CourseList.jsx';
 import MathProblem from './MathProblem.jsx';
 import Header from './Header.jsx';
 import Settings from './Settings.jsx';
+import Dashboard from './Dashboard.jsx';
 import LoginPage from './LoginPage.jsx';
 import { fetchMe } from './auth.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('app');
 
-const PAGES = ["math", "courses", "settings"];
+const PAGES = ["math", "dashboard", "courses", "settings"];
 
 function pageFromHash() {
   const page = window.location.hash.replace(/^#\/?/, "");
@@ -64,6 +65,7 @@ function App() {
       <Header currentPage={currentPage} linkClicked={(page)=>changeVisibility(page)}/>
       <div style={{paddingTop: '32px'}}>
         {currentPage==="math" && <MathProblem />}
+        {currentPage==="dashboard" && <Dashboard />}
         {currentPage==="courses" && <CourseList />}
         {currentPage==="settings" && <Settings onLoggedOut={handleLoggedOut} />}
       </div>

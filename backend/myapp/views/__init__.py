@@ -29,6 +29,7 @@ from .courses import (
 from .problems import generate_problem, _make_problem
 from .settings import settings_view
 from .deck import get_deck, advance_deck
+from .dashboard import view_dashboard
 
 __all__ = [
     "me",
@@ -44,4 +45,5 @@ __all__ = [
     "settings_view",
     "get_deck",
     "advance_deck",
+    "view_dashboard",
 ]

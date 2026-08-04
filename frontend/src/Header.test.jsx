@@ -17,4 +17,12 @@ describe('Header', () => {
     await user.click(screen.getByRole('button', { name: 'Available Courses' }));
     expect(linkClicked).toHaveBeenCalledWith('courses');
   });
+
+  it('navigates to the dashboard', async () => {
+    const linkClicked = vi.fn();
+    const user = userEvent.setup();
+    render(<Header currentPage="math" linkClicked={linkClicked} />);
+    await user.click(screen.getByRole('button', { name: 'Dashboard' }));
+    expect(linkClicked).toHaveBeenCalledWith('dashboard');
+  });
 });
