@@ -71,6 +71,12 @@
     flex-shrink: 0;
 }
 
+/* Some — but not all — topics selected: the box shows an indeterminate dash,
+   tinted amber to distinguish it from a fully-selected (blue) course. */
+.course-bar-checkbox.partial {
+    accent-color: #d97706;
+}
+
 /* Chevron icon */
 .course-bar-chevron {
     flex-shrink: 0;

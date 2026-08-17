@@ -5,6 +5,15 @@ function CourseBar(props) {
   const [displayedTopics, setDisplayedTopics] = useState(props.topics);
   const topicsInnerRef = useRef(null);
   const [topicsHeight, setTopicsHeight] = useState(0);
+  const checkboxRef = useRef(null);
+
+  // `indeterminate` (the checkbox's dash) is a DOM-only property with no React
+  // attribute, so drive it imperatively. It shows only when some — but not
+  // all — of the course's topics are selected.
+  const isPartial = !props.isCourseSelected && !!props.isCoursePartial;
+  useEffect(() => {
+    if (checkboxRef.current) checkboxRef.current.indeterminate = isPartial;
+  }, [isPartial]);
 
   useEffect(() => {
     if (props.topics.length > 0) {
@@ -43,8 +52,9 @@ function CourseBar(props) {
         </div>
         <div className="course-bar-header-right">
           <input
+            ref={checkboxRef}
             type="checkbox"
-            className="course-bar-checkbox"
+            className={`course-bar-checkbox${isPartial ? ' partial' : ''}`}
             checked={props.isCourseSelected}
             onChange={handleCourseCheckbox}
             onClick={(e) => e.stopPropagation()}

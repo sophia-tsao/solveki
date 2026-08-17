@@ -1,0 +1,31 @@
+.course-list {
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 8px 16px 48px 16px;
+}
+
+.course-list-intro {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.course-list-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px 0;
+}
+
+.course-list-subtitle {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #6b7280;
+    margin: 0;
+}
+
+.course-list-error {
+    color: #b91c1c;
+    font-size: 14px;
+    text-align: center;
+}

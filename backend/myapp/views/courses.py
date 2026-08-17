@@ -12,9 +12,18 @@ from .deck import _regenerate_deck_tail, _client_today
 logger = logging.getLogger(__name__)
 
 
-def _course_is_selected(course, selected_ids):
-    topic_ids = list(course.topics.values_list("id", flat=True))
-    return bool(topic_ids) and all(tid in selected_ids for tid in topic_ids)
+def _course_selection(course, selected_ids):
+    # Read topic ids from the prefetched objects (see view_courses) rather than a
+    # fresh .values_list() query: .values_list() ignores the prefetch cache and
+    # issues one query per course (an N+1 against the DB), whereas .all() returns
+    # the already-in-memory topics, keeping the whole view at 2 queries total.
+    #
+    # is_selected: every topic selected. is_partial: some but not all selected.
+    topic_ids = [topic.id for topic in course.topics.all()]
+    selected_count = sum(1 for tid in topic_ids if tid in selected_ids)
+    is_selected = bool(topic_ids) and selected_count == len(topic_ids)
+    is_partial = selected_count > 0 and not is_selected
+    return is_selected, is_partial
 
 
 def view_courses(request):
@@ -26,11 +35,13 @@ def view_courses(request):
     )
     courses = []
     for course in Course.objects.all().prefetch_related("topics"):
+        is_selected, is_partial = _course_selection(course, selected_ids)
         courses.append({
             "id": course.id,
             "course_name": course.course_name,
             "grade_level": course.grade_level,
-            "is_selected": _course_is_selected(course, selected_ids),
+            "is_selected": is_selected,
+            "is_partial": is_partial,
         })
     return JsonResponse({"courses": courses})
 

@@ -1,31 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import CourseBar from './CourseBar.jsx';
 import { apiFetch, localDay } from './auth.js';
 import { createLogger } from './logger.js';
+import './CourseList.css';
 
 const log = createLogger('courses');
 
+async function fetchCourses() {
+  const response = await apiFetch(`/courses/`);
+  if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+  const result = await response.json();
+  log.debug(`Loaded ${result.courses.length} courses`);
+  return result.courses;
+}
+
 function CourseList() {
-  const [courses, setCourses] = useState([]);
+  const queryClient = useQueryClient();
   const [expandedCourses, setExpandedCourses] = useState(new Set());
   const [topicsMap, setTopicsMap] = useState({});
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const response = await apiFetch(`/courses/`);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        const result = await response.json();
-        log.debug(`Loaded ${result.courses.length} courses`);
-        setCourses(result.courses);
-      } catch (err) {
-        log.error('Failed to load courses:', err.message);
-        setError(err.message);
-      }
-    };
-    fetchCourses();
-  }, []);
+  const { data: courses = [], error: coursesError } = useQuery({
+    queryKey: ['courses'],
+    queryFn: fetchCourses,
+  });
+
+  // Optimistically flip a course's selection state in the cached courses list.
+  const patchCourseSelected = (courseID, isSelected, isPartial) =>
+    queryClient.setQueryData(['courses'], (prev = []) =>
+      prev.map(c => c.id === courseID ? { ...c, is_selected: isSelected, is_partial: isPartial } : c));
 
   const handleCourseBarClick = async (courseID) => {
     if (expandedCourses.has(courseID)) {
@@ -34,10 +38,18 @@ function CourseList() {
     }
     if (!topicsMap[courseID]) {
       try {
-        const response = await apiFetch(`/courses/${courseID}/topics`);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        const result = await response.json();
-        setTopicsMap(prev => ({ ...prev, [courseID]: result.topics }));
+        // fetchQuery caches by key and de-duplicates in-flight requests, so
+        // re-expanding a course (or racing double-clicks) won't re-hit the API.
+        const topics = await queryClient.fetchQuery({
+          queryKey: ['topics', courseID],
+          queryFn: async () => {
+            const response = await apiFetch(`/courses/${courseID}/topics`);
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+            const result = await response.json();
+            return result.topics;
+          },
+        });
+        setTopicsMap(prev => ({ ...prev, [courseID]: topics }));
       } catch (err) {
         log.error(`Failed to load topics for course ${courseID}:`, err.message);
         setError(err.message);
@@ -60,8 +72,9 @@ function CourseList() {
       log.info(`Topic ${topicID} ${newValue ? 'selected' : 'deselected'}`);
       const updatedTopics = topicsMap[courseID].map(t => t.id === topicID ? { ...t, is_selected: newValue } : t);
       const allSelected = updatedTopics.every(t => t.is_selected);
+      const anySelected = updatedTopics.some(t => t.is_selected);
       setTopicsMap(prev => ({ ...prev, [courseID]: updatedTopics }));
-      setCourses(prev => prev.map(c => c.id === courseID ? { ...c, is_selected: allSelected } : c));
+      patchCourseSelected(courseID, allSelected, anySelected && !allSelected);
     } catch (err) {
       log.error(`Failed to toggle topic ${topicID}:`, err.message);
       setError(err.message);
@@ -77,7 +90,8 @@ function CourseList() {
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       log.info(`Course ${courseID} ${newValue ? 'selected' : 'deselected'}`);
-      setCourses(prev => prev.map(c => c.id === courseID ? { ...c, is_selected: newValue } : c));
+      // Selecting/deselecting a whole course leaves no topics in a mixed state.
+      patchCourseSelected(courseID, newValue, false);
       if (topicsMap[courseID]) {
         setTopicsMap(prev => ({
           ...prev,
@@ -91,8 +105,17 @@ function CourseList() {
   };
 
   return (
-    <div>
-      {error && <p>Error: {error}</p>}
+    <div className="course-list">
+      <div className="course-list-intro">
+        <h1 className="course-list-title">Choose what to review</h1>
+        <p className="course-list-subtitle">
+          Select the courses and topics that you would like to review.
+          Selecting a course selects all of the topics within it.
+        </p>
+      </div>
+      {(error || coursesError) && (
+        <p className="course-list-error">Error: {error || coursesError.message}</p>
+      )}
       {courses.map((course) => (
         <CourseBar
           key={course.id}
@@ -102,6 +125,7 @@ function CourseList() {
           topics={topicsMap[course.id] ?? []}
           isOpen={expandedCourses.has(course.id)}
           isCourseSelected={course.is_selected}
+          isCoursePartial={course.is_partial}
           onItemClick={handleCourseBarClick}
           onTopicToggle={handleTopicToggle}
           onCourseToggle={handleCourseToggle}
