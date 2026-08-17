@@ -222,12 +222,35 @@
     gap: 10px;
 }
 
+/* Ease the accent bar between outcomes so an override from incorrect (red) to
+   correct (green) glides rather than snaps. */
+.math-problem-face-back {
+    transition: border-left-color 0.5s ease;
+}
+
 .math-problem-correct {
     border-left-color: #16a34a;
 }
 
 .math-problem-incorrect {
     border-left-color: #dc2626;
+}
+
+/* Fades the "Correct!" icon and text in when a student overrides an incorrect
+   grade, softening the in-place swap on the already-flipped back face. */
+@keyframes math-problem-reveal {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.math-problem-reveal {
+    animation: math-problem-reveal 0.45s ease both;
 }
 
 .math-problem-result-icon {
