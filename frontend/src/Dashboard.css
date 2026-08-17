@@ -1,14 +1,70 @@
+/* Fill the space the app shell hands us (flex: 1) and lay the sections out in a
+   column. The widgets section grows to absorb any leftover height, so the page
+   reaches the footer instead of leaving blank space at the bottom. */
 .dashboard {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
     padding: 8px 32px 32px 32px;
+    box-sizing: border-box;
 }
 
-.dash-error {
-    color: #b91c1c;
-    font-size: 14px;
+/* Page intro — what the whole dashboard is showing. Centered, mirroring the
+   Available Courses intro. The tight bottom margin keeps the first section
+   tucked up close beneath it. */
+.dash-intro {
+    text-align: center;
+    margin-bottom: 16px;
 }
 
+.dash-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.02em;
+    margin: 0 0 6px 0;
+}
+
+.dash-subtitle {
+    font-size: 15px;
+    line-height: 1.5;
+    color: #6b7280;
+    max-width: 70ch;
+    margin: 0 auto;
+}
+
+/* A titled block (decks, or the overview widgets) with a heading that says what
+   the user is looking at. */
 .dash-section {
-    margin-bottom: 28px;
+    display: flex;
+    flex-direction: column;
+}
+
+/* The decks section: heading centered. The top margin gives the "Topics by
+   proficiency" heading breathing room below the overview widgets above it. */
+.dash-section-decks {
+    margin-top: 32px;
+    margin-bottom: 32px;
+}
+
+.dash-section-decks .dash-section-head,
+.dash-section-widgets .dash-section-head {
+    text-align: center;
+}
+
+.dash-section-decks .dash-section-desc,
+.dash-section-widgets .dash-section-desc {
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* The overview row grows to fill whatever vertical space is left over. */
+.dash-section-widgets {
+    flex: 1;
+}
+
+.dash-section-head {
+    margin-bottom: 16px;
 }
 
 .dash-section-title {
@@ -16,31 +72,259 @@
     font-weight: 700;
     color: #111827;
     letter-spacing: -0.01em;
-    margin: 0 0 2px 0;
+    margin: 0 0 4px 0;
 }
 
-.dash-section-subtitle {
+.dash-section-desc {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #6b7280;
+    max-width: 70ch;
+    margin: 0;
+}
+
+.dash-error {
+    color: #b91c1c;
+    font-size: 14px;
+}
+
+/* Bottom row: pie box (left) and practice calendar (right), each half the
+   width and stretched to equal height. */
+.dash-widgets {
+    display: flex;
+    align-items: stretch;
+    gap: 24px;
+    flex: 1;
+}
+
+.dash-widgets > .dash-overview,
+.dash-widgets > .dash-calendar {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+/* Overview: proficiency pie + legend, contents centered within the box. */
+.dash-overview {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+    box-sizing: border-box;
+    background: #ffffff;
+    border: 1px solid #dde3ed;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+    padding: 28px 24px;
+}
+
+.dash-pie {
+    flex-shrink: 0;
+    line-height: 0;
+}
+
+.dash-pie svg {
+    display: block;
+}
+
+/* Clockwise "un-wipe" reveal — the mask ring draws itself on from 12 o'clock,
+   uncovering the colored slices as it sweeps around. */
+.dash-pie-sweep {
+    stroke-dasharray: var(--circ);
+    stroke-dashoffset: var(--circ);
+    animation: dash-pie-sweep 0.5s ease-out forwards;
+}
+
+@keyframes dash-pie-sweep {
+    to { stroke-dashoffset: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-pie-sweep {
+        animation: none;
+        stroke-dashoffset: 0;
+    }
+}
+
+.dash-legend-wrap {
+    min-width: 220px;
+}
+
+/* Selected-topic total — sits next to the pie, above the per-level rows */
+.dash-legend-total {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid #eef2f7;
+}
+
+.dash-legend-total-num {
+    font-size: 42px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-legend-total-label {
+    font-size: 15px;
+    color: #6b7280;
+}
+
+.dash-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 10px;
+}
+
+.dash-legend-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 16px;
+}
+
+.dash-legend-label {
+    color: #374151;
+    font-weight: 500;
+    flex: 1;
+}
+
+.dash-legend-count {
+    color: #111827;
+    font-weight: 700;
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+}
+
+.dash-legend-pct {
+    color: #9ca3af;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+    width: 42px;
+    text-align: right;
+}
+
+/* The five decks sit side by side across the top, each a compact card. They
+   wrap to the next line on narrow screens rather than stretching into strips
+   or forcing a horizontal scrollbar. */
+.dash-decks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 32px;
+    align-items: flex-start;
+}
+
+/* Each deck is styled like a pile of cards — the stacked paper edges below and
+   to the right are drawn with two offset pseudo-layers. They grow to share the
+   full width of the row evenly, wrapping only on narrow screens. */
+.deck {
+    position: relative;
+    flex: 1 1 200px;
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid #dde3ed;
+    border-radius: 10px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+    padding: 16px 18px 18px 18px;
+}
+
+.deck::before,
+.deck::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: #ffffff;
+    border: 1px solid #dde3ed;
+    z-index: -1;
+}
+
+.deck::before {
+    transform: translate(4px, 5px);
+    z-index: -1;
+}
+
+.deck::after {
+    transform: translate(8px, 10px);
+    z-index: -2;
+    opacity: 0.6;
+}
+
+.deck-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 4px;
+}
+
+.deck-head .dash-dot {
+    width: 11px;
+    height: 11px;
+}
+
+.deck-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.01em;
+    margin: 0;
+}
+
+.deck-count {
+    font-size: 12px;
+    font-weight: 700;
+    color: #4b5563;
+    background: #f1f5f9;
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-variant-numeric: tabular-nums;
+}
+
+.deck-hint {
     font-size: 13px;
     color: #6b7280;
     margin: 0 0 14px 0;
+}
+
+.deck-toggle {
+    margin-top: 12px;
+    background: #f8fafc;
+    border: 1px solid #dde3ed;
+    border-radius: 6px;
+    color: #2563eb;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.deck-toggle:hover {
+    background: #eff4ff;
+    border-color: #93b4fb;
 }
 
 .dash-empty {
     font-size: 13px;
     color: #9ca3af;
     font-style: italic;
+    margin: 0;
 }
 
-/* Cards flow into as many columns as the viewport allows, each at least
-   340px wide, so topics spread evenly across the screen instead of stacking
-   in a single column. */
+/* Inside a deck the cards stack in a single column, like a pile. */
 .dash-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-    gap: 12px;
+    grid-template-columns: 1fr;
+    gap: 10px;
 }
 
-/* Topic card — mirrors the CourseBar look */
+/* Topic card — mirrors the CourseBar look. The left accent stripe tracks the
+   topic's proficiency level so cards read at a glance even inside a deck. */
 .dash-card {
     background: #ffffff;
     border: 1px solid #dde3ed;
@@ -51,9 +335,13 @@
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
+.dash-card[data-level="new"] { border-left-color: #ef4444; }
+.dash-card[data-level="learning"] { border-left-color: #f59e0b; }
+.dash-card[data-level="young"] { border-left-color: #3b82f6; }
+.dash-card[data-level="mature"] { border-left-color: #22c55e; }
+
 .dash-card:hover {
     box-shadow: 0 3px 10px rgba(37, 99, 235, 0.15);
-    border-left-color: #1d4ed8;
 }
 
 .dash-card-head {
@@ -61,7 +349,6 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 12px;
 }
 
 .dash-card-name {
@@ -81,20 +368,49 @@
     flex-shrink: 0;
 }
 
+/* Stats stay hidden until the topic is hovered (or focused), keeping the deck
+   tidy. The wrapper animates its row track from 0fr to 1fr so the content
+   height (which is auto) expands smoothly, fading in as it grows. */
+.dash-card-stats-wrap {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    margin-top: 0;
+    transition: grid-template-rows 0.22s ease, opacity 0.22s ease, margin-top 0.22s ease;
+}
+
+.dash-card:hover .dash-card-stats-wrap,
+.dash-card:focus-within .dash-card-stats-wrap {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    margin-top: 12px;
+}
+
+/* Stats stack as compact label/value rows so they fit the narrow card. */
 .dash-card-stats {
     display: flex;
-    gap: 12px;
+    flex-direction: column;
+    gap: 6px;
+    overflow: hidden;
+    min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dash-card-stats-wrap {
+        transition: none;
+    }
 }
 
 .dash-stat {
-    flex: 1;
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     background: #f8fafc;
     border: 1px solid #eef2f7;
     border-radius: 6px;
-    padding: 8px 10px;
+    padding: 6px 10px;
 }
 
 .dash-stat-label {
@@ -102,16 +418,17 @@
     font-weight: 500;
     color: #6b7280;
     text-transform: uppercase;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.02em;
 }
 
 .dash-stat-value {
     display: flex;
     align-items: center;
-    gap: 6px;
-    font-size: 14px;
+    gap: 5px;
+    font-size: 13px;
     font-weight: 600;
     color: #111827;
+    white-space: nowrap;
 }
 
 /* Status dot — color encodes how well-learned / how far out the topic is */
@@ -136,4 +453,8 @@
 
 .dash-dot-mature {
     background: #22c55e; /* green: well retained */
+}
+
+.dash-dot-soon {
+    background: #6366f1; /* indigo: neutral accent for the "Shown soon" deck */
 }

@@ -98,6 +98,35 @@ class DailyTopicGrade(models.Model):
     def __str__(self):
         return f"Grade({self.user} -> {self.topic} on {self.date}, q={self.applied_quality})"
 
+class DailyPractice(models.Model):
+    """Durable record of how much of a day's deck a user got through.
+
+    `DailyDeck` rows are pruned when a new day starts (see
+    ``_get_or_create_today_deck``), and `DailyTopicGrade` counts distinct topics,
+    not problems answered — so neither can tell, after the fact, whether a past
+    day's deck was finished. This one-row-per-(user, date) record is updated as
+    the student advances through the deck, giving the dashboard calendar a
+    stable "completed / partial / none" signal per day.
+
+    `answered` is the number of problems stepped past that day; `total` is the
+    deck size at that moment (`min(len(problems), questions_per_day)`, matching
+    what the deck view reports). The day counts as completed when
+    ``answered >= total`` (with ``total > 0``); a row only exists once at least
+    one problem has been answered, so a day with no row means "did not practice".
+    """
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="daily_practice")
+    date = models.DateField()
+    answered = models.IntegerField(default=0)
+    total = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "date"], name="unique_user_date_practice"),
+        ]
+
+    def __str__(self):
+        return f"Practice({self.user} on {self.date}: {self.answered}/{self.total})"
+
 class Settings(models.Model):
     """Per-user settings."""
     user = models.OneToOneField(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="settings")

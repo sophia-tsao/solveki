@@ -1,9 +1,11 @@
+import calendar as _calendar
+import datetime
 import logging
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from ..models import Topic, Settings, TopicReview
+from ..models import Topic, Settings, TopicReview, DailyPractice
 from .common import _require_auth
 from .deck import _client_today, _effective_due_dates, _ordered_topics
 from .. import srs
@@ -87,3 +89,58 @@ def view_dashboard(request):
     ]
 
     return JsonResponse({"selected": selected, "upcoming": upcoming})
+
+
+def _month_from_request(request, today):
+    """Resolve the (year, month) the calendar should show.
+
+    Honors an optional ``?month=YYYY-MM`` param (so the client can page through
+    months); falls back to the month containing ``today`` when it's missing or
+    malformed.
+    """
+    raw = request.GET.get("month")
+    if raw:
+        try:
+            parsed = datetime.datetime.strptime(raw, "%Y-%m").date()
+            return parsed.year, parsed.month
+        except ValueError:
+            logger.warning("Ignoring malformed 'month' param: %r", raw)
+    return today.year, today.month
+
+
+@require_http_methods(["GET"])
+def view_practice_calendar(request):
+    """Per-day practice status for a calendar month.
+
+    Returns, for the requested month, each day the user practiced tagged as
+    ``completed`` (finished the whole deck) or ``partial`` (answered some but not
+    all). Days with no entry weren't practiced — the client renders those
+    neutrally, so only practiced days are sent.
+
+    Response::
+
+        {"year": 2026, "month": 8, "days": {"2026-08-03": "completed", ...}}
+    """
+    auth = _require_auth(request)
+    if auth:
+        return auth
+
+    today = _client_today(request)
+    year, month = _month_from_request(request, today)
+    first = datetime.date(year, month, 1)
+    last = datetime.date(year, month, _calendar.monthrange(year, month)[1])
+
+    records = DailyPractice.objects.filter(
+        user=request.user, date__gte=first, date__lte=last
+    )
+    days = {}
+    for rec in records:
+        if rec.total > 0 and rec.answered >= rec.total:
+            status = "completed"
+        elif rec.answered > 0:
+            status = "partial"
+        else:
+            continue
+        days[rec.date.isoformat()] = status
+
+    return JsonResponse({"year": year, "month": month, "days": days})
