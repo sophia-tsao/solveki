@@ -419,3 +419,382 @@ class RiemannSumTests(TestCase):
             expected = dx * sum(poly_eval(poly, a + i * dx) for i in indices)
             self.assertEqual(parse_frac(solution), expected,
                              f"{problem!r} -> {solution!r}")
+
+
+class LimitConjugateTests(TestCase):
+    PROBLEM = re.compile(r"\\lim_\{x \\to (?P<c>\d+)\} \\frac\{(?P<num>[^{}]*(?:\{[^}]*\}[^{}]*)*)\}\{(?P<den>[^{}]*(?:\{[^}]*\}[^{}]*)*)\}")
+    B = re.compile(r"\\sqrt\{x\}-(?P<b>\d+)")
+    INT_SOL = re.compile(r"\$(?P<n>-?\d+)\$")
+    FRAC_SOL = re.compile(r"\$(?P<n>-?\d+)/(?P<d>-?\d+)\$")
+
+    def test_limit_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["calc_limit_conjugate"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            c = int(m.group("c"))
+            num, den = m.group("num"), m.group("den")
+            bm = self.B.search(num) or self.B.search(den)
+            self.assertIsNotNone(bm, f"no sqrt term: {problem!r}")
+            b = int(bm.group("b"))
+            self.assertEqual(c, b * b, f"point should be b^2: {problem!r}")
+            fr = self.FRAC_SOL.search(solution)
+            if fr:
+                stated = Fraction(int(fr.group("n")), int(fr.group("d")))
+            else:
+                stated = Fraction(int(self.INT_SOL.search(solution).group("n")))
+            if self.B.search(num):  # (sqrt(x)-b)/(x-b^2) -> 1/(2b)
+                expected = Fraction(1, 2 * b)
+            else:                    # (x-b^2)/(sqrt(x)-b) -> 2b
+                expected = Fraction(2 * b)
+            self.assertEqual(stated, expected, f"{problem!r} -> {solution!r}")
+
+
+class ImplicitDifferentiationTests(TestCase):
+    REL = re.compile(r"relation \$([^$]+) = (-?\d+)\$")
+    PT = re.compile(r"point \$\((-?\d+), (-?\d+)\)\$")
+    XX = re.compile(r"([+-]?)\s*(\d*)x\^2")
+    XY = re.compile(r"([+-]?)\s*(\d*)xy")
+    YY = re.compile(r"([+-]?)\s*(\d*)y\^2")
+
+    @staticmethod
+    def _coef(m):
+        if m is None:
+            return 0
+        sign = -1 if m.group(1) == "-" else 1
+        mag = int(m.group(2)) if m.group(2) else 1
+        return sign * mag
+
+    def test_implicit_matches(self):
+        random.seed(0)
+        g = gen("calc_implicit_differentiation")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            rel = self.REL.search(problem)
+            self.assertIsNotNone(rel, f"could not parse: {problem!r}")
+            lhs = rel.group(1)
+            A = self._coef(self.XX.search(lhs))
+            B = self._coef(self.XY.search(lhs))
+            C = self._coef(self.YY.search(lhs))
+            pt = self.PT.search(problem)
+            x0, y0 = int(pt.group(1)), int(pt.group(2))
+            expected = Fraction(-(2 * A * x0 + B * y0), B * x0 + 2 * C * y0)
+            self.assertEqual(parse_frac(solution), expected,
+                             f"{problem!r} -> {solution!r}")
+
+
+class ParticleMotionTests(TestCase):
+    S = re.compile(r"s\(t\) = ([^$]+)\$")
+    ASK = re.compile(r"Find its (velocity|acceleration) at \$t = (-?\d+)\$")
+    REST = re.compile(r"velocity is zero")
+
+    def test_particle_motion_matches(self):
+        random.seed(0)
+        g = gen("calc_particle_motion")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            poly = parse_poly(self.S.search(problem).group(1).replace("t", "x"))
+            if self.REST.search(problem):
+                A, B = poly.get(2, 0), poly.get(1, 0)
+                expected = Fraction(-B, 2 * A)
+                self.assertEqual(parse_frac(solution), expected,
+                                 f"{problem!r} -> {solution!r}")
+            else:
+                m = self.ASK.search(problem)
+                self.assertIsNotNone(m, f"could not parse: {problem!r}")
+                t = int(m.group(2))
+                d = poly_deriv(poly)
+                if m.group(1) == "acceleration":
+                    d = poly_deriv(d)
+                expected = poly_eval(d, t)
+                self.assertEqual(int(parse_frac(solution)), expected,
+                                 f"{problem!r} -> {solution!r}")
+
+
+class VolumeRevolutionTests(TestCase):
+    UNDER = re.compile(r"under \$y = ([^$]+)\$")
+    BETWEEN = re.compile(r"between \$y = ([^$]+)\$ and \$y = ([^$]+)\$")
+    BOUNDS = re.compile(r"from \$x = (-?\d+)\$ to \$x = (-?\d+)\$")
+
+    @staticmethod
+    def _sq_integral(poly, a, b):
+        sq = {}
+        for e1, c1 in poly.items():
+            for e2, c2 in poly.items():
+                sq[e1 + e2] = sq.get(e1 + e2, 0) + c1 * c2
+        return poly_integrate_definite(sq, a, b)
+
+    def test_volume_matches(self):
+        random.seed(0)
+        g = gen("calc_volume_revolution")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            bm = self.BOUNDS.search(problem)
+            a, b = int(bm.group(1)), int(bm.group(2))
+            btw = self.BETWEEN.search(problem)
+            if btw:
+                R = parse_poly(btw.group(1))
+                r = parse_poly(btw.group(2))
+                expected = self._sq_integral(R, a, b) - self._sq_integral(r, a, b)
+            else:
+                f = parse_poly(self.UNDER.search(problem).group(1))
+                expected = self._sq_integral(f, a, b)
+            self.assertEqual(parse_frac(solution), expected,
+                             f"{problem!r} -> {solution!r}")
+
+
+class LHopitalTests(TestCase):
+    FRAC = re.compile(
+        r"\\frac\{((?:[^{}]|\{[^{}]*\})*)\}\{((?:[^{}]|\{[^{}]*\})*)\}")
+
+    @staticmethod
+    def _coef(inner):
+        inner = inner.strip()
+        if inner == "x":
+            return 1
+        if inner == "-x":
+            return -1
+        return int(inner.replace("x", "").strip())
+
+    def test_lhopital_matches(self):
+        random.seed(0)
+        g = gen("calc_lhopital")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.FRAC.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            num, den = m.group(1), m.group(2)
+            if "x^2" in den:  # (1 - cos(a x)) / (c x^2) -> a^2 / (2c)
+                a = self._coef(re.search(r"\\cos\(([^)]+)\)", num).group(1))
+                c = self._coef(den.replace("^2", ""))
+                expected = Fraction(a * a, 2 * c)
+            else:
+                b = self._coef(den)
+                if "\\sin" in num:
+                    a = self._coef(re.search(r"\\sin\(([^)]+)\)", num).group(1))
+                elif "\\tan" in num:
+                    a = self._coef(re.search(r"\\tan\(([^)]+)\)", num).group(1))
+                else:  # e^{a x} - 1
+                    a = self._coef(re.search(r"e\^\{([^}]+)\}", num).group(1))
+                expected = Fraction(a, b)
+            self.assertEqual(parse_frac(solution), expected,
+                             f"{problem!r} -> {solution!r}")
+
+
+class LimitDefinitionDerivativeTests(TestCase):
+    P = re.compile(r"find \$f'\((-?\d+)\)\$ for \$f\(x\) = ([^$]+)\$")
+
+    def test_limit_definition_matches(self):
+        random.seed(0)
+        g = gen("calc_limit_definition_derivative")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.P.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            p = int(m.group(1))
+            poly = parse_poly(m.group(2))
+            expected = poly_eval(poly_deriv(poly), p)
+            self.assertEqual(int(parse_frac(solution)), expected,
+                             f"{problem!r} -> {solution!r}")
+
+
+class IntegrationByPartsTests(TestCase):
+    P = re.compile(r"\\int_\{(-?\d+)\}\^\{(-?\d+)\} (.+?) \\, dx\$")
+
+    @staticmethod
+    def _simpson(f, a, b, n=2000):
+        h = (b - a) / n
+        total = f(a) + f(b)
+        for i in range(1, n):
+            total += (4 if i % 2 else 2) * f(a + i * h)
+        return total * h / 3
+
+    def test_by_parts_matches(self):
+        random.seed(0)
+        g = gen("calc_integration_by_parts")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.P.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            a, b = int(m.group(1)), int(m.group(2))
+            integrand = m.group(3)
+            if "\\ln" in integrand:
+                f = lambda x: x * math.log(x)
+            elif "\\sin" in integrand:
+                f = lambda x: x * math.sin(x)
+            elif "\\cos" in integrand:
+                f = lambda x: x * math.cos(x)
+            else:  # x e^{x}
+                f = lambda x: x * math.exp(x)
+            expected = self._simpson(f, a, b)
+            stated = float(re.search(r"\$(-?[\d.]+)\$", solution).group(1))
+            self.assertAlmostEqual(stated, expected, places=2,
+                                   msg=f"{problem!r} -> {solution!r}")
+
+
+# -------------------- calculus (chunk 2) correctness ----------------------
+
+class RelatedRatesTests(TestCase):
+    CIRCLE = re.compile(
+        r"circle's radius grows at \$(\d+)\$ units per second.*radius is \$(\d+)\$")
+    SPHERE = re.compile(
+        r"sphere's radius grows at \$(\d+)\$ units per second.*radius is \$(\d+)\$")
+    LADDER = re.compile(
+        r"\$(\d+)\$ ft ladder.*at \$(\d+)\$ ft/s.*base is \$(\d+)\$ ft")
+
+    def test_related_rates_matches(self):
+        random.seed(0)
+        g = gen("calc_related_rates")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            cm, sm, lm = (self.CIRCLE.search(problem),
+                          self.SPHERE.search(problem),
+                          self.LADDER.search(problem))
+            if cm:
+                dr, r = int(cm.group(1)), int(cm.group(2))
+                expected = Fraction(2 * r * dr)
+            elif sm:
+                dr, r = int(sm.group(1)), int(sm.group(2))
+                expected = Fraction(4 * r * r * dr)
+            elif lm:
+                c, v, a = int(lm.group(1)), int(lm.group(2)), int(lm.group(3))
+                b = math.isqrt(c * c - a * a)
+                self.assertEqual(a * a + b * b, c * c,
+                                 f"not pythagorean: {problem!r}")
+                expected = Fraction(-a * v, b)
+            else:
+                self.fail(f"could not parse: {problem!r}")
+            self.assertEqual(parse_frac(solution), expected,
+                             f"{problem!r} -> {solution!r}")
+
+
+class MvtFindCTests(TestCase):
+    P = re.compile(r"f\(x\) = ([^$]+)\$ on the interval "
+                   r"\$\[(-?\d+), (-?\d+)\]\$")
+    VAL = re.compile(r"\$(-?[\d.]+)\$")
+
+    def test_mvt_matches(self):
+        random.seed(0)
+        g = gen("calc_mvt_find_c")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.P.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            poly = parse_poly(m.group(1))
+            a, b = int(m.group(2)), int(m.group(3))
+            slope = Fraction(poly_eval(poly, b) - poly_eval(poly, a), b - a)
+            if 3 in poly:                       # f(x) = x^3 -> 3c^2 = slope
+                c = math.sqrt(float(slope) / 3)
+            else:                               # 2A c + B = slope
+                A, B = poly.get(2, 0), poly.get(1, 0)
+                c = float(Fraction(slope - B, 2 * A))
+            stated = float(self.VAL.search(solution).group(1))
+            self.assertAlmostEqual(stated, round(c, 3), places=6,
+                                   msg=f"{problem!r} -> {solution!r}")
+
+
+class TrapezoidalRuleTests(TestCase):
+    P = re.compile(r"n = (\d+)\$ subintervals.*?"
+                   r"\\int_\{(-?\d+)\}\^\{(-?\d+)\} (.+?) \\, dx\$")
+    VAL = re.compile(r"\$(-?[\d.]+)\$")
+
+    def test_trapezoidal_matches(self):
+        random.seed(0)
+        g = gen("calc_trapezoidal_rule")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.P.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            n = int(m.group(1))
+            a, b = int(m.group(2)), int(m.group(3))
+            poly = parse_poly(m.group(4))
+            dx = (b - a) / n
+            total = 0.0
+            for i in range(n + 1):
+                x = a + i * dx
+                w = 1 if (i == 0 or i == n) else 2
+                total += w * poly_eval(poly, x)
+            expected = dx / 2 * total
+            stated = float(self.VAL.search(solution).group(1))
+            self.assertAlmostEqual(stated, round(expected, 3), places=6,
+                                   msg=f"{problem!r} -> {solution!r}")
+
+
+class SeparableOdeTests(TestCase):
+    P = re.compile(r"dy/dx = (-?\d+)( x)? y\$ with \$y\((-?\d+)\) = (\d+)\$, "
+                   r"then find \$y\((-?\d+)\)\$")
+    VAL = re.compile(r"\$(-?[\d.]+)\$")
+
+    def test_separable_matches(self):
+        random.seed(0)
+        g = gen("calc_separable_ode")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.P.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            k = int(m.group(1))
+            has_x = m.group(2) is not None
+            x0, y0, x1 = int(m.group(3)), int(m.group(4)), int(m.group(5))
+            if has_x:
+                expected = y0 * math.exp(k * (x1 * x1 - x0 * x0) / 2)
+            else:
+                expected = y0 * math.exp(k * (x1 - x0))
+            stated = float(self.VAL.search(solution).group(1))
+            self.assertAlmostEqual(stated, round(expected, 3), places=6,
+                                   msg=f"{problem!r} -> {solution!r}")
+
+
+class ConcavityIntervalTests(TestCase):
+    P = re.compile(r"f\(x\) = ([^$]+)\$ concave up")
+
+    def test_concavity_matches(self):
+        random.seed(0)
+        g = gen("calc_concavity_interval")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            poly = parse_poly(self.P.search(problem).group(1))
+            A, B = poly.get(3, 0), poly.get(2, 0)
+            x_inf = Fraction(-B, 3 * A)
+            interval = solution.strip("$")
+            if A > 0:
+                self.assertTrue(interval.endswith(", inf)"),
+                                f"{problem!r} -> {solution!r}")
+                endpoint = interval[1:].split(",")[0]
+            else:
+                self.assertTrue(interval.startswith("(-inf, "),
+                                f"{problem!r} -> {solution!r}")
+                endpoint = interval[:-1].split(", ")[1]
+            self.assertEqual(Fraction(endpoint), x_inf,
+                             f"{problem!r} -> {solution!r}")
+
+
+class TaylorCoefficientTests(TestCase):
+    P = re.compile(r"coefficient of \$x\^\{(\d+)\}\$ in the Maclaurin series "
+                   r"of \$f\(x\) = (.+?)\$\.")
+
+    def test_taylor_matches(self):
+        random.seed(0)
+        g = gen("calc_taylor_coefficient")
+        for _ in range(SAMPLES):
+            problem, solution = g()
+            m = self.P.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            k = int(m.group(1))
+            func = m.group(2)
+            if func == "e^x":
+                expected = Fraction(1, math.factorial(k))
+            elif "\\sin" in func:
+                expected = (Fraction(0) if k % 2 == 0
+                            else Fraction((-1) ** ((k - 1) // 2),
+                                          math.factorial(k)))
+            elif "\\cos" in func:
+                expected = (Fraction(0) if k % 2 == 1
+                            else Fraction((-1) ** (k // 2), math.factorial(k)))
+            elif "\\ln" in func:
+                expected = Fraction((-1) ** (k + 1), k)
+            else:                               # 1/(1-x)
+                expected = Fraction(1)
+            self.assertEqual(parse_frac(solution), expected,
+                             f"{problem!r} -> {solution!r}")

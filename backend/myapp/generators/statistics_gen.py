@@ -9,10 +9,12 @@ the math-correctness tests can recover the inputs and recompute the answer.
 """
 import math
 import random
+from fractions import Fraction
 from math import gcd
 
 from ._registry import register
 from ._format import num as _fmt  # noqa: F401 — typeable number formatter
+from ._format import frac_from  # noqa: F401 — typeable fraction formatter
 
 
 def _median(values):
@@ -261,4 +263,205 @@ def stat_relative_frequency(max_count=20):
         "(as a reduced fraction)."
     )
     solution = f"${numerator}/{denominator}$"
+    return problem, solution
+
+
+def _phi(z):
+    """Standard-normal CDF via the error function: 0.5*(1 + erf(z/sqrt(2)))."""
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+@register
+def stat_normal_probability():
+    r"""Normal Distribution Probability
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | A normally distributed variable X has mean = 50 and standard deviation = 10. Using the normal CDF, find P(X < 65). Round to the nearest thousandth. | $0.933$ |
+
+    P uses the normal CDF Phi(z) = 0.5*(1 + erf(z/sqrt(2))); the answer is a
+    decimal in [0, 1] rounded to 3 decimal places.
+    """
+    mean = random.randint(20, 80)
+    sd = random.choice([2, 4, 5, 10])
+    mults = [-2, -1.5, -1, -0.5, 0.5, 1, 1.5, 2]
+    kind = random.choice(["less", "greater", "between"])
+
+    if kind == "between":
+        a_m, b_m = sorted(random.sample(mults, 2))
+        a = mean + sd * a_m
+        b = mean + sd * b_m
+        prob = _phi((b - mean) / sd) - _phi((a - mean) / sd)
+        event = f"P({_fmt(a)} < X < {_fmt(b)})"
+    elif kind == "less":
+        b = mean + sd * random.choice(mults)
+        prob = _phi((b - mean) / sd)
+        event = f"P(X < {_fmt(b)})"
+    else:
+        b = mean + sd * random.choice(mults)
+        prob = 1.0 - _phi((b - mean) / sd)
+        event = f"P(X > {_fmt(b)})"
+
+    problem = (
+        f"A normally distributed variable X has mean = {_fmt(mean)} and "
+        f"standard deviation = {_fmt(sd)}. Using the normal CDF, find "
+        f"{event}. Round to the nearest thousandth."
+    )
+    solution = f"${_fmt(prob)}$"
+    return problem, solution
+
+
+@register
+def stat_test_statistic():
+    r"""Test Statistic for a Mean or Proportion
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | A sample of size n = 36 has mean xbar = 52. The hypothesized mean is mu0 = 50 and the population standard deviation is sigma = 6. Find the z test statistic (round to the nearest thousandth). | $2$ |
+
+    Mean: z = (xbar - mu0) / (sigma / sqrt(n)). Proportion: z = (phat - p0) /
+    sqrt(p0(1 - p0) / n). Rounded to 3 decimal places.
+    """
+    kind = random.choice(["mean", "proportion"])
+    if kind == "mean":
+        n = random.choice([16, 25, 36, 49, 100])
+        sigma = random.choice([3, 4, 5, 6, 8, 10])
+        mu0 = random.randint(20, 80)
+        xbar = mu0 + random.choice([-8, -5, -4, -3, -2, 2, 3, 4, 5, 8])
+        z = (xbar - mu0) / (sigma / math.sqrt(n))
+        problem = (
+            f"A sample of size n = {n} has mean xbar = {_fmt(xbar)}. The "
+            f"hypothesized mean is mu0 = {_fmt(mu0)} and the population "
+            f"standard deviation is sigma = {_fmt(sigma)}. Find the z test "
+            "statistic (round to the nearest thousandth)."
+        )
+    else:
+        n = random.choice([100, 150, 200, 400, 500])
+        p0 = random.choice([0.25, 0.4, 0.5, 0.6, 0.75])
+        phat = round(p0 + random.choice([-0.1, -0.08, -0.05, 0.05, 0.08, 0.1, 0.12]), 3)
+        z = (phat - p0) / math.sqrt(p0 * (1 - p0) / n)
+        problem = (
+            f"A sample of size n = {n} has sample proportion phat = {_fmt(phat)}. "
+            f"The hypothesized proportion is p0 = {_fmt(p0)}. Find the z test "
+            "statistic (round to the nearest thousandth)."
+        )
+    solution = f"${_fmt(z)}$"
+    return problem, solution
+
+
+@register
+def stat_discrete_variance():
+    r"""Expected Value and Variance
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | A discrete random variable X takes the values 1, 2, 5 with probabilities 0.2, 0.5, 0.3 respectively. Find the variance Var(X) (round to the nearest thousandth if necessary). | $2.49$ |
+
+    Var(X) = E[X^2] - (E[X])^2 = sum p_i x_i^2 - (sum p_i x_i)^2, rounded to 3
+    decimal places when necessary.
+    """
+    denom = random.choice([10, 20])
+    k = random.choice([3, 4])
+    cuts = sorted(random.sample(range(1, denom), k - 1))
+    counts = [b - a for a, b in zip([0] + cuts, cuts + [denom])]
+    values = random.sample(range(0, 10), k)
+    probs = [c / denom for c in counts]
+
+    ev = sum(p * v for p, v in zip(probs, values))
+    ev2 = sum(p * v * v for p, v in zip(probs, values))
+    var = ev2 - ev * ev
+
+    vals_str = ", ".join(str(v) for v in values)
+    probs_str = ", ".join(_fmt(p) for p in probs)
+    problem = (
+        f"A discrete random variable X takes the values {vals_str} with "
+        f"probabilities {probs_str} respectively. Find the variance Var(X) "
+        "(round to the nearest thousandth if necessary)."
+    )
+    solution = f"${_fmt(var)}$"
+    return problem, solution
+
+
+@register
+def stat_percentile_rank():
+    r"""Percentile Rank
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Given the data set: 3, 7, 1, 9, 4. Find the percentile rank of the value 7. Use percentile rank = (number of values below it) / n * 100, and round to the nearest thousandth if necessary. | $60$ |
+
+    Percentile rank = (number of values strictly below the target) / n * 100,
+    rounded to 3 decimal places when necessary.
+    """
+    n = random.choice([6, 7, 8, 9, 10])
+    data = [random.randint(1, 20) for _ in range(n)]
+    value = random.choice(data)
+    below = sum(1 for v in data if v < value)
+    pr = below / n * 100
+
+    problem = (
+        f"Given the data set: {', '.join(str(v) for v in data)}. Find the "
+        f"percentile rank of the value {value}. Use percentile rank = "
+        "(number of values below it) / n * 100, and round to the nearest "
+        "thousandth if necessary."
+    )
+    solution = f"${_fmt(pr)}$"
+    return problem, solution
+
+
+@register
+def stat_counting_probability():
+    r"""Counting to Probability
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | A box contains 10 marbles: 4 red and 6 green. You draw 3 marbles at random without replacement. Find the probability that exactly 2 are red. Express your answer as a reduced fraction a/b. | $3/10$ |
+
+    Probability = C(r, m) * C(g, k - m) / C(n, k), given as a reduced fraction.
+    """
+    while True:
+        r = random.randint(2, 6)
+        g = random.randint(2, 6)
+        n = r + g
+        k = random.randint(2, min(4, n - 1))
+        m = random.randint(max(0, k - g), min(k, r))
+        ways = math.comb(r, m) * math.comb(g, k - m)
+        total = math.comb(n, k)
+        prob = Fraction(ways, total)
+        if 0 < prob < 1:
+            break
+
+    problem = (
+        f"A box contains {n} marbles: {r} red and {g} green. You draw {k} "
+        "marbles at random without replacement. Find the probability that "
+        f"exactly {m} are red. Express your answer as a reduced fraction a/b."
+    )
+    solution = f"${frac_from(prob)}$"
+    return problem, solution
+
+
+@register
+def stat_odds_probability():
+    r"""Odds from Probability
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | The probability of an event is 3/7. Write the odds in favor of the event in the form a:b (lowest terms). | $3:4$ |
+
+    Odds in favor = P : (1 - P). For P = a/b this is a : (b - a), reduced to
+    lowest terms.
+    """
+    b = random.randint(3, 12)
+    a = random.randint(1, b - 1)
+    fr = Fraction(a, b)
+
+    favor = fr.numerator
+    against = fr.denominator - fr.numerator
+    g = gcd(favor, against)
+
+    problem = (
+        f"The probability of an event is {fr.numerator}/{fr.denominator}. "
+        "Write the odds in favor of the event in the form a:b (lowest terms)."
+    )
+    solution = f"${favor // g}:{against // g}$"
     return problem, solution

@@ -7,10 +7,10 @@ places, or reduced ``"a/b"`` fractions. Never seed ``random`` inside a
 generator.
 """
 import random
-from math import cos, gcd, sin, tan
+from math import atan2, cos, gcd, pi, sin, sqrt, tan
 
 from ._registry import register
-from ._format import num as _num
+from ._format import num as _num, frac as _frac
 
 
 # Integer-sided right triangles, used where an exact answer is required.
@@ -330,3 +330,253 @@ def geo_expected_value():
         f"Find the expected value E(X), rounded to the nearest thousandth."
     )
     return problem, f"${_num(ev)}$"
+
+
+@register
+def geo_special_right_triangle(min_len=2, max_len=20):
+    r"""Special Right Triangles
+
+    In a 30-60-90 or 45-45-90 right triangle, one side is given and another is
+    requested. Since a side may be irrational, the answer is rounded to the
+    nearest thousandth.
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | In a 45-45-90 right triangle, the leg measures $5$. Find the length of the hypotenuse, rounded to the nearest thousandth if the value is irrational. | $7.071$ |
+    """
+    if random.random() < 0.5:
+        kind = "45-45-90"
+        ratios = {"leg": 1.0, "hypotenuse": 2 ** 0.5}
+    else:
+        kind = "30-60-90"
+        ratios = {"shorter leg": 1.0, "longer leg": 3 ** 0.5, "hypotenuse": 2.0}
+    given, target = random.sample(list(ratios), 2)
+    length = random.randint(min_len, max_len)
+    answer = length * ratios[target] / ratios[given]
+
+    problem = (
+        f"In a {kind} right triangle, the {given} measures ${length}$. Find "
+        f"the length of the {target}, rounded to the nearest thousandth if the "
+        f"value is irrational."
+    )
+    return problem, f"${_num(answer)}$"
+
+
+@register
+def geo_similar_triangle_side(min_scale=2, max_scale=5, min_base=2, max_base=8):
+    r"""Similar Triangles Missing Side
+
+    Two similar triangles are given with three known corresponding sides; set up
+    a proportion and solve for the missing side.
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Triangle ABC is similar to triangle DEF, with vertices listed in corresponding order. In triangle ABC, AB = $6$ and BC = $9$. In triangle DEF, the corresponding side DE = $10$. Find the length of side EF. Round to the nearest thousandth if necessary. | $15$ |
+    """
+    # Pick a coprime ratio m:n so every stated length is a clean integer.
+    while True:
+        m = random.randint(min_scale, max_scale)
+        n = random.randint(min_scale, max_scale + 1)
+        if m != n and gcd(m, n) == 1:
+            break
+    p = random.randint(min_base, max_base)
+    q = random.randint(min_base, max_base)
+    s1, s2 = m * p, m * q            # sides AB, BC of triangle ABC
+    t1 = n * p                       # side DE of triangle DEF (corresponds to AB)
+    answer = s2 * t1 / s1            # side EF (corresponds to BC) = n * q
+
+    problem = (
+        f"Triangle ABC is similar to triangle DEF, with vertices listed in "
+        f"corresponding order. In triangle ABC, AB = ${s1}$ and BC = ${s2}$. In "
+        f"triangle DEF, the corresponding side DE = ${t1}$. Find the length of "
+        f"side EF. Round to the nearest thousandth if necessary."
+    )
+    return problem, f"${_num(answer)}$"
+
+
+@register
+def geo_scale_factor_ratio(min_part=1, max_part=6):
+    r"""Scale Factor to Area or Volume Ratio
+
+    Given the linear scale factor between two similar figures, find the ratio of
+    their areas (scale factor squared) or volumes (scale factor cubed).
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Two similar figures have a linear scale factor of $2/3$ (ratio of corresponding lengths). Find the ratio of their areas. Express your answer as a reduced fraction a/b or an integer. | $4/9$ |
+    """
+    while True:
+        p = random.randint(min_part, max_part)
+        q = random.randint(min_part, max_part)
+        if (p, q) != (1, 1) and gcd(p, q) == 1:
+            break
+    scale = str(p) if q == 1 else f"{p}/{q}"
+
+    if random.random() < 0.5:
+        kind = "areas"
+        answer = _frac(p * p, q * q)
+    else:
+        kind = "volumes"
+        answer = _frac(p ** 3, q ** 3)
+
+    problem = (
+        f"Two similar figures have a linear scale factor of ${scale}$ (ratio of "
+        f"corresponding lengths). Find the ratio of their {kind}. Express your "
+        f"answer as a reduced fraction a/b or an integer."
+    )
+    return problem, f"${answer}$"
+
+
+@register
+def geo_circle_segments():
+    r"""Segment Lengths in Circles
+
+    Apply the power of a point: either two chords intersecting inside a circle
+    (chord-chord product) or a tangent and secant from an external point.
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Two chords of a circle intersect. The first chord is divided into segments of length $6$ and $4$. The second chord is divided into segments of length $8$ and x. Find x. Round to the nearest thousandth if necessary. | $3$ |
+    """
+    if random.random() < 0.5:
+        a = random.randint(2, 12)
+        b = random.randint(2, 12)
+        product = a * b
+        divisors = [x for x in range(1, product + 1) if product % x == 0]
+        c = random.choice(divisors)
+        d = product // c
+        problem = (
+            f"Two chords of a circle intersect. The first chord is divided into "
+            f"segments of length ${a}$ and ${b}$. The second chord is divided "
+            f"into segments of length ${c}$ and x. Find x. Round to the nearest "
+            f"thousandth if necessary."
+        )
+        return problem, f"${_num(d)}$"
+
+    external = random.randint(2, 10)
+    total = external + random.randint(2, 12)
+    tangent = sqrt(external * total)
+    problem = (
+        f"From an external point, a tangent segment and a secant are drawn to a "
+        f"circle. The secant has external segment ${external}$ and total length "
+        f"${total}$ (from the external point to the far intersection). Find the "
+        f"length of the tangent segment. Round to the nearest thousandth if "
+        f"necessary."
+    )
+    return problem, f"${_num(tangent)}$"
+
+
+@register
+def geo_regular_polygon_area(min_side=2, max_side=15):
+    r"""Area of a Regular Polygon
+
+    Given the number of sides and the side length of a regular polygon, find its
+    area, rounded to the nearest thousandth.
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | A regular polygon has $6$ sides, each of length $4$. Find its area. Round to the nearest thousandth. | $41.569$ |
+    """
+    n = random.choice([3, 4, 5, 6, 8, 10, 12])
+    s = random.randint(min_side, max_side)
+    area = n * s * s / (4 * tan(pi / n))
+
+    problem = (
+        f"A regular polygon has ${n}$ sides, each of length ${s}$. Find its "
+        f"area. Round to the nearest thousandth."
+    )
+    return problem, f"${_num(area)}$"
+
+
+@register
+def geo_composite_solid():
+    r"""Composite Solid Volume
+
+    Find the total volume of a composite solid: a cylinder topped by a cone, or
+    two stacked rectangular prisms.
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | A composite solid is made of two rectangular prisms. The first measures $2$ by $3$ by $4$, and the second measures $1$ by $1$ by $5$. Find the total volume. Round to the nearest thousandth if necessary. | $29$ |
+    """
+    if random.random() < 0.5:
+        r = random.randint(2, 8)
+        h_cyl = random.randint(3, 12)
+        h_cone = random.randint(3, 9)
+        volume = pi * r * r * h_cyl + pi * r * r * h_cone / 3
+        problem = (
+            f"A solid consists of a cylinder of radius ${r}$ and height "
+            f"${h_cyl}$ topped by a cone of the same radius ${r}$ and height "
+            f"${h_cone}$. Find the total volume, using your calculator's full "
+            f"value of pi. Round to the nearest thousandth if necessary."
+        )
+        return problem, f"${_num(volume)}$"
+
+    a, b, c = (random.randint(1, 8) for _ in range(3))
+    d, e, f = (random.randint(1, 8) for _ in range(3))
+    volume = a * b * c + d * e * f
+    problem = (
+        f"A composite solid is made of two rectangular prisms. The first "
+        f"measures ${a}$ by ${b}$ by ${c}$, and the second measures ${d}$ by "
+        f"${e}$ by ${f}$. Find the total volume. Round to the nearest "
+        f"thousandth if necessary."
+    )
+    return problem, f"${_num(volume)}$"
+
+
+@register
+def geo_polygon_area_vertices(coord=6):
+    r"""Polygon Area from Vertices
+
+    Given the integer coordinates of a triangle's or quadrilateral's vertices
+    (listed in order around the figure), find its area with the shoelace
+    formula. The area is an integer or ends in .5.
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Find the area of the triangle with vertices $(0, 0)$, $(4, 0)$, $(0, 3)$ (given in order around the figure). Give your answer as a number (it may end in .5). | $6$ |
+    """
+    n = random.choice([3, 4])
+    while True:
+        pts = set()
+        while len(pts) < n:
+            pts.add((random.randint(-coord, coord), random.randint(-coord, coord)))
+        pts = list(pts)
+        cx = sum(x for x, _ in pts) / n
+        cy = sum(y for _, y in pts) / n
+        pts.sort(key=lambda p: atan2(p[1] - cy, p[0] - cx))
+        cross = 0
+        for i in range(n):
+            x1, y1 = pts[i]
+            x2, y2 = pts[(i + 1) % n]
+            cross += x1 * y2 - x2 * y1
+        area = abs(cross) / 2
+        if area > 0:
+            break
+
+    coords = ", ".join(f"$({x}, {y})$" for x, y in pts)
+    shape = "triangle" if n == 3 else "quadrilateral"
+    problem = (
+        f"Find the area of the {shape} with vertices {coords} (given in order "
+        f"around the figure). Give your answer as a number (it may end in .5)."
+    )
+    return problem, f"${_num(area)}$"
+
+
+@register
+def geo_frustum_volume(min_r=1, max_r=8, min_h=3, max_h=15):
+    r"""Volume of the Frustum of a Cone
+
+    Volume $= \frac{1}{3}\pi h (R^2 + Rr + r^2)$, where $R$ and $r$ are the
+    lower and upper base radii ($R > r$). Answer rounded to three decimals.
+    """
+    r = random.randint(min_r, max_r)
+    big_r = r + random.randint(1, max_r)
+    h = random.randint(min_h, max_h)
+    volume = pi * h * (big_r ** 2 + big_r * r + r ** 2) / 3
+    problem = (
+        f"A frustum of a cone has height ${h}$, lower base radius ${big_r}$, "
+        f"and upper base radius ${r}$. Find its volume. "
+        f"Round your answer to the nearest thousandth."
+    )
+    return problem, f"${_num(volume)}$"

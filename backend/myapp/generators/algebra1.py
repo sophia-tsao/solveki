@@ -12,7 +12,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
-from ._format import frac_from as _fmt_frac, num
+from ._format import frac_from as _fmt_frac, num, pair
 
 _FRACTION_HINT = "Express your answer as a fraction in the form a/b, or an integer."
 
@@ -260,3 +260,396 @@ def factoring(max_root=9):
     )
     solution = f"$(x{_signed(p)})(x{_signed(q)})$"
     return problem, solution
+
+
+@register
+def alg1_product_of_powers(min_base=2, max_base=12, min_exp=2, max_exp=8):
+    r"""Product of Powers with the Same Base
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Simplify $7^{3} \cdot 7^{5}$ | 7^8 |
+
+    ``a^m * a^n = a^(m+n)``. The answer stays in ``a^b`` form (ASCII caret, no
+    braces) so it is typeable and never a huge number.
+    """
+    a = random.randint(min_base, max_base)
+    m = random.randint(min_exp, max_exp)
+    n = random.randint(min_exp, max_exp)
+    problem = (
+        f"Simplify ${a}^{{{m}}} \\cdot {a}^{{{n}}}$. "
+        f"Write your answer in the form a^b."
+    )
+    return problem, f"{a}^{m + n}"
+
+
+@register
+def alg1_power_of_product(min_exp=2, max_exp=6):
+    r"""Power of a Product
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Simplify $(xy)^{4}$ | x^4*y^4 |
+
+    ``(xy)^n = x^n * y^n``. Kept purely symbolic so the rule is isolated and the
+    answer carries no large numbers.
+    """
+    n = random.randint(min_exp, max_exp)
+    problem = (
+        f"Simplify $(xy)^{{{n}}}$. Write your answer in the form x^a*y^b."
+    )
+    return problem, f"x^{n}*y^{n}"
+
+
+@register
+def alg1_negative_exponent(min_base=2, max_base=5, min_exp=2, max_exp=3):
+    r"""Negative Exponents
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Evaluate $2^{-3}$ | 1/8 |
+
+    ``a^(-n) = 1/a^n``. Bases and exponents are small so the denominator stays
+    modest (at most 125). The answer is a reduced ``1/k`` fraction.
+    """
+    a = random.randint(min_base, max_base)
+    n = random.randint(min_exp, max_exp)
+    problem = (
+        f"Evaluate ${a}^{{-{n}}}$. Express your answer as a fraction a/b."
+    )
+    return problem, f"1/{a ** n}"
+
+
+@register
+def alg1_complete_the_square(max_shift=8, min_c=-10, max_c=10):
+    r"""Completing the Square
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Write $x^2+6x+4$ in vertex form $(x - h)^2 + k$. | $(x+3)^2-5$ |
+    | Write $x^2-4x+1$ in vertex form $(x - h)^2 + k$. | $(x-2)^2-3$ |
+
+    ``x^2 + bx + c = (x + b/2)^2 + (c - (b/2)^2)``. ``b`` is forced even so the
+    shift ``b/2`` is an integer and the answer stays keyboard-typeable.
+    """
+    shift = random.choice([n for n in range(-max_shift, max_shift + 1) if n != 0])
+    b = 2 * shift
+    c = random.randint(min_c, max_c)
+    k = c - shift * shift
+
+    problem = (
+        f"Write ${_quadratic(1, b, c)}$ in vertex form $(x - h)^2 + k$. "
+        f"Write your answer in the form (x - h)^2 + k."
+    )
+    solution = f"$(x{_signed(shift)})^2{_signed(k)}$"
+    return problem, solution
+
+
+# Curated literal equations: (equation, variable to solve for, answer). Each
+# answer is a typeable expression; the test rearranges numerically to confirm.
+_LITERAL_EQUATIONS = [
+    ("P = 2l + 2w", "l", "(P - 2w)/2"),
+    ("P = 2l + 2w", "w", "(P - 2l)/2"),
+    ("A = lw", "l", "A/w"),
+    ("A = lw", "w", "A/l"),
+    ("d = rt", "r", "d/t"),
+    ("d = rt", "t", "d/r"),
+    ("F = ma", "a", "F/m"),
+    ("F = ma", "m", "F/a"),
+    ("V = lwh", "h", "V/(lw)"),
+    ("V = lwh", "l", "V/(wh)"),
+    ("y = mx + b", "m", "(y - b)/x"),
+    ("y = mx + b", "x", "(y - b)/m"),
+    ("I = prt", "r", "I/(pt)"),
+    ("I = prt", "p", "I/(rt)"),
+    ("ax + b = c", "x", "(c - b)/a"),
+]
+
+
+@register
+def alg1_literal_equation():
+    r"""Solve a Literal Equation
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Solve the formula $P = 2l + 2w$ for $l$. | $(P - 2w)/2$ |
+    | Solve the formula $d = rt$ for $r$. | $d/t$ |
+
+    Rearranges a familiar formula to isolate one variable. The answer is a
+    typeable expression built from ``+ - * /`` and parentheses.
+    """
+    equation, var, answer = random.choice(_LITERAL_EQUATIONS)
+    problem = (
+        f"Solve the formula ${equation}$ for ${var}$. "
+        f"Write your answer as a typeable expression using +, -, *, /, and "
+        f"parentheses."
+    )
+    return problem, f"${answer}$"
+
+
+@register
+def alg1_point_slope_form(coord_max=8, slope_max=6):
+    r"""Point-Slope Form
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Write the equation of the line through $(1, 3)$ with slope $2$ in point-slope form. | $y - 3 = 2(x - 1)$ |
+    | Write the equation of the line through $(-2, -5)$ with slope $-1$ in point-slope form. | $y + 5 = -(x + 2)$ |
+
+    Point-slope form ``y - y1 = m(x - x1)``. Signs collapse so that, e.g.,
+    ``y - (-5)`` reads ``y + 5`` and slope ``-1`` shows as a bare ``-``.
+    """
+    x1 = random.randint(-coord_max, coord_max)
+    y1 = random.randint(-coord_max, coord_max)
+    m = random.choice([n for n in range(-slope_max, slope_max + 1) if n != 0])
+
+    # "y - y1": subtract a positive, add a negative; drop the term when zero.
+    left = "y" if y1 == 0 else f"y - {y1}" if y1 > 0 else f"y + {abs(y1)}"
+    # "(x - x1)" with the same sign collapsing.
+    x_term = "(x)" if x1 == 0 else f"(x - {x1})" if x1 > 0 else f"(x + {abs(x1)})"
+    if m == 1:
+        right = x_term
+    elif m == -1:
+        right = f"-{x_term}"
+    else:
+        right = f"{m}{x_term}"
+
+    problem = (
+        f"Write the equation of the line through $({x1}, {y1})$ with slope "
+        f"${m}$ in point-slope form. Give your answer in the form "
+        f"y - y1 = m(x - x1)."
+    )
+    return problem, f"${left} = {right}$"
+
+
+def _linear_factor(coef, const):
+    """Render ``(coef*x + const)`` with unit/negative coefficients collapsed."""
+    if coef == 1:
+        head = "x"
+    elif coef == -1:
+        head = "-x"
+    else:
+        head = f"{coef}x"
+    return f"({head}{_signed(const)})"
+
+
+@register
+def alg1_multiply_binomials(max_coef=6, max_const=8):
+    r"""Multiply Binomials
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Expand $(2x+3)(x-4)$. | $2x^2-5x-12$ |
+    | Expand $(x-1)(x+5)$. | $x^2+4x-5$ |
+
+    ``(ax + b)(cx + d) = ac x^2 + (ad + bc) x + bd``. Coefficients are kept small
+    so the expanded polynomial has tidy integer terms.
+    """
+    a = random.choice([n for n in range(-max_coef, max_coef + 1) if n != 0])
+    c = random.choice([n for n in range(-max_coef, max_coef + 1) if n != 0])
+    b = random.choice([n for n in range(-max_const, max_const + 1) if n != 0])
+    d = random.choice([n for n in range(-max_const, max_const + 1) if n != 0])
+    p = a * c
+    q = a * d + b * c
+    r = b * d
+
+    problem = (
+        f"Expand ${_linear_factor(a, b)}{_linear_factor(c, d)}$. "
+        f"Write your answer as a polynomial in the form px^2 + qx + r."
+    )
+    return problem, f"${_quadratic(p, q, r)}$"
+
+
+def _two_var_line(a, b, e):
+    """Render ``ax + by = e`` (a, b != 0) with unit/negative coefficients tidy."""
+    if a == 1:
+        head = "x"
+    elif a == -1:
+        head = "-x"
+    else:
+        head = f"{a}x"
+    if b > 0:
+        y_term = f" + {'' if b == 1 else b}y"
+    else:
+        y_term = f" - {'' if b == -1 else abs(b)}y"
+    return f"{head}{y_term} = {e}"
+
+
+@register
+def alg1_solve_system(coef_max=6, sol_max=8):
+    r"""Solve a System of Equations
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Solve the system: $2x + y = 8$ and $x - y = 1$. | $(3, 2)$ |
+
+    Builds a 2x2 linear system from a known integer solution ``(x, y)`` and
+    integer coefficients with a nonzero determinant, so the unique solution is
+    exactly that pair.
+    """
+    x = random.randint(-sol_max, sol_max)
+    y = random.randint(-sol_max, sol_max)
+    nonzero = [n for n in range(-coef_max, coef_max + 1) if n != 0]
+    for _ in range(100):
+        a = random.choice(nonzero)
+        b = random.choice(nonzero)
+        c = random.choice(nonzero)
+        d = random.choice(nonzero)
+        if a * d - b * c != 0:  # nonzero determinant -> unique solution
+            break
+    else:  # deterministic fallback guaranteeing a nonzero determinant
+        a, b, c, d = 1, 1, 1, -1  # det = 1*(-1) - 1*1 = -2
+    e = a * x + b * y
+    f = c * x + d * y
+
+    problem = (
+        f"Solve the system: ${_two_var_line(a, b, e)}$ and "
+        f"${_two_var_line(c, d, f)}$. Format your answer as (x, y)."
+    )
+    return problem, f"${pair(x, y)}$"
+
+
+@register
+def alg1_variation(max_k=6, max_x=9):
+    r"""Direct and Inverse Variation
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | $y$ varies directly with $x$. When $x = 4$, $y = 12$. Find the constant of variation $k$. | $3$ |
+    | $y$ varies inversely with $x$. When $x = 2$, $y = 6$. Find $y$ when $x = 4$. | $3$ |
+
+    For direct variation ``y = kx`` so ``k = y/x``; for inverse variation
+    ``xy = k``. Points are built from a small integer ``k`` so the constant is
+    tidy; requested values may reduce to a simple ``a/b`` fraction.
+    """
+    kind = random.choice(["directly", "inversely"])
+    ask = random.choice(["k", "value"])
+    k = random.randint(1, max_k)
+
+    if kind == "directly":
+        # y = k*x. Build the given point from an integer k so k = y1/x1 exactly.
+        x1 = random.choice([n for n in range(-max_x, max_x + 1) if n != 0])
+        y1 = k * x1
+        const = Fraction(y1, x1)  # == k
+    else:
+        # x*y = k' where k' = x1*y1 for the chosen point.
+        x1 = random.choice([n for n in range(-max_x, max_x + 1) if n != 0])
+        y1 = random.choice([n for n in range(-max_x, max_x + 1) if n != 0])
+        const = Fraction(x1 * y1)
+
+    hint = _FRACTION_HINT
+    stem = (
+        f"$y$ varies {kind} with $x$. When $x = {x1}$, $y = {y1}$. "
+    )
+    if ask == "k":
+        problem = stem + f"Find the constant of variation $k$. {hint}"
+        answer = const
+    else:
+        x2 = random.choice([n for n in range(-max_x, max_x + 1) if n != 0])
+        problem = stem + f"Find $y$ when $x = {x2}$. {hint}"
+        if kind == "directly":
+            answer = const * x2      # y = k * x2
+        else:
+            answer = const / x2      # y = k / x2
+    return problem, f"${_fmt_frac(answer)}$"
+
+
+@register
+def alg1_simplify_rational(max_root=7):
+    r"""Simplify a Rational Expression
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Simplify $\frac{x^2+5x+6}{x^2+x-6}$. | $(x+2)/(x-3)$ |
+
+    Numerator ``(x+r)(x+a)`` and denominator ``(x+r)(x+b)`` share the factor
+    ``(x+r)``; cancelling it leaves ``(x+a)/(x+b)``. All of ``r, a, b`` are
+    distinct and nonzero so no further cancellation is possible.
+    """
+    choices = [n for n in range(-max_root, max_root + 1) if n != 0]
+    for _ in range(100):
+        r = random.choice(choices)
+        a = random.choice(choices)
+        b = random.choice(choices)
+        if len({r, a, b}) == 3:
+            break
+    else:  # deterministic fallback with three distinct nonzero values
+        r, a, b = 1, 2, 3
+
+    num_quad = _quadratic(1, r + a, r * a)   # (x+r)(x+a)
+    den_quad = _quadratic(1, r + b, r * b)   # (x+r)(x+b)
+    problem = (
+        f"Simplify $\\frac{{{num_quad}}}{{{den_quad}}}$. "
+        f"Write your answer in the form (x + a)/(x + b)."
+    )
+    solution = f"${_linear_factor(1, a)}/{_linear_factor(1, b)}$"
+    return problem, solution
+
+
+@register
+def alg1_abs_value_inequality(max_a=5, max_b=10, min_c=2, max_c=12):
+    r"""Absolute-Value Inequality
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Solve $|2x-3| < 5$. | $-1 < x < 4$ |
+    | Solve $|x+1| > 3$. | $x < -4 U x > 2$ |
+
+    ``|ax + b| < c`` becomes the compound inequality ``-c < ax + b < c``;
+    ``|ax + b| > c`` becomes ``ax + b < -c`` OR ``ax + b > c``. Boundaries are
+    the values where ``ax + b = +/- c``; they are sorted so the reported
+    interval reads low-to-high regardless of the sign of ``a``.
+    """
+    a = random.choice([n for n in range(-max_a, max_a + 1) if n != 0])
+    b = random.randint(-max_b, max_b)
+    c = random.randint(min_c, max_c)
+    op = random.choice(["<", ">"])
+
+    if a == 1:
+        head = "x"
+    elif a == -1:
+        head = "-x"
+    else:
+        head = f"{a}x"
+    inner = f"{head}{_signed(b)}"
+
+    hint = (
+        "Write your answer as a compound inequality using <, >, and U, for "
+        "example -3 < x < 5 or x < -3 U x > 5."
+    )
+    problem = f"Solve $|{inner}| {op} {c}$. {hint}"
+
+    # Boundaries where ax + b = -c and ax + b = c.
+    bounds = sorted([Fraction(-c - b, a), Fraction(c - b, a)])
+    lo, hi = _fmt_frac(bounds[0]), _fmt_frac(bounds[1])
+    if op == "<":
+        solution = f"${lo} < x < {hi}$"
+    else:
+        solution = f"$x < {lo} U x > {hi}$"
+    return problem, solution
+
+
+# Square-free integers >= 2: valid radicands that leave nothing more to factor
+# out of the radical, so ``a*sqrt(b)`` is fully simplified.
+_SQUAREFREE = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23]
+
+
+@register
+def alg1_simplify_radical(min_factor=2, max_factor=9):
+    r"""Simplify Square Root
+
+    | Ex. Problem | Ex. Solution |
+    | --- | --- |
+    | Simplify $\sqrt{72}$. | $6*sqrt(2)$ |
+
+    The radicand is built as $a^2 b$ with $b$ square-free, so the fully
+    simplified form is $a\sqrt{b}$, typed as ``a*sqrt(b)``.
+    """
+    a = random.randint(min_factor, max_factor)
+    b = random.choice(_SQUAREFREE)
+    n = a * a * b
+    problem = (
+        f"Simplify $\\sqrt{{{n}}}$. Write your answer in the form "
+        f"a*sqrt(b), for example 6*sqrt(2)."
+    )
+    return problem, f"${a}*sqrt({b})$"

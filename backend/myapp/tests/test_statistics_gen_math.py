@@ -274,3 +274,199 @@ class RelativeFrequencyTests(TestCase):
                 num / den, expected, places=3,
                 msg=f"rel freq wrong for {problem!r} -> {solution!r}",
             )
+
+
+def _phi(z):
+    return 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+
+
+class NormalProbabilityTests(TestCase):
+    PARAMS = re.compile(
+        rf"mean = (?P<mean>{NUM}) and standard deviation = (?P<sd>{NUM})"
+    )
+    BETWEEN = re.compile(rf"P\((?P<a>{NUM}) < X < (?P<b>{NUM})\)")
+    LESS = re.compile(rf"P\(X < (?P<b>{NUM})\)")
+    GREATER = re.compile(rf"P\(X > (?P<b>{NUM})\)")
+    SOLUTION = re.compile(rf"\$(?P<p>{NUM})\$")
+
+    def test_normal_probability(self):
+        import random
+        random.seed(0)
+        gen = LOCAL_GENERATORS["stat_normal_probability"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            pm = self.PARAMS.search(problem)
+            self.assertIsNotNone(pm, f"could not parse: {problem!r}")
+            mean, sd = float(pm.group("mean")), float(pm.group("sd"))
+            bt = self.BETWEEN.search(problem)
+            if bt:
+                a, b = float(bt.group("a")), float(bt.group("b"))
+                expected = _phi((b - mean) / sd) - _phi((a - mean) / sd)
+            elif self.LESS.search(problem):
+                b = float(self.LESS.search(problem).group("b"))
+                expected = _phi((b - mean) / sd)
+            else:
+                gt = self.GREATER.search(problem)
+                self.assertIsNotNone(gt, f"could not parse event: {problem!r}")
+                b = float(gt.group("b"))
+                expected = 1.0 - _phi((b - mean) / sd)
+            expected = round(expected, 3)
+            stated = float(self.SOLUTION.search(solution).group("p"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"P wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class TestStatisticTests(TestCase):
+    MEAN = re.compile(
+        rf"size n = (?P<n>\d+) has mean xbar = (?P<xbar>{NUM}).*"
+        rf"mu0 = (?P<mu0>{NUM}).*sigma = (?P<sigma>{NUM})"
+    )
+    PROP = re.compile(
+        rf"size n = (?P<n>\d+) has sample proportion phat = (?P<phat>{NUM}).*"
+        rf"p0 = (?P<p0>{NUM})"
+    )
+    SOLUTION = re.compile(rf"\$(?P<z>{NUM})\$")
+
+    def test_test_statistic(self):
+        import random
+        random.seed(0)
+        gen = LOCAL_GENERATORS["stat_test_statistic"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            mm = self.MEAN.search(problem)
+            if mm:
+                n = int(mm.group("n"))
+                xbar = float(mm.group("xbar"))
+                mu0 = float(mm.group("mu0"))
+                sigma = float(mm.group("sigma"))
+                expected = (xbar - mu0) / (sigma / math.sqrt(n))
+            else:
+                pm = self.PROP.search(problem)
+                self.assertIsNotNone(pm, f"could not parse: {problem!r}")
+                n = int(pm.group("n"))
+                phat = float(pm.group("phat"))
+                p0 = float(pm.group("p0"))
+                expected = (phat - p0) / math.sqrt(p0 * (1 - p0) / n)
+            expected = round(expected, 3)
+            stated = float(self.SOLUTION.search(solution).group("z"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"z wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class DiscreteVarianceTests(TestCase):
+    VALUES = re.compile(
+        r"values (?P<vals>[-\d, ]+?) with probabilities "
+        r"(?P<probs>[\d., ]+?) respectively"
+    )
+    SOLUTION = re.compile(rf"\$(?P<v>{NUM})\$")
+
+    def test_variance(self):
+        import random
+        random.seed(0)
+        gen = LOCAL_GENERATORS["stat_discrete_variance"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.VALUES.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            vals = [int(v) for v in m.group("vals").split(", ")]
+            probs = [float(p) for p in m.group("probs").split(", ")]
+            ev = sum(p * v for p, v in zip(probs, vals))
+            ev2 = sum(p * v * v for p, v in zip(probs, vals))
+            expected = round(ev2 - ev * ev, 3)
+            stated = float(self.SOLUTION.search(solution).group("v"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"variance wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class PercentileRankTests(TestCase):
+    DATA = re.compile(r"data set: (?P<data>[\d, ]+?)\.")
+    VALUE = re.compile(r"percentile rank of the value (?P<v>\d+)")
+    SOLUTION = re.compile(rf"\$(?P<p>{NUM})\$")
+
+    def test_percentile_rank(self):
+        import random
+        random.seed(0)
+        gen = LOCAL_GENERATORS["stat_percentile_rank"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            dm = self.DATA.search(problem)
+            vm = self.VALUE.search(problem)
+            self.assertIsNotNone(dm, f"could not parse: {problem!r}")
+            self.assertIsNotNone(vm, f"could not parse: {problem!r}")
+            data = [int(v) for v in dm.group("data").split(", ")]
+            value = int(vm.group("v"))
+            below = sum(1 for v in data if v < value)
+            expected = round(below / len(data) * 100, 3)
+            stated = float(self.SOLUTION.search(solution).group("p"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"percentile rank wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class CountingProbabilityTests(TestCase):
+    PROBLEM = re.compile(
+        r"contains (?P<n>\d+) marbles: (?P<r>\d+) red and (?P<g>\d+) green\. "
+        r"You draw (?P<k>\d+) marbles.*exactly (?P<m>\d+) are red"
+    )
+    SOLUTION = re.compile(r"\$(?P<num>\d+)(?:/(?P<den>\d+))?\$")
+
+    def test_counting_probability(self):
+        import random
+        from fractions import Fraction
+        random.seed(0)
+        gen = LOCAL_GENERATORS["stat_counting_probability"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            n = int(m.group("n"))
+            r = int(m.group("r"))
+            g = int(m.group("g"))
+            k = int(m.group("k"))
+            mm = int(m.group("m"))
+            ways = math.comb(r, mm) * math.comb(g, k - mm)
+            total = math.comb(n, k)
+            expected = Fraction(ways, total)
+            s = self.SOLUTION.search(solution)
+            self.assertIsNotNone(s, f"could not parse solution: {solution!r}")
+            num = int(s.group("num"))
+            den = int(s.group("den")) if s.group("den") else 1
+            self.assertEqual(
+                math.gcd(num, den), 1, f"fraction not reduced: {solution!r}"
+            )
+            self.assertEqual(
+                Fraction(num, den), expected,
+                msg=f"probability wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class OddsProbabilityTests(TestCase):
+    PROBLEM = re.compile(r"probability of an event is (?P<a>\d+)/(?P<b>\d+)")
+    SOLUTION = re.compile(r"\$(?P<f>\d+):(?P<ag>\d+)\$")
+
+    def test_odds_probability(self):
+        import random
+        random.seed(0)
+        gen = LOCAL_GENERATORS["stat_odds_probability"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            a, b = int(m.group("a")), int(m.group("b"))
+            favor = a
+            against = b - a
+            g = math.gcd(favor, against)
+            expected = (favor // g, against // g)
+            s = self.SOLUTION.search(solution)
+            self.assertIsNotNone(s, f"could not parse solution: {solution!r}")
+            self.assertEqual(
+                (int(s.group("f")), int(s.group("ag"))), expected,
+                msg=f"odds wrong for {problem!r} -> {solution!r}",
+            )

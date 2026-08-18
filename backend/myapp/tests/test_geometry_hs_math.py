@@ -355,3 +355,234 @@ class ExpectedValueTests(TestCase):
                 stated, ev, places=3,
                 msg=f"wrong for {problem!r} -> {solution!r}",
             )
+
+
+class SpecialRightTriangleTests(TestCase):
+    PROBLEM = re.compile(
+        r"In a (?P<kind>45-45-90|30-60-90) right triangle, the "
+        r"(?P<given>shorter leg|longer leg|hypotenuse|leg) measures "
+        r"\$(?P<len>\d+)\$\. Find the length of the "
+        r"(?P<target>shorter leg|longer leg|hypotenuse|leg),"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>-?[\d.]+)\$")
+
+    RATIOS = {
+        "45-45-90": {"leg": 1.0, "hypotenuse": math.sqrt(2)},
+        "30-60-90": {
+            "shorter leg": 1.0,
+            "longer leg": math.sqrt(3),
+            "hypotenuse": 2.0,
+        },
+    }
+
+    def test_special_right_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_special_right_triangle"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            ratios = self.RATIOS[m.group("kind")]
+            length = int(m.group("len"))
+            expected = round(
+                length * ratios[m.group("target")] / ratios[m.group("given")], 3
+            )
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class SimilarTriangleSideTests(TestCase):
+    PROBLEM = re.compile(
+        r"AB = \$(?P<ab>\d+)\$ and BC = \$(?P<bc>\d+)\$\. In triangle DEF, the "
+        r"corresponding side DE = \$(?P<de>\d+)\$"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>-?[\d.]+)\$")
+
+    def test_similar_side_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_similar_triangle_side"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            ab, bc, de = (int(m.group(k)) for k in ("ab", "bc", "de"))
+            expected = round(bc * de / ab, 3)
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class ScaleFactorRatioTests(TestCase):
+    PROBLEM = re.compile(
+        r"linear scale factor of \$(?P<scale>[\d/]+)\$ .*Find the ratio of "
+        r"their (?P<kind>areas|volumes)"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>\d+(?:/\d+)?)\$")
+
+    def test_scale_ratio_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_scale_factor_ratio"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            scale = m.group("scale")
+            if "/" in scale:
+                p, q = (int(t) for t in scale.split("/"))
+            else:
+                p, q = int(scale), 1
+            power = 2 if m.group("kind") == "areas" else 3
+            num, den = p ** power, q ** power
+            g = math.gcd(num, den)
+            expected = str(num // g) if den // g == 1 else f"{num // g}/{den // g}"
+            stated = self.SOLUTION.search(solution).group("ans")
+            self.assertEqual(
+                stated, expected,
+                f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class CircleSegmentsTests(TestCase):
+    CHORD = re.compile(
+        r"first chord is divided into segments of length \$(?P<a>\d+)\$ and "
+        r"\$(?P<b>\d+)\$\. The second chord is divided into segments of length "
+        r"\$(?P<c>\d+)\$ and x"
+    )
+    TANGENT = re.compile(
+        r"external segment \$(?P<e>\d+)\$ and total length \$(?P<s>\d+)\$"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>-?[\d.]+)\$")
+
+    def test_circle_segments_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_circle_segments"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            chord = self.CHORD.search(problem)
+            tangent = self.TANGENT.search(problem)
+            if chord:
+                a, b, c = (int(chord.group(k)) for k in ("a", "b", "c"))
+                expected = round(a * b / c, 3)
+            else:
+                self.assertIsNotNone(tangent, f"could not parse: {problem!r}")
+                e, s = int(tangent.group("e")), int(tangent.group("s"))
+                expected = round(math.sqrt(e * s), 3)
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class RegularPolygonAreaTests(TestCase):
+    PROBLEM = re.compile(
+        r"has \$(?P<n>\d+)\$ sides, each of length \$(?P<s>\d+)\$"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>-?[\d.]+)\$")
+
+    def test_polygon_area_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_regular_polygon_area"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            n, s = int(m.group("n")), int(m.group("s"))
+            expected = round(n * s * s / (4 * math.tan(math.pi / n)), 3)
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class CompositeSolidTests(TestCase):
+    CYL_CONE = re.compile(
+        r"cylinder of radius \$(?P<r>\d+)\$ and height \$(?P<hc>\d+)\$ topped by "
+        r"a cone of the same radius \$\d+\$ and height \$(?P<hk>\d+)\$"
+    )
+    PRISMS = re.compile(
+        r"first measures \$(?P<a>\d+)\$ by \$(?P<b>\d+)\$ by \$(?P<c>\d+)\$, and "
+        r"the second measures \$(?P<d>\d+)\$ by \$(?P<e>\d+)\$ by \$(?P<f>\d+)\$"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>-?[\d.]+)\$")
+
+    def test_composite_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_composite_solid"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            cyl = self.CYL_CONE.search(problem)
+            prisms = self.PRISMS.search(problem)
+            if cyl:
+                r = int(cyl.group("r"))
+                hc, hk = int(cyl.group("hc")), int(cyl.group("hk"))
+                expected = round(
+                    math.pi * r * r * hc + math.pi * r * r * hk / 3, 3
+                )
+            else:
+                self.assertIsNotNone(prisms, f"could not parse: {problem!r}")
+                vals = [int(prisms.group(k)) for k in
+                        ("a", "b", "c", "d", "e", "f")]
+                expected = round(
+                    vals[0] * vals[1] * vals[2] + vals[3] * vals[4] * vals[5], 3
+                )
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class PolygonAreaVerticesTests(TestCase):
+    VERTEX = re.compile(r"\((?P<x>-?\d+), (?P<y>-?\d+)\)")
+    SOLUTION = re.compile(r"\$(?P<ans>-?[\d.]+)\$")
+
+    def test_shoelace_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_polygon_area_vertices"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            body = problem.split("Give your answer")[0]
+            pts = [(int(x), int(y)) for x, y in self.VERTEX.findall(body)]
+            self.assertIn(len(pts), (3, 4), f"could not parse: {problem!r}")
+            cross = 0
+            for i in range(len(pts)):
+                x1, y1 = pts[i]
+                x2, y2 = pts[(i + 1) % len(pts)]
+                cross += x1 * y2 - x2 * y1
+            expected = round(abs(cross) / 2, 3)
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"wrong for {problem!r} -> {solution!r}",
+            )
+
+
+class FrustumVolumeTests(TestCase):
+    PROBLEM = re.compile(
+        r"height \$(?P<h>\d+)\$, lower base radius \$(?P<R>\d+)\$, "
+        r"and upper base radius \$(?P<r>\d+)\$"
+    )
+    SOLUTION = re.compile(r"\$(?P<ans>[\d.]+)\$")
+
+    def test_frustum_volume(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["geo_frustum_volume"]
+        for _ in range(SAMPLES):
+            problem, solution = gen()
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            h, R, r = int(m.group("h")), int(m.group("R")), int(m.group("r"))
+            self.assertGreater(R, r, f"R must exceed r: {problem!r}")
+            expected = round(math.pi * h * (R * R + R * r + r * r) / 3, 3)
+            stated = float(self.SOLUTION.search(solution).group("ans"))
+            self.assertAlmostEqual(
+                stated, expected, places=3,
+                msg=f"{problem!r} -> {solution!r}",
+            )
