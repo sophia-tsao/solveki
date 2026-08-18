@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { renderWithClient } from './test-utils.jsx';
 
 vi.mock('./auth.js', () => ({
   apiFetch: vi.fn(),
@@ -27,7 +28,7 @@ describe('Settings — loading', () => {
     apiFetch.mockResolvedValueOnce(
       jsonResponse({ language: 'fr', questions_per_day: 15 }),
     );
-    render(<Settings onLoggedOut={() => {}} />);
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
     await waitFor(() =>
       expect(screen.getByRole('combobox')).toHaveValue('fr'),
     );
@@ -36,7 +37,7 @@ describe('Settings — loading', () => {
 
   it('shows an error when the fetch fails', async () => {
     apiFetch.mockResolvedValueOnce(jsonResponse({}, { ok: false, status: 500 }));
-    render(<Settings onLoggedOut={() => {}} />);
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
     await screen.findByText(/Error: HTTP error! Status: 500/);
   });
 });
@@ -50,7 +51,7 @@ describe('Settings — saving', () => {
 
   it('PATCHes the new values and shows a confirmation', async () => {
     const user = userEvent.setup();
-    render(<Settings onLoggedOut={() => {}} />);
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
     await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     apiFetch.mockResolvedValueOnce(
@@ -72,7 +73,7 @@ describe('Settings — saving', () => {
 
   it('rejects a questions-per-day below 1 without calling the API', async () => {
     const user = userEvent.setup();
-    render(<Settings onLoggedOut={() => {}} />);
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
     await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     const input = screen.getByRole('spinbutton');
@@ -97,7 +98,7 @@ describe('Settings — account actions', () => {
     const onLoggedOut = vi.fn();
     logout.mockResolvedValueOnce({ ok: true });
     const user = userEvent.setup();
-    render(<Settings onLoggedOut={onLoggedOut} />);
+    renderWithClient(<Settings onLoggedOut={onLoggedOut} />);
     await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     await user.click(screen.getByRole('button', { name: 'Log out' }));
@@ -108,7 +109,7 @@ describe('Settings — account actions', () => {
     const onLoggedOut = vi.fn();
     deleteAccount.mockResolvedValueOnce({ ok: true });
     const user = userEvent.setup();
-    render(<Settings onLoggedOut={onLoggedOut} />);
+    renderWithClient(<Settings onLoggedOut={onLoggedOut} />);
     await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     // First click reveals the confirmation, does not delete.
@@ -123,7 +124,7 @@ describe('Settings — account actions', () => {
 
   it('cancels the delete confirmation', async () => {
     const user = userEvent.setup();
-    render(<Settings onLoggedOut={() => {}} />);
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
     await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     await user.click(screen.getByRole('button', { name: 'Delete account' }));

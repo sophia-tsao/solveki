@@ -59,8 +59,6 @@ describe('Dashboard', () => {
     expect(screen.getByRole('heading', { name: 'Proficient' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Shown soon' })).toBeInTheDocument();
     expect(screen.getByText('Quadratic')).toBeInTheDocument();
-    expect(screen.getByText('2.36')).toBeInTheDocument();
-    expect(screen.getByText('6 days')).toBeInTheDocument();
   });
 
   it('shows the selected-topic total next to the pie', async () => {

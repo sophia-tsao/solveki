@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { renderWithClient } from './test-utils.jsx';
 
 vi.mock('./auth.js', () => ({ apiFetch: vi.fn(), localDay: vi.fn(() => '2026-07-20') }));
 
@@ -26,14 +27,14 @@ beforeEach(() => apiFetch.mockReset());
 describe('CourseList', () => {
   it('renders courses from the initial fetch', async () => {
     apiFetch.mockResolvedValueOnce(jsonResponse({ courses: COURSES }));
-    render(<CourseList />);
+    renderWithClient(<CourseList />);
     await screen.findByText('Algebra');
     expect(screen.getByText('Geometry')).toBeInTheDocument();
   });
 
   it('shows an error when the courses fetch fails', async () => {
     apiFetch.mockResolvedValueOnce(jsonResponse({}, { ok: false, status: 500 }));
-    render(<CourseList />);
+    renderWithClient(<CourseList />);
     await screen.findByText(/Error: HTTP error! Status: 500/);
   });
 
@@ -42,7 +43,7 @@ describe('CourseList', () => {
       .mockResolvedValueOnce(jsonResponse({ courses: COURSES }))
       .mockResolvedValueOnce(jsonResponse({ topics: ALGEBRA_TOPICS }));
     const user = userEvent.setup();
-    render(<CourseList />);
+    renderWithClient(<CourseList />);
     await screen.findByText('Algebra');
 
     await user.click(screen.getByText('Algebra'));
@@ -61,7 +62,7 @@ describe('CourseList', () => {
       )
       .mockResolvedValueOnce(jsonResponse({ ok: true })); // topic select PATCH
     const user = userEvent.setup();
-    render(<CourseList />);
+    renderWithClient(<CourseList />);
     await screen.findByText('Algebra');
     await user.click(screen.getByText('Algebra'));
     await screen.findByText('Linear equations');
