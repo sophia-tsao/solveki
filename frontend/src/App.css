@@ -1,0 +1,29 @@
+/* Full-height app shell: header at the top, the page content growing to fill
+   whatever height is left, and the footer pinned to the bottom of the viewport
+   so no page ever leaves a band of blank space above it. */
+body {
+    margin: 0;
+}
+
+.app-shell {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* The page area grows to fill the space between header and footer. It's a flex
+   column so a page can opt into filling that height (the Dashboard does, via
+   flex: 1) instead of sitting at its natural height. */
+.app-main {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    padding-top: 32px;
+}
+
+/* Blank for now — just the project blue bar anchored to the bottom. */
+.app-footer {
+    flex-shrink: 0;
+    height: 56px;
+    background: #2563eb;
+}
