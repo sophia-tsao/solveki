@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import './Settings.css';
 import { apiFetch, logout, deleteAccount, localDay } from './auth.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('settings');
+
+async function fetchSettings() {
+  const response = await apiFetch(`/settings/`);
+  if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+  return response.json();
+}
 
 const LANGUAGES = [
   { code: 'en', label: 'English' },
@@ -20,21 +27,21 @@ function Settings({ onLoggedOut }) {
   const [error, setError] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
+  const { data: loaded, error: loadError } = useQuery({
+    queryKey: ['settings'],
+    queryFn: fetchSettings,
+  });
+
+  // Seed the editable fields from the fetched settings once they arrive. The
+  // form owns the values after that (the user edits them locally, then saves),
+  // so this only mirrors the server value in — it doesn't fight later edits
+  // because `loaded` doesn't change again unless we refetch.
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await apiFetch(`/settings/`);
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-        const result = await response.json();
-        setLanguage(result.language);
-        setQuestionsPerDay(result.questions_per_day);
-      } catch (err) {
-        log.error('Failed to load settings:', err.message);
-        setError(err.message);
-      }
-    };
-    fetchSettings();
-  }, []);
+    if (loaded) {
+      setLanguage(loaded.language);
+      setQuestionsPerDay(loaded.questions_per_day);
+    }
+  }, [loaded]);
 
   const saveSettings = async () => {
     setStatus(null);
@@ -85,6 +92,19 @@ function Settings({ onLoggedOut }) {
       setError(err.message);
     }
   };
+
+  // Gate the form on the initial load. Rendering the form with placeholder
+  // defaults first would (a) let a slow settings load land mid-edit and clobber
+  // what the user just typed, and (b) briefly show the wrong values. Wait until
+  // the real settings are in before showing anything editable.
+  if (loadError) {
+    return (
+      <div className="settings-card">
+        <p className="settings-error">Error: {loadError.message}</p>
+      </div>
+    );
+  }
+  if (!loaded) return <div className="settings-card" aria-busy="true" />;
 
   return (
     <div className="settings-card">

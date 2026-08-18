@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
 import './MathProblem.css';
@@ -72,6 +73,7 @@ function MathProblem() {
   const [result, setResult] = useState('correct'); // 'correct' | 'incorrect' — back-face content
   const [resultAnswer, setResultAnswer] = useState(null); // solution frozen for the back face
   const [attempt, setAttempt] = useState(1);
+  const [overriding, setOverriding] = useState(false); // true while the incorrect face eases into "Correct!"
   const [showConfetti, setShowConfetti] = useState(false);
   const MAX_ATTEMPTS = 2;
 
@@ -110,24 +112,39 @@ function MathProblem() {
     setCurrentNumber(result.current_number);
     setTotal(result.total);
     setAttempt(1);
+    setOverriding(false);
     setFlipped(false);
     setStatus('active');
   }, [celebrate]);
 
-  const fetchDeck = useCallback(async () => {
-    try {
-      // Pass the client's local day so the deck resets at the user's midnight,
-      // not the server's UTC midnight (the backend clock runs in UTC).
-      const response = await apiFetch(`/deck/?today=${localDay()}`);
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      applyDeck(await response.json());
-    } catch (err) {
-      log.error('Failed to load deck:', err.message);
-      setError(err.message);
+  // The deck belongs to a specific local day. `day` is that day; the deck query
+  // is keyed by it, so bumping `day` (a midnight rollover, below) refetches the
+  // fresh deck the backend builds for the new day. The client sends its local
+  // day because the deck resets at the user's midnight, not the server's UTC one.
+  const [day, setDay] = useState(localDay);
+
+  const deckQuery = useQuery({
+    queryKey: ['deck', day],
+    queryFn: async () => {
+      const response = await apiFetch(`/deck/?today=${day}`);
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      return response.json();
+    },
+  });
+
+  // Feed each loaded deck into the card state. A passive load — mount, a day
+  // rollover, or reopening a completed deck — never celebrates; only the finish
+  // transition in the advance mutation below does (see applyDeck's docstring).
+  useEffect(() => {
+    if (deckQuery.data) applyDeck(deckQuery.data);
+  }, [deckQuery.data, applyDeck]);
+
+  useEffect(() => {
+    if (deckQuery.error) {
+      log.error('Failed to load deck:', deckQuery.error.message);
+      setError(deckQuery.error.message);
     }
-  }, [applyDeck]);
+  }, [deckQuery.error]);
 
   // `outcome` reports how the card being left was answered ('correct_first' |
   // 'correct_second' | 'incorrect') so the backend can update that topic's
@@ -139,8 +156,8 @@ function MathProblem() {
   // card it's showing, so a stray leftover timer — e.g. the correct-answer
   // timer from finishing yesterday's last card, firing after the deck has
   // rolled over to today's card 1 — can't step the fresh deck past card 1.
-  const advanceDeck = useCallback(async (outcome, fromNumber) => {
-    try {
+  const advanceDeck = useMutation({
+    mutationFn: async ({ outcome, fromNumber }) => {
       const body = {};
       if (typeof outcome === 'string') body.outcome = outcome;
       if (typeof fromNumber === 'number') body.from_number = fromNumber;
@@ -148,30 +165,25 @@ function MathProblem() {
         method: 'POST',
         ...(Object.keys(body).length ? { body: JSON.stringify(body) } : {}),
       });
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-      // Reaching `completed` here means the student just answered the last
-      // card — the one moment worth celebrating.
-      applyDeck(await response.json(), { celebrating: true });
-    } catch (err) {
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      return response.json();
+    },
+    // Reaching `completed` here means the student just answered the last card —
+    // the one moment worth celebrating.
+    onSuccess: (data) => applyDeck(data, { celebrating: true }),
+    onError: (err) => {
       log.error('Failed to advance deck:', err.message);
       setError(err.message);
-    }
-  }, [applyDeck]);
-
-  // Load the deck on mount, and remember which local day it was built for.
-  const loadedDay = useRef(localDay());
-  useEffect(() => {
-    loadedDay.current = localDay();
-    fetchDeck();
-  }, [fetchDeck]);
+    },
+  });
 
   // The deck resets at the start of each day, but the SPA can sit open across
   // midnight (a student leaves the tab up overnight). Fetching only on mount
   // would leave them staring at yesterday's deck — usually the "come back
-  // tomorrow" completion screen. Reload when the local day has rolled over so
-  // the backend can hand back the fresh deck it already builds for the new day.
+  // tomorrow" completion screen. Bumping `day` to the current local day re-keys
+  // the deck query so React Query refetches the fresh deck; if the day hasn't
+  // changed the state set is a no-op, so nothing refetches and refocusing
+  // mid-day never discards local attempt state.
   //
   // Three triggers, because no single one covers every case: refocus and
   // visibility handle a tab that was backgrounded across midnight, and a
@@ -179,14 +191,7 @@ function MathProblem() {
   // open on-screen), which would otherwise never re-check and keep showing
   // yesterday's card.
   useEffect(() => {
-    const reloadIfNewDay = () => {
-      const today = localDay();
-      if (today !== loadedDay.current) {
-        log.info('Local day rolled over; reloading deck for the new day');
-        loadedDay.current = today;
-        fetchDeck();
-      }
-    };
+    const reloadIfNewDay = () => setDay(localDay());
     const onVisible = () => {
       if (document.visibilityState === 'visible') reloadIfNewDay();
     };
@@ -200,7 +205,7 @@ function MathProblem() {
       document.removeEventListener('visibilitychange', onVisible);
       clearInterval(interval);
     };
-  }, [fetchDeck]);
+  }, []);
 
   // Flip the card to reveal the result on its back, then advance once the
   // student has had a beat to read it. advanceDeck() sets `flipped` back to
@@ -216,7 +221,7 @@ function MathProblem() {
     const from = currentNumber;
     setResult('correct');
     setFlipped(true);
-    setTimeout(() => advanceDeck(outcome, from), 1400);
+    setTimeout(() => advanceDeck.mutate({ outcome, fromNumber: from }), 1400);
   };
 
   const handleIncorrect = () => {
@@ -237,14 +242,23 @@ function MathProblem() {
   };
 
   // From the incorrect back face: accept the miss and move on.
-  const handleAcceptIncorrect = () => advanceDeck('incorrect', currentNumber);
+  const handleAcceptIncorrect = () =>
+    advanceDeck.mutate({ outcome: 'incorrect', fromNumber: currentNumber });
 
   // From the incorrect back face: the student says the answer box wrongly
-  // marked them wrong. Override to a clean correct grade (full credit).
+  // marked them wrong. Override to a clean correct grade (full credit). The
+  // back face is already showing, so we can't lean on the flip to soften the
+  // swap the way the front-face correct flow does — instead `overriding` fades
+  // the "Correct!" content in over the incorrect content, and we hold that beat
+  // (matching handleCorrect's dwell) before advancing so the reveal isn't blunt.
   const handleOverrideCorrect = () => {
     log.info('Student overrode an incorrect grade to correct');
+    // Capture the card being answered now, so a stray timer firing after a
+    // day-rollover reload carries a stale from_number the backend will reject.
+    const from = currentNumber;
     setResult('correct');
-    advanceDeck('correct_first', currentNumber);
+    setOverriding(true);
+    setTimeout(() => advanceDeck.mutate({ outcome: 'correct_first', fromNumber: from }), 1400);
   };
 
   if (error) return <div>Error: {error}</div>;
@@ -324,11 +338,15 @@ function MathProblem() {
             </>
           ) : (
             <>
-              <svg className="math-problem-result-icon" viewBox="0 0 24 24" fill="none">
+              <svg
+                className={`math-problem-result-icon${overriding ? ' math-problem-reveal' : ''}`}
+                viewBox="0 0 24 24"
+                fill="none"
+              >
                 <circle cx="12" cy="12" r="11" stroke="#16a34a" strokeWidth="1.5" />
                 <path d="M7 12.5l3.2 3.2L17 9" stroke="#16a34a" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              <span className="math-problem-correct-text">Correct!</span>
+              <span className={`math-problem-correct-text${overriding ? ' math-problem-reveal' : ''}`}>Correct!</span>
             </>
           )}
         </div>

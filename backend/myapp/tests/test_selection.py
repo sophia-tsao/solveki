@@ -32,6 +32,29 @@ class ViewCoursesTests(TestCase):
         courses = {c["id"]: c for c in self.client.get("/courses/").json()["courses"]}
         self.assertFalse(courses[empty.id]["is_selected"])
 
+    def test_course_is_partial_when_some_but_not_all_topics_selected(self):
+        # Nothing selected: neither fully nor partially selected.
+        course = self.client.get("/courses/").json()["courses"][0]
+        self.assertFalse(course["is_selected"])
+        self.assertFalse(course["is_partial"])
+
+        # One of two topics selected: partial, not fully selected.
+        select(self.user, self.t1)
+        course = self.client.get("/courses/").json()["courses"][0]
+        self.assertFalse(course["is_selected"])
+        self.assertTrue(course["is_partial"])
+
+        # Both selected: fully selected, no longer partial.
+        select(self.user, self.t2)
+        course = self.client.get("/courses/").json()["courses"][0]
+        self.assertTrue(course["is_selected"])
+        self.assertFalse(course["is_partial"])
+
+    def test_course_with_no_topics_is_not_partial(self):
+        empty = make_course(course_name="Empty", grade_level=5)
+        courses = {c["id"]: c for c in self.client.get("/courses/").json()["courses"]}
+        self.assertFalse(courses[empty.id]["is_partial"])
+
 
 class ViewCourseTopicsTests(TestCase):
     def setUp(self):

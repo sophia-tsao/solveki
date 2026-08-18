@@ -57,12 +57,25 @@ _load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-z=&t-t!s2zn3c3u-9y6)3pw5k1dd*4z!n)4*&=-#26drowfr!5'
+# In production, set SECRET_KEY in the environment (Cloud Run env var). The
+# insecure fallback is only for local development.
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY',
+    'django-insecure-z=&t-t!s2zn3c3u-9y6)3pw5k1dd*4z!n)4*&=-#26drowfr!5',
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Defaults to True locally; set DEBUG=0 (or leave unset) in production.
+DEBUG = os.environ.get('DEBUG', '1') == '1'
 
-ALLOWED_HOSTS = []
+# Hosts allowed to serve this app. In production, set ALLOWED_HOSTS to a
+# comma-separated list including the Cloud Run host, e.g.
+# ALLOWED_HOSTS=myapp-abc123.run.app  (or a custom domain).
+ALLOWED_HOSTS = [
+    h.strip()
+    for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+    if h.strip()
+]
 
 INTERNAL_IPS = ['127.0.0.1']
 
@@ -83,6 +96,9 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # WhiteNoise serves static files in production (Django doesn't on its own).
+    # Must come right after SecurityMiddleware.
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -115,11 +131,17 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# Uses DATABASE_URL if set (e.g. Neon Postgres in production), otherwise falls
+# back to the local SQLite file for development. conn_max_age keeps connections
+# alive between requests; ssl_require forces TLS for the managed Postgres.
+import dj_database_url  # noqa: E402
+
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
+    'default': dj_database_url.config(
+        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        conn_max_age=600,
+        ssl_require=os.environ.get('DATABASE_URL', '').startswith('postgres'),
+    )
 }
 
 
@@ -159,17 +181,59 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+# Where collectstatic gathers files for WhiteNoise to serve in production.
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Compress and cache-bust static files. WhiteNoise serves them efficiently.
+STORAGES = {
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage',
+    },
+}
+
+# Frontend origins allowed to call the API with credentials. Locally this is
+# the Vite dev server; in production add your Vercel URL via CORS_ALLOWED_ORIGINS
+# (comma-separated), e.g. https://solveki.vercel.app
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:5173',
+    origin.strip()
+    for origin in os.environ.get(
+        'CORS_ALLOWED_ORIGINS', 'http://localhost:5173'
+    ).split(',')
+    if origin.strip()
 ]
 
 # The SPA sends the session cookie cross-origin, so credentials must be allowed.
 CORS_ALLOW_CREDENTIALS = True
 
-# Session cookie config for the dev SPA (Vite on :5173 -> Django on :8000).
-# 'Lax' works because both run on localhost; tighten SECURE settings for prod.
-SESSION_COOKIE_SAMESITE = 'Lax'
+# Session cookie config. In production the SPA (Vercel) and API (Cloud Run) are
+# on different sites, so the session cookie must be SameSite=None + Secure to be
+# sent cross-site. Locally (DEBUG) both are on localhost, so 'Lax' over HTTP works.
 SESSION_COOKIE_HTTPONLY = True
+if DEBUG:
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SAMESITE = 'Lax'
+    CSRF_COOKIE_SECURE = False
+else:
+    SESSION_COOKIE_SAMESITE = 'None'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SAMESITE = 'None'
+    CSRF_COOKIE_SECURE = True
+
+# Cloud Run terminates TLS at its proxy and forwards the original scheme in this
+# header; trust it so Django knows the request was HTTPS (needed for secure
+# cookies and correct redirects).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Trust the Vercel + Cloud Run origins for CSRF (Django 4+ requires scheme).
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get('CSRF_TRUSTED_ORIGINS', '').split(',')
+    if origin.strip()
+]
 
 # Google OAuth client ID (from Google Cloud Console). Loaded from .env or env.
 GOOGLE_OAUTH_CLIENT_ID = os.environ.get('GOOGLE_OAUTH_CLIENT_ID', '')

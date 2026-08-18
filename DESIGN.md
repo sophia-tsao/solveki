@@ -9,7 +9,7 @@ documents the API for manual QA.
 
 ```
 solveki/
-├── backend/          Django project — JSON API, problem generators, SQLite DB
+├── backend/          Django project — JSON API, problem generators, DB (SQLite dev / Postgres prod)
 │   ├── config/       project package (settings, urls, asgi/wsgi)
 │   └── myapp/        the single app (models, views, generators, tests, commands)
 ├── frontend/         React 19 SPA built with Vite (unit tests + Playwright e2e)
@@ -22,17 +22,21 @@ solveki/
 
 Plain Django with function-based views returning `JsonResponse` — no DRF.
 Dependencies (`backend/pyproject.toml`): `django==6.0.4`,
-`django-cors-headers`, `google-auth`, `mathgenerator==1.5.0`. Python ≥ 3.11,
-SQLite.
+`django-cors-headers`, `google-auth`, `mathgenerator==1.5.0`, plus deployment
+deps (`gunicorn`, `psycopg`, `dj-database-url`, `whitenoise`). Python ≥ 3.12.
+The database is SQLite in local development and Postgres in production (see
+[Deployment](#deployment)).
 
 ### Authentication
 
 Google ID tokens are verified server-side
 (`google.oauth2.id_token.verify_oauth2_token`) and mapped to a Django session
-login. CORS is configured for the Vite dev origin (`http://localhost:5173`)
-with `CORS_ALLOW_CREDENTIALS = True` so the SPA can send the session cookie
-cross-origin. `settings.py` uses a small dependency-free `_load_dotenv()` to
-read `backend/.env`.
+login. The SPA sends the session cookie cross-origin, so
+`CORS_ALLOW_CREDENTIALS = True`; the allowed origins and cookie flags are
+environment-driven — the Vite dev origin (`http://localhost:5173`) with `Lax`
+cookies locally, the Vercel origin with `SameSite=None; Secure` cookies in
+production (see [Deployment](#deployment)). `settings.py` uses a small
+dependency-free `_load_dotenv()` to read `backend/.env`.
 
 ### Data model (`backend/myapp/models.py`)
 
@@ -182,6 +186,154 @@ off) and resetting the shared test user's state on each call. The suite runs
 serially (one shared backend user → no DB isolation between tests) and has its
 own CI workflow (`.github/workflows/e2e-tests.yml`). See the README for how to
 run it.
+
+## Deployment
+
+The app runs entirely on free tiers, split across three services chosen so that
+nothing has to stay always-on:
+
+```
+   Browser
+      │
+      ▼
+┌──────────────┐   HTTPS + cookies    ┌──────────────────┐   TLS    ┌──────────────┐
+│  Frontend    │ ───────────────────► │  Backend         │ ───────► │  Database    │
+│  (Vercel)    │                      │  (Cloud Run)     │          │  (Neon PG)   │
+│  Vite SPA    │ ◄─────────────────── │  Django+Gunicorn │ ◄─────── │  Postgres    │
+└──────────────┘                      └──────────────────┘          └──────────────┘
+```
+
+- **Frontend → Vercel.** The Vite SPA builds to static assets (`npm run build`
+  → `dist/`), which Vercel serves from its CDN.
+- **Backend → Google Cloud Run.** Cloud Run runs a container that listens for
+  HTTP on `$PORT`; it scales to zero when idle (so an unused app costs nothing)
+  and its always-free quota does not expire. It was chosen over the two
+  serverless options that first come to mind: **Firebase** can't run a Django
+  WSGI app at all (its functions are Node/Flask-shaped and event-triggered), and
+  **AWS Lambda** can only via an adapter (Mangum) plus VPC networking and
+  native-dependency packaging. Cloud Run runs our existing Gunicorn/WSGI app
+  *unchanged* — the same `config.wsgi:application` a normal server would use — so
+  no serverless-specific code enters the project.
+- **Database → Neon Postgres.** Neon is managed, serverless Postgres on a
+  free-forever tier that also scales to zero, matching Cloud Run. It replaces the
+  dev SQLite file (see below for why SQLite can't follow us to production).
+
+### The environment-variable principle
+
+Every production behavior is gated behind an environment variable with a
+development-friendly fallback. **With no env vars set the app behaves exactly as
+it does on a developer's machine** (SQLite, `DEBUG` on, `Lax` cookies over
+HTTP); Cloud Run supplies the env vars that flip each setting into its production
+form. This keeps `python manage.py runserver` working with zero configuration
+while the same `settings.py` serves production.
+
+| Env var | Unset (local dev) | Set (Cloud Run) |
+| --- | --- | --- |
+| `SECRET_KEY` | insecure `django-insecure-…` fallback | strong per-deploy secret |
+| `DEBUG` | `True` | `0` (off) |
+| `ALLOWED_HOSTS` | `localhost,127.0.0.1` | the `*.run.app` host |
+| `DATABASE_URL` | local `db.sqlite3` | Neon Postgres URL |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | the Vercel origin |
+| `CSRF_TRUSTED_ORIGINS` | (empty) | the Vercel origin |
+| `GOOGLE_OAUTH_CLIENT_ID` | from `.env` | set directly |
+
+### `SECRET_KEY`
+
+`SECRET_KEY` is Django's cryptographic signing key. Django uses it to sign
+anything a user shouldn't be able to forge — session cookies, CSRF tokens,
+password-reset tokens, and other signed values. If the key leaks, an attacker
+can mint valid session cookies and impersonate any user, so it must be secret
+and unpredictable. The project ships a `django-insecure-…` placeholder (fine for
+local dev, and it's in git), but production reads a real key from the
+environment: `SECRET_KEY = os.environ.get('SECRET_KEY', <local fallback>)`. The
+deploy generates a fresh one with `python -c 'import secrets;
+print(secrets.token_urlsafe(50))'` and passes it as a Cloud Run env var, so the
+real key never lives in the repo.
+
+### Database: `dj-database-url` (SQLite stays the local default)
+
+SQLite is a single file on local disk. Cloud Run's filesystem is **ephemeral and
+per-instance** — wiped when an instance recycles, and not shared between the
+parallel instances Cloud Run spins up under load — so a `db.sqlite3` there would
+silently lose writes. Production therefore needs a networked database (Neon),
+which every instance connects to over TLS.
+
+Rather than branch on the environment by hand, the `DATABASES` setting delegates
+to `dj-database-url`:
+
+```python
+DATABASES = {
+    'default': dj_database_url.config(
+        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        conn_max_age=600,
+        ssl_require=os.environ.get('DATABASE_URL', '').startswith('postgres'),
+    )
+}
+```
+
+`dj_database_url.config()` reads the `DATABASE_URL` env var and parses that one
+connection string into the verbose dict Django expects (engine, name, host,
+user, …). The `default=` argument is used **only when `DATABASE_URL` is unset**,
+and it points at the local SQLite file — so a developer's `runserver` is
+unchanged, while Cloud Run's `DATABASE_URL` switches the app to Postgres with no
+code edit. `conn_max_age=600` keeps a connection alive up to ten minutes so
+requests reuse it instead of paying network-connection latency every time;
+`ssl_require` forces TLS, but only for Postgres (the local SQLite file has no
+network to encrypt).
+
+### Static files: WhiteNoise + `STATIC_ROOT`
+
+Django does not serve static files (the Django admin's CSS/JS, etc.) in
+production — in development `runserver` does it as a convenience, but the real
+WSGI app expects a separate web server or CDN in front. Cloud Run has no nginx,
+so the app serves its own static files via **WhiteNoise**:
+
+- `python manage.py collectstatic` copies every app's static files into one
+  directory, `STATIC_ROOT` (`backend/staticfiles/`). This runs at image-build
+  time in the Dockerfile, so the files are baked into the container.
+- `whitenoise.middleware.WhiteNoiseMiddleware` (placed immediately after
+  `SecurityMiddleware`) serves files from `STATIC_ROOT` on matching requests.
+- The `CompressedManifestStaticFilesStorage` backend gzip-compresses each file
+  and adds a content hash to its name (e.g. `admin.abc123.css`) so browsers can
+  cache aggressively yet still pick up changes.
+
+### CSRF and cross-site cookies
+
+In production the SPA (`*.vercel.app`) and the API (`*.run.app`) are on
+different sites, which changes how the session cookie and CSRF protection must
+be configured versus local dev (where both sit on `localhost`):
+
+- **Session cookie.** Locally it's `SameSite=Lax` over HTTP. In production it
+  must be `SameSite=None; Secure` — `None` so the browser sends it on cross-site
+  requests, `Secure` because browsers require that pairing (and only send it over
+  HTTPS). These flip on automatically when `DEBUG` is off.
+- **CORS.** `CORS_ALLOWED_ORIGINS` lists the Vercel origin and
+  `CORS_ALLOW_CREDENTIALS = True` lets the browser include the session cookie on
+  cross-origin calls — the counterpart to the frontend's `credentials: 'include'`
+  in `apiFetch` (`frontend/src/auth.js`).
+- **CSRF.** For state-changing requests Django checks the request's origin
+  against `CSRF_TRUSTED_ORIGINS`, so the Vercel URL must be listed there or those
+  requests are rejected.
+- **Proxy scheme.** Cloud Run terminates TLS at its proxy and forwards the
+  original scheme in `X-Forwarded-Proto`. `SECURE_PROXY_SSL_HEADER` tells Django
+  to trust that header so it knows the request was HTTPS — without it Django
+  thinks the request is plain HTTP and refuses to set `Secure` cookies.
+
+### Build and deploy mechanics
+
+- **Backend.** A `Dockerfile` (`python:3.13-slim` → `pip install .` →
+  `collectstatic` → `gunicorn --bind :$PORT config.wsgi:application`) defines the
+  image; `gcloud run deploy --source .` builds and deploys it. Production config
+  (secret, database URL, allowed hosts, origins) is passed as Cloud Run env vars.
+- **Database.** A Neon project provides the Postgres instance; use its **pooled**
+  connection string (host contains `-pooler`) for serverless compute. Migrations
+  are run once against Neon (`DATABASE_URL=… python manage.py migrate`).
+- **Frontend.** Vercel builds with root directory `frontend`, framework preset
+  Vite. `VITE_API_URL` (the Cloud Run URL) and `VITE_GOOGLE_CLIENT_ID` are set as
+  build-time env vars — Vite inlines `VITE_*` values at build time.
+- **Google OAuth.** The deployed Vercel (and Cloud Run) URLs must be added to the
+  OAuth client's *Authorized JavaScript origins* in the Google Cloud Console, or
+  Google sign-in is rejected.
 
 ## The math generator system
 

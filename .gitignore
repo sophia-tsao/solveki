@@ -11,6 +11,8 @@
 backend/db.sqlite3
 # Runtime server logs are regenerated on each run; don't track them.
 backend/*.log
+# collectstatic output; regenerated on deploy, don't track it.
+backend/staticfiles/
 
 # Frontend
 node_modules/

@@ -1,0 +1,16 @@
+# Keep the image small and avoid leaking local/dev files into the build.
+__pycache__/
+*.py[cod]
+*.log
+
+# Local secrets and dev database — config comes from Cloud Run env vars instead.
+.env
+*.env
+db.sqlite3
+
+# Collected static is regenerated in the image build.
+staticfiles/
+
+# VCS / tooling
+.git/
+.gitignore
