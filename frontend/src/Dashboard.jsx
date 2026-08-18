@@ -27,15 +27,6 @@ function intervalLevel(interval) {
   return 'mature';
 }
 
-// Ease is the SM-2 multiplier (floor 1.3, starts 2.5). Lower ease means the
-// topic keeps coming up hard, so its intervals grow slowly — worth flagging.
-function easeLevel(ease) {
-  if (ease < 1.6) return 'new';
-  if (ease < 2.2) return 'learning';
-  if (ease < 2.6) return 'young';
-  return 'mature';
-}
-
 // The four proficiency decks, in progression order. `level` keys the shared
 // status colors (see .dash-dot-* in the CSS); `label` is the user-facing name.
 const CATEGORIES = [
@@ -56,18 +47,6 @@ const LEVEL_COLOR = {
 
 const MAX_PREVIEW = 4;
 
-function Stat({ label, value, level }) {
-  return (
-    <div className="dash-stat">
-      <span className="dash-stat-label">{label}</span>
-      <span className="dash-stat-value">
-        <span className={`dash-dot dash-dot-${level}`} />
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function TopicCard({ topic }) {
   const level = intervalLevel(topic.interval);
   return (
@@ -77,25 +56,6 @@ function TopicCard({ topic }) {
         {topic.course_name && (
           <span className="dash-card-course">{topic.course_name}</span>
         )}
-      </div>
-      <div className="dash-card-stats-wrap">
-        <div className="dash-card-stats">
-          <Stat
-            label="Repetitions"
-            value={topic.repetitions}
-            level={intervalLevel(topic.interval)}
-          />
-          <Stat
-            label="Ease"
-            value={topic.ease.toFixed(2)}
-            level={easeLevel(topic.ease)}
-          />
-          <Stat
-            label="Interval"
-            value={topic.interval === 1 ? '1 day' : `${topic.interval} days`}
-            level={intervalLevel(topic.interval)}
-          />
-        </div>
       </div>
     </div>
   );
@@ -297,7 +257,6 @@ function Dashboard() {
           <h2 className="dash-section-title">Topics by proficiency</h2>
           <p className="dash-section-desc">
             Every topic you've selected, grouped by how well you've learned it.
-            Hover a card to see its review stats.
           </p>
         </div>
         <div className="dash-decks">
