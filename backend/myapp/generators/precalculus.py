@@ -800,21 +800,19 @@ def pc_rational_inequality():
     if relation in (">", ">="):
         inc_lo = relation == ">=" and lo == z
         inc_hi = relation == ">=" and hi == z
-        left = f"(-inf, {lo}" + ("]" if inc_lo else ")")
-        right = ("[" if inc_hi else "(") + f"{hi}, inf)"
-        solution = f"{left} U {right}"
+        left = f"x {'<=' if inc_lo else '<'} {lo}"
+        right = f"x {'>=' if inc_hi else '>'} {hi}"
+        solution = f"{left} or {right}"
     else:
         inc_lo = relation == "<=" and lo == z
         inc_hi = relation == "<=" and hi == z
-        left_br = "[" if inc_lo else "("
-        right_br = "]" if inc_hi else ")"
-        solution = f"{left_br}{lo}, {hi}{right_br}"
+        solution = f"{lo} {'<=' if inc_lo else '<'} x {'<=' if inc_hi else '<'} {hi}"
     rel_latex = {">": ">", ">=": r"\ge", "<": "<", "<=": r"\le"}[relation]
     problem = (
         f"Solve $\\frac{{{_linear_factor(z)}}}{{{_linear_factor(p)}}} "
-        f"{rel_latex} 0$. Express your solution in interval notation using "
-        f"'inf' and '-inf' for infinity, 'U' for union, ( ) for excluded and "
-        f"[ ] for included endpoints (e.g. (-inf, -2) U [1, inf))."
+        f"{rel_latex} 0$. Express your solution as an inequality in x using "
+        f"'<', '<=', '>', '>=' and 'or' for a union "
+        f"(e.g. 'x < -2 or x >= 1' or '-2 < x <= 1')."
     )
     return problem, solution
 

@@ -531,7 +531,7 @@ def arith_count_money_value():
 
     | Ex. Problem | Ex. Solution |
     | --- | --- |
-    | You have 2 quarters, 3 dimes, 1 nickel, and 4 pennies. What is the total value? Format your answer as a dollar amount like $X.XX. | $0.89 |
+    | You have 2 quarters, 3 dimes, 1 nickel, and 4 pennies. What is the total value? Give your answer in dollars and cents, for example 0.89. | $0.89 |
     """
     while True:
         q = random.randint(0, 4)
@@ -545,7 +545,7 @@ def arith_count_money_value():
     problem = (
         f"You have {q} quarters, {d} dimes, {n} nickels, and {p} pennies. "
         f"What is the total value? "
-        f"Format your answer as a dollar amount like $X.XX."
+        f"Give your answer in dollars and cents, for example 1.23."
     )
     solution = f"${dollars}.{rem:02d}"
     return problem, solution

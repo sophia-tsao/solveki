@@ -757,7 +757,7 @@ def pre_discount_tax_tip(min_price=10, max_price=200):
 
     | Ex. Problem | Ex. Solution |
     | --- | --- |
-    | A jacket costs $48$ dollars. It is discounted by $25\%$. Find the sale price. Format your answer as a dollar amount like $X.XX. | $36.00 |
+    | A jacket costs $48$ dollars. It is discounted by $25\%$. Find the sale price. Give your answer in dollars and cents, for example 36.00. | $36.00 |
     """
     price = random.randint(min_price, max_price)
     pct = random.choice([5, 10, 15, 20, 25, 30, 40, 50])
@@ -783,7 +783,7 @@ def pre_discount_tax_tip(min_price=10, max_price=200):
             f"A restaurant bill is ${price}$ dollars. A ${pct}\\%$ tip is added. "
             f"Find the total amount."
         )
-    problem += " Format your answer as a dollar amount like $X.XX."
+    problem += " Give your answer in dollars and cents, for example 12.34."
     return problem, _dollars(final_cents)
 
 

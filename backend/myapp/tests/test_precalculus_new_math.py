@@ -300,27 +300,32 @@ class RationalInequalityTests(TestCase):
         r"\\frac\{(?P<num>[^{}]+)\}\{(?P<den>[^{}]+)\} (?P<rel>>|<|\\ge|\\le) 0"
     )
 
-    @staticmethod
-    def _intervals(sol):
-        out = []
-        for piece in sol.split(" U "):
-            piece = piece.strip()
-            lb = piece[0] == "["
-            rb = piece[-1] == "]"
-            a, b = piece[1:-1].split(", ")
-            lo = float("-inf") if a == "-inf" else float(a)
-            hi = float("inf") if b == "inf" else float(b)
-            out.append((lo, lb, hi, rb))
-        return out
+    RAY = re.compile(r"x (?P<rel>>=|<=|>|<) (?P<val>-?\d+)")
+    BAND = re.compile(
+        r"(?P<lo>-?\d+) (?P<lrel><=|<) x (?P<hrel><=|<) (?P<hi>-?\d+)"
+    )
 
-    @staticmethod
-    def _member(intervals, x):
-        for lo, li, hi, ri in intervals:
-            if lo < x < hi:
+    @classmethod
+    def _member(cls, sol, x):
+        """True iff x is in the solution set described by the ASCII inequality."""
+        sol = sol.strip()
+        band = cls.BAND.match(sol)
+        if band:
+            lo, hi = int(band.group("lo")), int(band.group("hi"))
+            left = x >= lo if band.group("lrel") == "<=" else x > lo
+            right = x <= hi if band.group("hrel") == "<=" else x < hi
+            return left and right
+        # Otherwise a union of one-sided rays joined by " or ".
+        for piece in sol.split(" or "):
+            m = cls.RAY.match(piece.strip())
+            rel, val = m.group("rel"), int(m.group("val"))
+            if rel == ">" and x > val:
                 return True
-            if x == lo and li:
+            if rel == ">=" and x >= val:
                 return True
-            if x == hi and ri:
+            if rel == "<" and x < val:
+                return True
+            if rel == "<=" and x <= val:
                 return True
         return False
 
@@ -336,17 +341,16 @@ class RationalInequalityTests(TestCase):
             z = _parse_factored(m.group("num"))[1][0]
             p = _parse_factored(m.group("den"))[1][0]
             test = holds[m.group("rel")]
-            intervals = self._intervals(solution.strip())
             for t in range(-24, 25):
                 x = t / 2
                 if x == p:
                     self.assertFalse(
-                        self._member(intervals, x),
+                        self._member(solution, x),
                         f"asymptote included: {problem!r} -> {solution!r}")
                     continue
                 g = (x - z) / (x - p)
                 self.assertEqual(
-                    self._member(intervals, x), test(g),
+                    self._member(solution, x), test(g),
                     f"x={x}: {problem!r} -> {solution!r}")
 
 
