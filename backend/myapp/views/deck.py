@@ -7,7 +7,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
-from ..models import Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade
+from ..models import Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade, DailyPractice
 from .common import _require_auth
 from .problems import _make_problem_for_topic
 from .. import srs
@@ -253,6 +253,23 @@ def _generate_problems(user, count, today, existing=()):
             break  # every topic's generator is broken; return what we have
         problems.append(problem)
     return problems
+
+
+def _record_practice(user, deck, today):
+    """Update the durable per-day practice record after a deck advance.
+
+    Stores how many problems the student has stepped past today (`answered`) and
+    the deck's current display size (`total`, matching `_deck_payload`), so the
+    dashboard calendar can later report completed / partial for the day even
+    after the `DailyDeck` itself is pruned. A row is created on the first advance
+    of the day, so a day with no row means the student never practiced.
+    """
+    total = min(len(deck.problems), Settings.load(user).questions_per_day)
+    answered = min(deck.current_index, total)
+    DailyPractice.objects.update_or_create(
+        user=user, date=today,
+        defaults={"answered": answered, "total": total},
+    )
 
 
 def _grade_topic(user, topic_id, outcome, today):
@@ -531,6 +548,7 @@ def advance_deck(request):
             _grade_topic(request.user, topic_id, outcome, today)
         deck.current_index += 1
         deck.save(update_fields=["current_index"])
+        _record_practice(request.user, deck, today)
         logger.debug(
             "User %s advanced deck to %d/%d",
             request.user.id, deck.current_index, len(deck.problems),
