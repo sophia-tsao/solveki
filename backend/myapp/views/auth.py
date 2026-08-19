@@ -7,6 +7,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings as django_settings
 from django.contrib.auth import login, logout, get_user_model
 
+import cachecontrol
+import requests as requests_lib
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from google.auth.exceptions import GoogleAuthError
@@ -20,6 +22,16 @@ logger = logging.getLogger(__name__)
 # early/late". Allow a modest tolerance so ordinary clock skew doesn't lock all
 # users out.
 GOOGLE_CLOCK_SKEW_SECONDS = 10
+
+# verify_oauth2_token fetches Google's signing certs over HTTPS on every call.
+# A fresh Request() per login pays that round trip each time (~1.5s), even
+# though Google serves the certs with a multi-hour Cache-Control max-age.
+# Reuse one cachecontrol-wrapped session process-wide so repeated logins hit
+# the cached certs (and the pooled TLS connection) instead of the network.
+# This is the caching transport pattern documented by google-auth.
+_google_request = google_requests.Request(
+    session=cachecontrol.CacheControl(requests_lib.session())
+)
 
 
 def _serialize_user(user):
@@ -59,7 +71,7 @@ def google_login(request):
     try:
         idinfo = google_id_token.verify_oauth2_token(
             token,
-            google_requests.Request(),
+            _google_request,
             client_id,
             clock_skew_in_seconds=GOOGLE_CLOCK_SKEW_SECONDS,
         )

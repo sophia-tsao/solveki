@@ -7,6 +7,7 @@ dependencies = [
     "django==6.0.4",
     "django-cors-headers",
     "google-auth[requests]",
+    "cachecontrol",             # cache Google's OAuth signing certs across logins
     "mathgenerator==1.5.0",
     # Verify TLS against the OS trust store so HTTPS-intercepting antivirus /
     # proxies (whose re-signing root is trusted by the OS but not by certifi)
