@@ -100,12 +100,12 @@ describe('LoginPage', () => {
     ).toBeGreaterThan(0);
   });
 
-  it('navigates to the How it works and FAQ pages from the header', async () => {
+  it('navigates to the Why Solveki and FAQ pages from the header', async () => {
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
 
-    await user.click(screen.getByRole('button', { name: 'How it works' }));
-    expect(screen.getByText('How Solveki works')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Why Solveki' }));
+    expect(screen.getByText('Why Solveki?')).toBeInTheDocument();
     expect(screen.getByText(/324 topics/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'FAQ' }));

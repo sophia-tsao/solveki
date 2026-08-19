@@ -9,7 +9,7 @@
     box-sizing: border-box;
 }
 
-/* Public marketing pages shown before login (landing / how it works / FAQ). */
+/* Public marketing pages shown before login (landing / why Solveki / FAQ). */
 .landing {
     min-height: 100vh;
     display: flex;
@@ -93,6 +93,92 @@
 .landing-feature p {
     margin: 0;
     font-size: 15px;
+}
+
+/* Spaced-repetition explanatory chart on the "Why Solveki" page. */
+.sr-chart {
+    margin: 0 0 36px;
+}
+
+.sr-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 8px;
+    box-sizing: border-box;
+}
+
+.sr-grid {
+    stroke: #e5e7eb;
+    stroke-width: 1;
+}
+
+.sr-axis-label {
+    fill: #6b7280;
+    font-size: 12px;
+}
+
+.sr-axis-label-y {
+    text-anchor: end;
+}
+
+.sr-axis-title {
+    fill: #6b7280;
+    font-size: 12px;
+    text-anchor: start;
+}
+
+.sr-line {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+}
+
+.sr-line-with {
+    stroke: #2563eb;
+}
+
+.sr-line-without {
+    stroke: #d97706;
+    stroke-dasharray: 6 5;
+}
+
+.sr-review-dot {
+    fill: #2563eb;
+    stroke: #ffffff;
+    stroke-width: 2;
+}
+
+.sr-review-label {
+    fill: #2563eb;
+    font-size: 12px;
+    font-weight: 600;
+    text-anchor: middle;
+}
+
+.sr-curve-label {
+    font-size: 13px;
+    font-weight: 600;
+    text-anchor: end;
+}
+
+.sr-curve-label-with {
+    fill: #2563eb;
+}
+
+.sr-curve-label-without {
+    fill: #b45309;
+}
+
+.sr-chart-caption {
+    margin: 12px 0 0;
+    font-size: 14px;
+    color: #6b7280;
+    line-height: 1.5;
 }
 
 .landing-faq {

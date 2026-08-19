@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { loginWithGoogle } from './auth.js';
 import { createLogger } from './logger.js';
+import SpacedRepetitionChart from './SpacedRepetitionChart.jsx';
 import './Header.css';
 import './LoginPage.css';
 
@@ -30,7 +31,7 @@ function loadGsi() {
 }
 
 // Public marketing header, formatted like the in-app Header the user sees
-// after logging in. Lets visitors move between the landing, "How it works",
+// after logging in. Lets visitors move between the landing, "Why Solveki",
 // and FAQ pages before authenticating.
 function LandingHeader({ view, onNavigate }) {
   return (
@@ -43,10 +44,10 @@ function LandingHeader({ view, onNavigate }) {
       </button>
       <nav className="header-nav">
         <button
-          className={view === 'how' ? 'active' : ''}
-          onClick={() => onNavigate('how')}
+          className={view === 'why' ? 'active' : ''}
+          onClick={() => onNavigate('why')}
         >
-          How it works
+          Why Solveki
         </button>
         <button
           className={view === 'faq' ? 'active' : ''}
@@ -65,40 +66,60 @@ function LandingHeader({ view, onNavigate }) {
   );
 }
 
-function HowItWorks() {
+function WhySolveki() {
   return (
     <section className="landing-content">
-      <h1>How Solveki works</h1>
+      <h1>Why Solveki?</h1>
       <p>
-        Solveki helps you commit math skills to long-term memory using{' '}
-        <strong>spaced repetition</strong>. Instead of cramming, you review each
-        topic at the moment you're most likely to forget it.
+        Most math practice is forgotten within days. Solveki is built around{' '}
+        <strong>spaced repetition</strong> so the work you put in actually
+        sticks &mdash; you review each topic at the moment you're about to
+        forget it, and never a moment sooner.
       </p>
+
+      <SpacedRepetitionChart />
+
       <div className="landing-features">
         <div className="landing-feature">
-          <h2>The SM-2 algorithm</h2>
+          <h2>Remember it for good</h2>
           <p>
-            Every review is scheduled by the proven SM-2 spaced-repetition
-            algorithm. Topics you find easy come back after longer and longer
-            gaps, while the ones you struggle with return sooner &mdash; so you
-            spend your time exactly where it counts.
+            Cramming fades fast. By timing each review to just before you'd
+            forget, Solveki turns short-term effort into durable, long-term
+            memory &mdash; with far less total study time.
           </p>
         </div>
         <div className="landing-feature">
-          <h2>Randomly generated problems</h2>
+          <h2>Spend time only where it counts</h2>
           <p>
-            Each topic generates a fresh problem every time, with new numbers
-            and setups. You practice the concept and the skill itself, never a
-            memorized answer to a single question.
+            The proven SM-2 algorithm schedules every review for you. Topics you
+            find easy come back after longer and longer gaps, while the ones you
+            struggle with return sooner &mdash; so no minute is wasted on what
+            you already know.
           </p>
         </div>
         <div className="landing-feature">
-          <h2>Grades 1&ndash;12, and beyond</h2>
+          <h2>Real skill, not memorized answers</h2>
+          <p>
+            Every problem is randomly generated with fresh numbers and setups.
+            You build genuine problem-solving ability instead of memorizing the
+            answer to one specific question.
+          </p>
+        </div>
+        <div className="landing-feature">
+          <h2>From counting to calculus</h2>
           <p>
             Choose from <strong>324 topics</strong> spanning grades 1 through
             12, including AP courses &mdash; from early arithmetic and fractions
             all the way through algebra, geometry, statistics, precalculus, and
             AP Calculus.
+          </p>
+        </div>
+        <div className="landing-feature">
+          <h2>Free, and always saved</h2>
+          <p>
+            Sign in with your Google account to get started. Your progress and
+            review schedule are saved automatically, so you can pick up right
+            where you left off.
           </p>
         </div>
       </div>
@@ -145,7 +166,7 @@ function Faq() {
 }
 
 function LoginPage({ onLoggedIn }) {
-  const [view, setView] = useState('landing'); // landing | login | how | faq
+  const [view, setView] = useState('landing'); // landing | login | why | faq
   const [error, setError] = useState(null);
   const buttonRef = useRef(null);
 
@@ -203,7 +224,7 @@ function LoginPage({ onLoggedIn }) {
               </button>
             </div>
           )}
-          {view === 'how' && <HowItWorks />}
+          {view === 'why' && <WhySolveki />}
           {view === 'faq' && <Faq />}
         </main>
       </div>
