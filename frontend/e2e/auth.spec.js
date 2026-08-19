@@ -18,7 +18,11 @@ test.describe('authentication gate', () => {
     await page.goto('/#/settings');
     await page.getByRole('button', { name: 'Log out' }).click();
     // Landing page: brand + the login CTA, and no header nav.
-    await expect(page.getByRole('button', { name: 'Log in / Register' })).toBeVisible();
+    // The landing page has two "Log in / Register" buttons (header + hero CTA);
+    // scope to the hero CTA in <main>.
+    await expect(
+      page.getByRole('main').getByRole('button', { name: 'Log in / Register' })
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Practice' })).toHaveCount(0);
   });
 });
@@ -30,14 +34,19 @@ test.describe('unauthenticated visitor', () => {
   test('sees the landing page, not the app', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('heading', { name: 'Solveki' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Log in / Register' })).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('button', { name: 'Log in / Register' })
+    ).toBeVisible();
     // No app nav for anonymous users.
     await expect(page.getByRole('button', { name: 'Practice' })).toHaveCount(0);
   });
 
   test('the login CTA reveals the Google sign-in view', async ({ page }) => {
     await page.goto('/');
-    await page.getByRole('button', { name: 'Log in / Register' }).click();
+    await page
+      .getByRole('main')
+      .getByRole('button', { name: 'Log in / Register' })
+      .click();
     await expect(page.getByText('Log in or register to continue')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Back' })).toBeVisible();
   });

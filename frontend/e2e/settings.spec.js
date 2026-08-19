@@ -41,7 +41,10 @@ test.describe('settings page', () => {
   test('deleting the account returns to the login screen', async ({ page }) => {
     await page.getByRole('button', { name: 'Delete account' }).click();
     await page.getByRole('button', { name: 'Delete permanently' }).click();
-    await expect(page.getByRole('button', { name: 'Log in / Register' })).toBeVisible();
+    // Landing page has two "Log in / Register" buttons; scope to the hero CTA.
+    await expect(
+      page.getByRole('main').getByRole('button', { name: 'Log in / Register' })
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: 'Practice' })).toHaveCount(0);
   });
 });
