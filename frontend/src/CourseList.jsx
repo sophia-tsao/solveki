@@ -15,9 +15,10 @@ async function fetchCourses() {
   return result.courses;
 }
 
-// Every topic across every course. Fetched only once the user starts searching
-// (see the `enabled` flag below), since search must match topic names even for
-// courses the user hasn't expanded — and so hasn't lazily loaded topics for.
+// Every topic across every course. Prefetched on mount so the first search is
+// instant — search must match topic names even for courses the user hasn't
+// expanded (and so hasn't lazily loaded topics for), and waiting until the first
+// keystroke to fetch would stall that first search on a full network round-trip.
 async function fetchAllTopics() {
   const response = await apiFetch(`/topics/`);
   if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
@@ -43,7 +44,7 @@ function CourseList() {
   const { data: allTopics, isLoading: topicsLoading } = useQuery({
     queryKey: ['all-topics'],
     queryFn: fetchAllTopics,
-    enabled: searching,
+    staleTime: 5 * 60 * 1000,
   });
 
   // Once the full topic list arrives, seed topicsMap for any course we haven't

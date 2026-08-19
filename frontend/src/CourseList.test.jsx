@@ -32,22 +32,31 @@ beforeEach(() => apiFetch.mockReset());
 
 describe('CourseList', () => {
   it('renders courses from the initial fetch', async () => {
-    apiFetch.mockResolvedValueOnce(jsonResponse({ courses: COURSES }));
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/topics/') return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+      return Promise.resolve(jsonResponse({}));
+    });
     renderWithClient(<CourseList />);
     await screen.findByText('Algebra');
     expect(screen.getByText('Geometry')).toBeInTheDocument();
   });
 
   it('shows an error when the courses fetch fails', async () => {
-    apiFetch.mockResolvedValueOnce(jsonResponse({}, { ok: false, status: 500 }));
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({}, { ok: false, status: 500 }));
+      return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+    });
     renderWithClient(<CourseList />);
     await screen.findByText(/Error: HTTP error! Status: 500/);
   });
 
   it('lazily loads topics the first time a course is expanded', async () => {
-    apiFetch
-      .mockResolvedValueOnce(jsonResponse({ courses: COURSES }))
-      .mockResolvedValueOnce(jsonResponse({ topics: ALGEBRA_TOPICS }));
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/courses/1/topics') return Promise.resolve(jsonResponse({ topics: ALGEBRA_TOPICS }));
+      return Promise.resolve(jsonResponse({}));
+    });
     const user = userEvent.setup();
     renderWithClient(<CourseList />);
     await screen.findByText('Algebra');
@@ -133,14 +142,14 @@ describe('CourseList', () => {
   });
 
   it('marks a course selected once all its topics are selected', async () => {
-    apiFetch
-      .mockResolvedValueOnce(jsonResponse({ courses: COURSES }))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          topics: [{ id: 10, topic_name: 'Linear equations', is_selected: true }],
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ ok: true })); // topic select PATCH
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/courses/1/topics')
+        return Promise.resolve(
+          jsonResponse({ topics: [{ id: 10, topic_name: 'Linear equations', is_selected: true }] }),
+        );
+      return Promise.resolve(jsonResponse({ ok: true })); // /topics/ prefetch + topic select PATCH
+    });
     const user = userEvent.setup();
     renderWithClient(<CourseList />);
     await screen.findByText('Algebra');
