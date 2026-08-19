@@ -34,14 +34,17 @@ describe('LoginPage', () => {
   it('shows the landing view first', () => {
     render(<LoginPage onLoggedIn={() => {}} />);
     expect(
-      screen.getByRole('button', { name: 'Log in / Register' }),
+      screen.getByText('Master math for grades 1–12 and AP with spaced repetition.'),
     ).toBeInTheDocument();
+    expect(
+      screen.getAllByRole('button', { name: 'Log in / Register' }).length,
+    ).toBeGreaterThan(0);
   });
 
   it('renders the Google button after entering the login view', async () => {
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
-    await user.click(screen.getByRole('button', { name: 'Log in / Register' }));
+    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
 
     await waitFor(() =>
       expect(window.google.accounts.id.renderButton).toHaveBeenCalled(),
@@ -54,7 +57,7 @@ describe('LoginPage', () => {
     loginWithGoogle.mockResolvedValueOnce({ user: { name: 'Ada' } });
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={onLoggedIn} />);
-    await user.click(screen.getByRole('button', { name: 'Log in / Register' }));
+    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
     await waitFor(() => expect(capturedCallback).toBeInstanceOf(Function));
 
     await capturedCallback({ credential: 'google-jwt' });
@@ -69,7 +72,7 @@ describe('LoginPage', () => {
     loginWithGoogle.mockRejectedValueOnce(new Error('bad token'));
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
-    await user.click(screen.getByRole('button', { name: 'Log in / Register' }));
+    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
     await waitFor(() => expect(capturedCallback).toBeInstanceOf(Function));
 
     await capturedCallback({ credential: 'x' });
@@ -80,12 +83,31 @@ describe('LoginPage', () => {
   it('returns to the landing view via Back', async () => {
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
-    await user.click(screen.getByRole('button', { name: 'Log in / Register' }));
+    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
     await screen.findByText('Log in or register to continue');
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(
-      screen.getByRole('button', { name: 'Log in / Register' }),
+      screen.getAllByRole('button', { name: 'Log in / Register' }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('navigates to the How it works and FAQ pages from the header', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage onLoggedIn={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: 'How it works' }));
+    expect(screen.getByText('How Solveki works')).toBeInTheDocument();
+    expect(screen.getByText(/324 topics/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'FAQ' }));
+    expect(
+      screen.getByText('Frequently asked questions'),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Solveki' }));
+    expect(
+      screen.getByText('Master math for grades 1–12 and AP with spaced repetition.'),
     ).toBeInTheDocument();
   });
 });

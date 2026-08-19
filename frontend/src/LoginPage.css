@@ -9,6 +9,110 @@
     box-sizing: border-box;
 }
 
+/* Public marketing pages shown before login (landing / how it works / FAQ). */
+.landing {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.landing-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Clickable brand in the public header. */
+.header-logo-button {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+/* Prominent login action in the public header. */
+.header-login {
+    background: #2563eb !important;
+    color: #ffffff !important;
+}
+
+.header-login:hover {
+    background: #1d4ed8 !important;
+}
+
+.landing-hero {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    padding: 24px;
+    box-sizing: border-box;
+    text-align: center;
+}
+
+.landing-content {
+    max-width: 760px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 48px 24px;
+    box-sizing: border-box;
+    color: #374151;
+    line-height: 1.6;
+}
+
+.landing-content h1 {
+    margin: 0 0 20px;
+    font-size: 34px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.02em;
+}
+
+.landing-content > p {
+    font-size: 17px;
+    margin: 0 0 32px;
+}
+
+.landing-features {
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+}
+
+.landing-feature h2 {
+    margin: 0 0 6px;
+    font-size: 19px;
+    font-weight: 600;
+    color: #2563eb;
+}
+
+.landing-feature p {
+    margin: 0;
+    font-size: 15px;
+}
+
+.landing-faq {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.landing-faq-item dt {
+    font-size: 17px;
+    font-weight: 600;
+    color: #111827;
+    margin-bottom: 6px;
+}
+
+.landing-faq-item dd {
+    margin: 0;
+    font-size: 15px;
+}
+
 .login-brand {
     margin: 0;
     font-size: 56px;
