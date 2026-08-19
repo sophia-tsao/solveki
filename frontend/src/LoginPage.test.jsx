@@ -30,6 +30,14 @@ afterEach(() => {
   delete window.google;
 });
 
+// The landing page has two "Log in / Register" buttons: the header one returns
+// to the landing hero, while the hero CTA (.login-cta) enters the login flow.
+function clickableLoginCta() {
+  return screen
+    .getAllByRole('button', { name: 'Log in / Register' })
+    .find((btn) => btn.classList.contains('login-cta'));
+}
+
 describe('LoginPage', () => {
   it('shows the landing view first', () => {
     render(<LoginPage onLoggedIn={() => {}} />);
@@ -44,7 +52,7 @@ describe('LoginPage', () => {
   it('renders the Google button after entering the login view', async () => {
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
-    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
+    await user.click(clickableLoginCta());
 
     await waitFor(() =>
       expect(window.google.accounts.id.renderButton).toHaveBeenCalled(),
@@ -57,7 +65,7 @@ describe('LoginPage', () => {
     loginWithGoogle.mockResolvedValueOnce({ user: { name: 'Ada' } });
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={onLoggedIn} />);
-    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
+    await user.click(clickableLoginCta());
     await waitFor(() => expect(capturedCallback).toBeInstanceOf(Function));
 
     await capturedCallback({ credential: 'google-jwt' });
@@ -72,7 +80,7 @@ describe('LoginPage', () => {
     loginWithGoogle.mockRejectedValueOnce(new Error('bad token'));
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
-    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
+    await user.click(clickableLoginCta());
     await waitFor(() => expect(capturedCallback).toBeInstanceOf(Function));
 
     await capturedCallback({ credential: 'x' });
@@ -83,7 +91,7 @@ describe('LoginPage', () => {
   it('returns to the landing view via Back', async () => {
     const user = userEvent.setup();
     render(<LoginPage onLoggedIn={() => {}} />);
-    await user.click(screen.getAllByRole('button', { name: 'Log in / Register' })[0]);
+    await user.click(clickableLoginCta());
     await screen.findByText('Log in or register to continue');
 
     await user.click(screen.getByRole('button', { name: 'Back' }));
@@ -106,6 +114,23 @@ describe('LoginPage', () => {
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Solveki' }));
+    expect(
+      screen.getByText('Master math for grades 1–12 and AP with spaced repetition.'),
+    ).toBeInTheDocument();
+  });
+
+  it('returns to the landing page from the header Log in / Register button', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage onLoggedIn={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: 'FAQ' }));
+    expect(screen.getByText('Frequently asked questions')).toBeInTheDocument();
+
+    const headerLogin = screen
+      .getAllByRole('button', { name: 'Log in / Register' })
+      .find((btn) => btn.classList.contains('header-login'));
+    await user.click(headerLogin);
+
     expect(
       screen.getByText('Master math for grades 1–12 and AP with spaced repetition.'),
     ).toBeInTheDocument();
