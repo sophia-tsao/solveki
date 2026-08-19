@@ -40,7 +40,7 @@ function CourseList() {
     queryFn: fetchCourses,
   });
 
-  const { data: allTopics } = useQuery({
+  const { data: allTopics, isLoading: topicsLoading } = useQuery({
     queryKey: ['all-topics'],
     queryFn: fetchAllTopics,
     enabled: searching,
@@ -142,11 +142,13 @@ function CourseList() {
     }
   };
 
-  // Build the list to render. When searching, keep only courses that match by
-  // name (show all their topics) or that contain a matching topic (show just
-  // those), and force them open so the matches are visible. topicsMap still
-  // holds each course's full topic list — we filter only what's displayed, so
-  // the selection handlers keep computing course state over every topic.
+  // Build the list to render. When searching, keep only courses that have at
+  // least one topic to show: a name match surfaces all the course's topics, a
+  // topic match surfaces just the matching ones. Requiring a visible topic
+  // means we never force open an empty course box — including while the full
+  // topic list is still loading (topicsMap not yet seeded). topicsMap still
+  // holds each course's full topic list, so the selection handlers keep
+  // computing course state over every topic, not just the visible subset.
   const rows = searching
     ? courses
         .map((course) => {
@@ -155,13 +157,12 @@ function CourseList() {
           const visibleTopics = nameMatch
             ? topics
             : topics.filter((t) => t.topic_name.toLowerCase().includes(query));
-          return { course, visibleTopics, matched: nameMatch || visibleTopics.length > 0 };
+          return { course, visibleTopics };
         })
-        .filter((r) => r.matched)
+        .filter((r) => r.visibleTopics.length > 0)
     : courses.map((course) => ({
         course,
         visibleTopics: topicsMap[course.id] ?? [],
-        matched: true,
       }));
 
   return (
@@ -186,7 +187,10 @@ function CourseList() {
       {(error || coursesError) && (
         <p className="course-list-error">Error: {error || coursesError.message}</p>
       )}
-      {searching && rows.length === 0 && (
+      {searching && topicsLoading && rows.length === 0 && (
+        <p className="course-list-empty">Searching…</p>
+      )}
+      {searching && !topicsLoading && rows.length === 0 && (
         <p className="course-list-empty">No courses or topics match “{search.trim()}”.</p>
       )}
       {rows.map(({ course, visibleTopics }) => (

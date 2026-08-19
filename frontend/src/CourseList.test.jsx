@@ -96,6 +96,26 @@ describe('CourseList', () => {
     expect(screen.queryByText('Geometry')).not.toBeInTheDocument();
   });
 
+  it('does not render a course as an open empty box when it has no matching topics', async () => {
+    // Geometry's name doesn't match "quad" and its only topic doesn't either,
+    // so it must be filtered out entirely — not shown expanded-but-empty.
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/topics/') return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+      return Promise.resolve(jsonResponse({}));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CourseList />);
+    await screen.findByText('Algebra');
+
+    await user.type(screen.getByRole('searchbox'), 'quad');
+
+    await screen.findByText('Quadratics');
+    // Geometry has no matching topic, so its bar shouldn't be on the page at all.
+    expect(screen.queryByText('Geometry')).not.toBeInTheDocument();
+    expect(screen.queryByText('Triangles')).not.toBeInTheDocument();
+  });
+
   it('shows an empty-state message when nothing matches', async () => {
     apiFetch.mockImplementation((url) => {
       if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
