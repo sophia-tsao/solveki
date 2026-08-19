@@ -31,13 +31,14 @@
     font: inherit;
 }
 
-/* Prominent login action in the public header. */
-.header-login {
+/* Login action in the public header. It only reads as "active" (blue) while
+   the landing page is showing, so it doesn't look selected on other pages. */
+.header-login.active {
     background: #2563eb !important;
     color: #ffffff !important;
 }
 
-.header-login:hover {
+.header-login.active:hover {
     background: #1d4ed8 !important;
 }
 

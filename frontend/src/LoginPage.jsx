@@ -54,7 +54,10 @@ function LandingHeader({ view, onNavigate }) {
         >
           FAQ
         </button>
-        <button className="header-login" onClick={() => onNavigate('landing')}>
+        <button
+          className={view === 'landing' ? 'header-login active' : 'header-login'}
+          onClick={() => onNavigate('landing')}
+        >
           Log in / Register
         </button>
       </nav>
