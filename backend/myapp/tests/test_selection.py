@@ -78,6 +78,36 @@ class ViewCourseTopicsTests(TestCase):
         self.assertFalse(data["topics"][0]["is_selected"])
 
 
+class ViewTopicsTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = make_user()
+        self.client.force_login(self.user)
+        self.algebra = make_course(course_name="Algebra", grade_level=8)
+        self.geometry = make_course(course_name="Geometry", grade_level=9)
+        self.linear = make_topic(self.algebra, topic_name="Linear")
+        self.triangles = make_topic(self.geometry, topic_name="Triangles")
+
+    def test_returns_every_topic_with_course_id(self):
+        topics = self.client.get("/topics/").json()["topics"]
+        self.assertEqual(len(topics), 2)
+        by_id = {t["id"]: t for t in topics}
+        self.assertEqual(by_id[self.linear.id]["course_id"], self.algebra.id)
+        self.assertEqual(by_id[self.triangles.id]["course_id"], self.geometry.id)
+
+    def test_includes_per_user_selection_state(self):
+        select(self.user, self.linear)
+        by_id = {t["id"]: t for t in self.client.get("/topics/").json()["topics"]}
+        self.assertTrue(by_id[self.linear.id]["is_selected"])
+        self.assertFalse(by_id[self.triangles.id]["is_selected"])
+
+    def test_selection_is_per_user(self):
+        other = make_user()
+        select(other, self.linear)
+        by_id = {t["id"]: t for t in self.client.get("/topics/").json()["topics"]}
+        self.assertFalse(by_id[self.linear.id]["is_selected"])
+
+
 class ToggleTopicTests(TestCase):
     def setUp(self):
         self.client = Client()

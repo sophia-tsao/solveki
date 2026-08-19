@@ -13,6 +13,7 @@ urlpatterns = [
     path('practice-calendar/', views.view_practice_calendar, name="view_practice_calendar"),
     path('settings/', views.settings_view, name="settings_view"),
     path('courses/', views.view_courses, name="view_courses"),
+    path('topics/', views.view_topics, name="view_topics"),
     path('courses/<int:courseID>/topics', views.view_course_topics, name="view_course_topics"),
     path('courses/<int:courseID>/select', views.set_course_topics_selected, name="set_course_topics_selected"),
     path('topics/<int:topicID>/select', views.toggle_topic, name="toggle_topic"),

@@ -29,3 +29,38 @@
     font-size: 14px;
     text-align: center;
 }
+
+.course-search {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.course-search-input {
+    width: 420px;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #111827;
+    background: #ffffff;
+    border: 1px solid #dde3ed;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.course-search-input::placeholder {
+    color: #9ca3af;
+}
+
+.course-search-input:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.course-list-empty {
+    text-align: center;
+    color: #6b7280;
+    font-size: 14px;
+}

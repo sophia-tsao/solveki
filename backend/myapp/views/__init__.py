@@ -22,6 +22,7 @@ from .auth import (
 )
 from .courses import (
     view_courses,
+    view_topics,
     view_course_topics,
     toggle_topic,
     set_course_topics_selected,
@@ -38,6 +39,7 @@ __all__ = [
     "logout_view",
     "delete_account",
     "view_courses",
+    "view_topics",
     "view_course_topics",
     "toggle_topic",
     "set_course_topics_selected",

@@ -46,6 +46,28 @@ def view_courses(request):
     return JsonResponse({"courses": courses})
 
 
+def view_topics(request):
+    auth = _require_auth(request)
+    if auth:
+        return auth
+    # Every topic across every course, with this user's selection state. Backs
+    # the course-search box, which matches on topic names for courses the user
+    # hasn't expanded (and so hasn't lazily loaded topics for) yet.
+    selected_ids = set(
+        UserTopicSelection.objects.filter(user=request.user).values_list("topic_id", flat=True)
+    )
+    topics = [
+        {
+            "id": topic.id,
+            "topic_name": topic.topic_name,
+            "course_id": topic.course_id,
+            "is_selected": topic.id in selected_ids,
+        }
+        for topic in Topic.objects.order_by("course_id", "id")
+    ]
+    return JsonResponse({"topics": topics})
+
+
 def view_course_topics(request, courseID):
     auth = _require_auth(request)
     if auth:

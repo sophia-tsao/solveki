@@ -22,6 +22,12 @@ const ALGEBRA_TOPICS = [
   { id: 11, topic_name: 'Quadratics', is_selected: false },
 ];
 
+const ALL_TOPICS = [
+  { id: 10, topic_name: 'Linear equations', course_id: 1, is_selected: false },
+  { id: 11, topic_name: 'Quadratics', course_id: 1, is_selected: false },
+  { id: 20, topic_name: 'Triangles', course_id: 2, is_selected: false },
+];
+
 beforeEach(() => apiFetch.mockReset());
 
 describe('CourseList', () => {
@@ -50,6 +56,60 @@ describe('CourseList', () => {
 
     await screen.findByText('Linear equations');
     expect(apiFetch).toHaveBeenCalledWith('/courses/1/topics');
+  });
+
+  it('filters to courses containing a matching topic when searching', async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/topics/') return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+      return Promise.resolve(jsonResponse({}));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CourseList />);
+    await screen.findByText('Algebra');
+
+    await user.type(screen.getByRole('searchbox'), 'quad');
+
+    // Algebra stays (it owns "Quadratics"); Geometry is filtered out.
+    await screen.findByText('Quadratics');
+    expect(screen.getByText('Algebra')).toBeInTheDocument();
+    expect(screen.queryByText('Geometry')).not.toBeInTheDocument();
+    // Non-matching topics within a matched course are hidden.
+    expect(screen.queryByText('Linear equations')).not.toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith('/topics/');
+  });
+
+  it('matches on course name and shows all that course\'s topics', async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/topics/') return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+      return Promise.resolve(jsonResponse({}));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CourseList />);
+    await screen.findByText('Algebra');
+
+    await user.type(screen.getByRole('searchbox'), 'algeb');
+
+    await screen.findByText('Linear equations');
+    expect(screen.getByText('Quadratics')).toBeInTheDocument();
+    expect(screen.queryByText('Geometry')).not.toBeInTheDocument();
+  });
+
+  it('shows an empty-state message when nothing matches', async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+      if (url === '/topics/') return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+      return Promise.resolve(jsonResponse({}));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CourseList />);
+    await screen.findByText('Algebra');
+
+    await user.type(screen.getByRole('searchbox'), 'zzz');
+
+    await screen.findByText(/No courses or topics match/);
+    expect(screen.queryByText('Algebra')).not.toBeInTheDocument();
   });
 
   it('marks a course selected once all its topics are selected', async () => {

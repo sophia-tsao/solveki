@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import CourseBar from './CourseBar.jsx';
 import { apiFetch, localDay } from './auth.js';
@@ -15,16 +15,54 @@ async function fetchCourses() {
   return result.courses;
 }
 
+// Every topic across every course. Fetched only once the user starts searching
+// (see the `enabled` flag below), since search must match topic names even for
+// courses the user hasn't expanded — and so hasn't lazily loaded topics for.
+async function fetchAllTopics() {
+  const response = await apiFetch(`/topics/`);
+  if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+  const result = await response.json();
+  return result.topics;
+}
+
 function CourseList() {
   const queryClient = useQueryClient();
   const [expandedCourses, setExpandedCourses] = useState(new Set());
   const [topicsMap, setTopicsMap] = useState({});
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+
+  const query = search.trim().toLowerCase();
+  const searching = query.length > 0;
 
   const { data: courses = [], error: coursesError } = useQuery({
     queryKey: ['courses'],
     queryFn: fetchCourses,
   });
+
+  const { data: allTopics } = useQuery({
+    queryKey: ['all-topics'],
+    queryFn: fetchAllTopics,
+    enabled: searching,
+  });
+
+  // Once the full topic list arrives, seed topicsMap for any course we haven't
+  // loaded topics for yet. We never overwrite an existing entry: a lazily-loaded
+  // (or optimistically-toggled) course already holds the authoritative state.
+  useEffect(() => {
+    if (!allTopics) return;
+    setTopicsMap((prev) => {
+      const next = { ...prev };
+      for (const topic of allTopics) {
+        if (!next[topic.course_id]) next[topic.course_id] = [];
+      }
+      for (const topic of allTopics) {
+        if (prev[topic.course_id]) continue; // keep already-loaded courses intact
+        next[topic.course_id].push(topic);
+      }
+      return next;
+    });
+  }, [allTopics]);
 
   // Optimistically flip a course's selection state in the cached courses list.
   const patchCourseSelected = (courseID, isSelected, isPartial) =>
@@ -104,6 +142,28 @@ function CourseList() {
     }
   };
 
+  // Build the list to render. When searching, keep only courses that match by
+  // name (show all their topics) or that contain a matching topic (show just
+  // those), and force them open so the matches are visible. topicsMap still
+  // holds each course's full topic list — we filter only what's displayed, so
+  // the selection handlers keep computing course state over every topic.
+  const rows = searching
+    ? courses
+        .map((course) => {
+          const nameMatch = course.course_name.toLowerCase().includes(query);
+          const topics = topicsMap[course.id] ?? [];
+          const visibleTopics = nameMatch
+            ? topics
+            : topics.filter((t) => t.topic_name.toLowerCase().includes(query));
+          return { course, visibleTopics, matched: nameMatch || visibleTopics.length > 0 };
+        })
+        .filter((r) => r.matched)
+    : courses.map((course) => ({
+        course,
+        visibleTopics: topicsMap[course.id] ?? [],
+        matched: true,
+      }));
+
   return (
     <div className="course-list">
       <div className="course-list-intro">
@@ -113,17 +173,30 @@ function CourseList() {
           Selecting a course selects all of the topics within it.
         </p>
       </div>
+      <div className="course-search">
+        <input
+          type="search"
+          className="course-search-input"
+          placeholder="Search courses and topics…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search courses and topics"
+        />
+      </div>
       {(error || coursesError) && (
         <p className="course-list-error">Error: {error || coursesError.message}</p>
       )}
-      {courses.map((course) => (
+      {searching && rows.length === 0 && (
+        <p className="course-list-empty">No courses or topics match “{search.trim()}”.</p>
+      )}
+      {rows.map(({ course, visibleTopics }) => (
         <CourseBar
           key={course.id}
           id={course.id}
           courseName={course.course_name}
           gradeLevel={course.grade_level}
-          topics={topicsMap[course.id] ?? []}
-          isOpen={expandedCourses.has(course.id)}
+          topics={visibleTopics}
+          isOpen={searching || expandedCourses.has(course.id)}
           isCourseSelected={course.is_selected}
           isCoursePartial={course.is_partial}
           onItemClick={handleCourseBarClick}
