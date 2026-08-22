@@ -10,6 +10,10 @@ gives more of the deck to the topics that are due, so struggled-with topics come
 back soon and take up more of your session while mastered ones resurface less
 often.
 
+A progress dashboard shows each selected topic's SM-2 state (ease, interval,
+repetitions, due date), what's coming up in the next deck, and a per-day
+practice calendar that marks each day as completed, partial, or unpracticed.
+
 Problems are produced by [mathgenerator](https://github.com/lukew3/mathgenerator),
 a library of parameterized math-problem generators (a pip dependency), plus a
 handful of first-party generators under `backend/myapp/generators/`.
@@ -64,10 +68,11 @@ npm install
 npm run dev
 ```
 
-Set the backend URL in `frontend/.env`:
+Set the backend URL and Google OAuth client ID in `frontend/.env`:
 
 ```
 VITE_API_URL=http://localhost:8000
+VITE_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
 
 The Vite dev server (`:5173`) talks to Django (`:8000`) with credentialed
@@ -77,12 +82,16 @@ requests, so the backend allows that origin via CORS.
 
 The backend exposes a small JSON API under the app's URLs, including:
 
-- `POST /auth/google/`, `GET /auth/me/`, `POST /auth/logout/` — authentication
+- `GET /auth/me/`, `POST /auth/google/`, `POST /auth/logout/`,
+  `DELETE /auth/delete/` — authentication and account deletion
 - `GET /problem/` — generate a problem
 - `GET /deck/`, `POST /deck/advance/` — the daily practice deck (advancing may
   report an answer outcome that updates the topic's spaced-repetition schedule)
-- `GET /courses/`, `GET /courses/<id>/topics`, `POST /topics/<id>/select` — course/topic selection
-- `GET|POST /settings/` — user settings
+- `GET /dashboard/` — selected/upcoming topics with their SM-2 state
+- `GET /practice-calendar/` — per-day practice status for a calendar month
+- `GET /courses/`, `GET /courses/<id>/topics`, `PATCH /courses/<id>/select`,
+  `GET /topics/`, `PATCH /topics/<id>/select` — course/topic browsing and selection
+- `GET|PATCH /settings/` — user settings
 
 See [backend/myapp/urls.py](backend/myapp/urls.py) for the full list. The
 [bruno/](bruno/) collection contains ready-to-run requests against these
