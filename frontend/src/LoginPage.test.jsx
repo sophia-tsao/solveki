@@ -72,7 +72,7 @@ describe('LoginPage', () => {
 
     expect(loginWithGoogle).toHaveBeenCalledWith('google-jwt');
     await waitFor(() =>
-      expect(onLoggedIn).toHaveBeenCalledWith({ name: 'Ada' }),
+      expect(onLoggedIn).toHaveBeenCalledWith({ user: { name: 'Ada' } }),
     );
   });
 

@@ -186,7 +186,7 @@ function LoginPage({ onLoggedIn }) {
           callback: async (response) => {
             try {
               const data = await loginWithGoogle(response.credential);
-              onLoggedIn(data.user);
+              onLoggedIn(data);
             } catch (err) {
               log.error('Sign-in failed:', err.message);
               setError(err.message);

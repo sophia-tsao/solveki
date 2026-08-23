@@ -59,6 +59,15 @@ function App() {
     }
   }
 
+  // Land first-time users on the Courses page so they pick a course before
+  // practicing; returning users stay on whatever page the hash resolves to.
+  function handleLoggedIn(data) {
+    setSession(data.user);
+    if (data.is_new_user) {
+      changeVisibility("courses");
+    }
+  }
+
   function handleLoggedOut() {
     setSession(null);
     window.location.hash = "#/math";
@@ -68,7 +77,7 @@ function App() {
   if (authLoading) return null;
 
   if (!user) {
-    return <LoginPage onLoggedIn={setSession} />;
+    return <LoginPage onLoggedIn={handleLoggedIn} />;
   }
 
   return(

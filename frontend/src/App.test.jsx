@@ -27,7 +27,12 @@ vi.mock('./LoginPage.jsx', () => ({
   default: ({ onLoggedIn }) => (
     <div>
       login-page
-      <button onClick={() => onLoggedIn({ name: 'Ada' })}>do-login</button>
+      <button onClick={() => onLoggedIn({ user: { name: 'Ada' } })}>
+        do-login
+      </button>
+      <button onClick={() => onLoggedIn({ user: { name: 'Ada' }, is_new_user: true })}>
+        do-login-new
+      </button>
     </div>
   ),
 }));
@@ -86,6 +91,15 @@ describe('App — auth gate', () => {
     renderWithClient(<App />);
     await user.click(await screen.findByText('do-login'));
     expect(await screen.findByText('header-on-math')).toBeInTheDocument();
+  });
+
+  it('sends a first-time user to the courses page after login', async () => {
+    fetchMe.mockResolvedValue(ANON);
+    const user = userEvent.setup();
+    renderWithClient(<App />);
+    await user.click(await screen.findByText('do-login-new'));
+    expect(await screen.findByText('courses-page')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/courses');
   });
 });
 

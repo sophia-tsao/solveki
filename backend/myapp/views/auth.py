@@ -117,7 +117,9 @@ def google_login(request):
         "Google login succeeded for user %s (%s account)",
         user.id, "new" if created else "existing",
     )
-    return JsonResponse({"authenticated": True, "user": _serialize_user(user)})
+    return JsonResponse(
+        {"authenticated": True, "user": _serialize_user(user), "is_new_user": created}
+    )
 
 
 @csrf_exempt

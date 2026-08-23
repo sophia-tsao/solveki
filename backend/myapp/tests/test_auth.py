@@ -89,6 +89,7 @@ class GoogleLoginTests(TestCase):
         response = self._post({"credential": "abc"})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["authenticated"])
+        self.assertTrue(response.json()["is_new_user"])
         user = User.objects.get(username="google-sub-42")
         self.assertEqual(user.email, "new@example.com")
         self.assertEqual(user.first_name, "New")
@@ -103,6 +104,7 @@ class GoogleLoginTests(TestCase):
         }
         response = self._post({"credential": "abc"})
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["is_new_user"])
         user = User.objects.get(username="google-sub-42")
         self.assertEqual(user.email, "fresh@example.com")
         # No duplicate account created.
