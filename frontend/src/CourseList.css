@@ -24,6 +24,24 @@
     margin: 0;
 }
 
+.course-list-diagnostic {
+    margin-top: 16px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2563eb;
+    background: #f8faff;
+    border: 1px solid #c7d7fb;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.course-list-diagnostic:hover {
+    background: #eef4ff;
+    border-color: #2563eb;
+}
+
 .course-list-error {
     color: #b91c1c;
     font-size: 14px;

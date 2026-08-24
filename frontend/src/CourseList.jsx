@@ -2,8 +2,19 @@ import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import CourseBar from './CourseBar.jsx';
 import { apiFetch, localDay } from './auth.js';
+import { readDiagnostic } from './diagnosticStore.js';
 import { createLogger } from './logger.js';
 import './CourseList.css';
+
+// Entry-button copy depends on whether the user has a diagnostic in flight or
+// already finished one. Read at render (cheap); CourseList remounts on every
+// navigation back to this page, so the label is always current.
+function diagnosticButtonLabel(userId) {
+  const status = readDiagnostic(userId)?.status;
+  if (status === 'in_progress') return 'Resume diagnostic';
+  if (status === 'completed') return 'Retake diagnostic';
+  return 'Not sure where to start? Take the 5-question diagnostic';
+}
 
 const log = createLogger('courses');
 
@@ -26,7 +37,7 @@ async function fetchAllTopics() {
   return result.topics;
 }
 
-function CourseList() {
+function CourseList({ onStartDiagnostic, userId }) {
   const queryClient = useQueryClient();
   const [expandedCourses, setExpandedCourses] = useState(new Set());
   const [topicsMap, setTopicsMap] = useState({});
@@ -174,6 +185,11 @@ function CourseList() {
           Select the courses and topics that you would like to review.
           Selecting a course selects all of the topics within it.
         </p>
+        {onStartDiagnostic && (
+          <button className="course-list-diagnostic" onClick={onStartDiagnostic}>
+            {diagnosticButtonLabel(userId)}
+          </button>
+        )}
       </div>
       <div className="course-search">
         <input

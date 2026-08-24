@@ -6,6 +6,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from ..models import Course, Topic, UserTopicSelection
+from ..diagnostic_config import topic_order_key
 from .common import _require_auth
 from .deck import _regenerate_deck_tail, _client_today
 
@@ -56,6 +57,15 @@ def view_topics(request):
     selected_ids = set(
         UserTopicSelection.objects.filter(user=request.user).values_list("topic_id", flat=True)
     )
+    # Group by course, then order within a course by its unit taxonomy so topics
+    # read in curriculum unit order rather than insertion (id) order.
+    ordered = sorted(
+        Topic.objects.select_related("course"),
+        key=lambda t: (
+            t.course_id,
+            topic_order_key(t.course.course_name if t.course else "", t.topic_name),
+        ),
+    )
     topics = [
         {
             "id": topic.id,
@@ -63,7 +73,7 @@ def view_topics(request):
             "course_id": topic.course_id,
             "is_selected": topic.id in selected_ids,
         }
-        for topic in Topic.objects.order_by("course_id", "id")
+        for topic in ordered
     ]
     return JsonResponse({"topics": topics})
 
@@ -76,8 +86,15 @@ def view_course_topics(request, courseID):
     selected_ids = set(
         UserTopicSelection.objects.filter(user=request.user).values_list("topic_id", flat=True)
     )
+    course = Course.objects.get(id=courseID)
+    # List topics in curriculum unit order (unit 1's topics first, …), not the
+    # order they happened to be inserted.
+    course_topics = sorted(
+        course.topics.all(),
+        key=lambda t: topic_order_key(course.course_name, t.topic_name),
+    )
     topics = []
-    for topic in Course.objects.get(id=courseID).topics.all():
+    for topic in course_topics:
         topics.append({
             "id": topic.id,
             "topic_name": topic.topic_name,

@@ -17,4 +17,7 @@ urlpatterns = [
     path('courses/<int:courseID>/topics', views.view_course_topics, name="view_course_topics"),
     path('courses/<int:courseID>/select', views.set_course_topics_selected, name="set_course_topics_selected"),
     path('topics/<int:topicID>/select', views.toggle_topic, name="toggle_topic"),
+    path('diagnostic/config/', views.diagnostic_config, name="diagnostic_config"),
+    path('diagnostic/start/', views.diagnostic_start, name="diagnostic_start"),
+    path('diagnostic/submit/', views.diagnostic_submit, name="diagnostic_submit"),
 ]

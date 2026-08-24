@@ -1,0 +1,266 @@
+.diagnostic {
+    position: relative;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 8px 16px 48px 16px;
+}
+
+/* Exit ("X") — top-right corner. Leaves progress saved so the run can resume. */
+.diagnostic-exit {
+    position: absolute;
+    top: 4px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    line-height: 1;
+    color: #6b7280;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.diagnostic-exit:hover {
+    background: #f3f4f6;
+    color: #111827;
+}
+
+.diagnostic-intro {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.diagnostic-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.01em;
+    margin: 0 0 8px 0;
+}
+
+.diagnostic-subtitle {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #6b7280;
+    margin: 0;
+}
+
+.diagnostic-error {
+    color: #b91c1c;
+    font-size: 14px;
+    text-align: center;
+}
+
+/* Progress bar */
+.diagnostic-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 20px;
+}
+
+.diagnostic-progress-track {
+    width: 100%;
+    height: 8px;
+    background: #eef2f7;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.diagnostic-progress-fill {
+    height: 100%;
+    background: #2563eb;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+.diagnostic-progress-label {
+    font-size: 13px;
+    color: #6b7280;
+    text-align: right;
+}
+
+/* Cards */
+.diagnostic-card {
+    background: #ffffff;
+    border: 1px solid #dde3ed;
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.diagnostic-card-centered {
+    align-items: center;
+    text-align: center;
+}
+
+.diagnostic-question {
+    font-size: 16px;
+    font-weight: 600;
+    color: #111827;
+    line-height: 1.4;
+}
+
+.diagnostic-attempt {
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.diagnostic-problem {
+    font-size: 18px;
+}
+
+/* Low-emphasis note shown in place of the unit dropdown when a course has no
+   authored units (rare) — we just review the whole course. */
+.diagnostic-note {
+    font-size: 14px;
+    color: #6b7280;
+    line-height: 1.4;
+    margin: 0;
+}
+
+/* Dropdown */
+.diagnostic-select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 14px;
+    font-size: 14px;
+    color: #111827;
+    background: #ffffff;
+    border: 1px solid #dde3ed;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.diagnostic-select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Multiple-choice / checkbox options */
+.diagnostic-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.diagnostic-check {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid #dde3ed;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #111827;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.diagnostic-check:hover {
+    border-color: #2563eb;
+    background: #f8faff;
+}
+
+.diagnostic-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: #2563eb;
+}
+
+.diagnostic-check-label {
+    flex: 1;
+}
+
+/* Navigation / buttons */
+.diagnostic-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.diagnostic-nav-center {
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.diagnostic-btn {
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background 0.15s ease, opacity 0.15s ease;
+}
+
+.diagnostic-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.diagnostic-btn-primary {
+    background: #2563eb;
+    color: #ffffff;
+}
+
+.diagnostic-btn-primary:not(:disabled):hover {
+    background: #1d4ed8;
+}
+
+.diagnostic-btn-ghost {
+    background: #ffffff;
+    color: #374151;
+    border-color: #dde3ed;
+}
+
+.diagnostic-btn-ghost:hover {
+    background: #f3f4f6;
+}
+
+/* Reveal / done */
+.diagnostic-reveal-answer {
+    font-size: 16px;
+    color: #111827;
+    margin: 0;
+}
+
+.diagnostic-reveal-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.diagnostic-done-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0;
+}
+
+.diagnostic-done-text {
+    font-size: 15px;
+    color: #374151;
+    margin: 0;
+}
+
+.diagnostic-summary-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 14px;
+    color: #6b7280;
+    text-align: center;
+}
+
+.diagnostic-summary-list li {
+    padding: 2px 0;
+}

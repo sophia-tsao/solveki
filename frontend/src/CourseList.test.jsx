@@ -7,6 +7,7 @@ vi.mock('./auth.js', () => ({ apiFetch: vi.fn(), localDay: vi.fn(() => '2026-07-
 
 import { apiFetch } from './auth.js';
 import CourseList from './CourseList.jsx';
+import { saveDiagnosticProgress, markDiagnosticCompleted } from './diagnosticStore.js';
 
 function jsonResponse(payload, { ok = true, status = 200 } = {}) {
   return { ok, status, json: async () => payload };
@@ -28,7 +29,10 @@ const ALL_TOPICS = [
   { id: 20, topic_name: 'Triangles', course_id: 2, is_selected: false },
 ];
 
-beforeEach(() => apiFetch.mockReset());
+beforeEach(() => {
+  apiFetch.mockReset();
+  localStorage.clear();
+});
 
 describe('CourseList', () => {
   it('renders courses from the initial fetch', async () => {
@@ -174,5 +178,45 @@ describe('CourseList', () => {
         expect.objectContaining({ method: 'PATCH' }),
       ),
     );
+  });
+
+  describe('diagnostic entry button', () => {
+    const mockList = () =>
+      apiFetch.mockImplementation((url) => {
+        if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
+        if (url === '/topics/') return Promise.resolve(jsonResponse({ topics: ALL_TOPICS }));
+        return Promise.resolve(jsonResponse({}));
+      });
+
+    it('invites a first-time user to take the diagnostic', async () => {
+      mockList();
+      renderWithClient(<CourseList userId={1} onStartDiagnostic={vi.fn()} />);
+      await screen.findByText('Algebra');
+      expect(screen.getByRole('button', { name: /Take the 5-question diagnostic/ })).toBeInTheDocument();
+    });
+
+    it('offers to resume when a run is in progress', async () => {
+      saveDiagnosticProgress(1, { phase: 'profile', profileStep: 1, currentCourseId: '', currentUnitKey: '' });
+      mockList();
+      renderWithClient(<CourseList userId={1} onStartDiagnostic={vi.fn()} />);
+      await screen.findByText('Algebra');
+      expect(screen.getByRole('button', { name: 'Resume diagnostic' })).toBeInTheDocument();
+    });
+
+    it('offers to retake once completed', async () => {
+      markDiagnosticCompleted(1);
+      mockList();
+      renderWithClient(<CourseList userId={1} onStartDiagnostic={vi.fn()} />);
+      await screen.findByText('Algebra');
+      expect(screen.getByRole('button', { name: 'Retake diagnostic' })).toBeInTheDocument();
+    });
+
+    it('scopes status per user (no cross-account bleed)', async () => {
+      markDiagnosticCompleted(1);
+      mockList();
+      renderWithClient(<CourseList userId={2} onStartDiagnostic={vi.fn()} />);
+      await screen.findByText('Algebra');
+      expect(screen.getByRole('button', { name: /Take the 5-question diagnostic/ })).toBeInTheDocument();
+    });
   });
 });
