@@ -5,7 +5,6 @@ import MathProblem from './MathProblem.jsx';
 import Header from './Header.jsx';
 import Settings from './Settings.jsx';
 import Dashboard from './Dashboard.jsx';
-import Diagnostic from './Diagnostic.jsx';
 import LoginPage from './LoginPage.jsx';
 import { fetchMe } from './auth.js';
 import { createLogger } from './logger.js';
@@ -13,7 +12,7 @@ import './App.css';
 
 const log = createLogger('app');
 
-const PAGES = ["math", "dashboard", "courses", "settings", "diagnostic"];
+const PAGES = ["math", "dashboard", "courses", "settings"];
 
 function pageFromHash() {
   const page = window.location.hash.replace(/^#\/?/, "");
@@ -88,17 +87,7 @@ function App() {
     setCurrentPage("math");
   }
 
-  // The session check hits the backend (Cloud Run), which can cold-start for
-  // several seconds. Show the same loading state as index.html rather than a
-  // blank screen while we wait.
-  if (authLoading) {
-    return (
-      <div className="app-boot">
-        <div className="app-boot__spinner" aria-hidden="true" />
-        <p className="app-boot__text">Loading…</p>
-      </div>
-    );
-  }
+  if (authLoading) return null;
 
   if (!user) {
     return <LoginPage onLoggedIn={handleLoggedIn} />;
@@ -110,8 +99,7 @@ function App() {
       <main className="app-main">
         {currentPage==="math" && <MathProblem />}
         {currentPage==="dashboard" && <Dashboard />}
-        {currentPage==="courses" && <CourseList userId={user.id} onStartDiagnostic={()=>changeVisibility("diagnostic")} />}
-        {currentPage==="diagnostic" && <Diagnostic userId={user.id} onNavigate={(page)=>changeVisibility(page)} />}
+        {currentPage==="courses" && <CourseList />}
         {currentPage==="settings" && <Settings onLoggedOut={handleLoggedOut} />}
       </main>
       <footer className="app-footer" />
