@@ -14,6 +14,7 @@ let capturedCallback = null;
 beforeEach(() => {
   loginWithGoogle.mockReset();
   capturedCallback = null;
+  window.location.hash = '';
   window.google = {
     accounts: {
       id: {
@@ -28,6 +29,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete window.google;
+  window.location.hash = '';
 });
 
 // The landing page has two "Log in / Register" buttons: the header one returns
@@ -117,6 +119,39 @@ describe('LoginPage', () => {
     expect(
       screen.getByText('Master math for grades 1–12 and AP with spaced repetition.'),
     ).toBeInTheDocument();
+  });
+
+  it('reflects the current landing view in the URL hash', async () => {
+    const user = userEvent.setup();
+    render(<LoginPage onLoggedIn={() => {}} />);
+
+    await user.click(screen.getByRole('button', { name: 'Why Solveki' }));
+    expect(window.location.hash).toBe('#/why');
+
+    await user.click(screen.getByRole('button', { name: 'FAQ' }));
+    expect(window.location.hash).toBe('#/faq');
+
+    // The login flow is entered from the landing hero CTA.
+    await user.click(screen.getByRole('button', { name: 'Solveki' }));
+    await user.click(clickableLoginCta());
+    expect(window.location.hash).toBe('#/login');
+  });
+
+  it('opens on the view named in the URL hash', () => {
+    window.location.hash = '#/faq';
+    render(<LoginPage onLoggedIn={() => {}} />);
+    expect(screen.getByText('Frequently asked questions')).toBeInTheDocument();
+  });
+
+  it('follows browser hashchange events (back/forward)', async () => {
+    render(<LoginPage onLoggedIn={() => {}} />);
+    expect(
+      screen.getByText('Master math for grades 1–12 and AP with spaced repetition.'),
+    ).toBeInTheDocument();
+
+    window.location.hash = '#/why';
+    window.dispatchEvent(new Event('hashchange'));
+    expect(await screen.findByText('Why Solveki?')).toBeInTheDocument();
   });
 
   it('returns to the landing page from the header Log in / Register button', async () => {

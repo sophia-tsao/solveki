@@ -143,7 +143,7 @@ describe('App — routing', () => {
 });
 
 describe('App — logout', () => {
-  it('returns to the login page and resets the hash to math', async () => {
+  it('returns to the login page and resets the hash to the landing page', async () => {
     window.location.hash = '#/settings';
     fetchMe.mockResolvedValue(AUTHED);
     const user = userEvent.setup();
@@ -151,6 +151,6 @@ describe('App — logout', () => {
 
     await user.click(await screen.findByText('do-logout'));
     expect(await screen.findByText('login-page')).toBeInTheDocument();
-    expect(window.location.hash).toBe('#/math');
+    expect(window.location.hash).toBe('#/');
   });
 });

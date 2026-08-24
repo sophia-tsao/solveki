@@ -5,6 +5,7 @@ import MathProblem from './MathProblem.jsx';
 import Header from './Header.jsx';
 import Settings from './Settings.jsx';
 import Dashboard from './Dashboard.jsx';
+import Diagnostic from './Diagnostic.jsx';
 import LoginPage from './LoginPage.jsx';
 import { fetchMe } from './auth.js';
 import { createLogger } from './logger.js';
@@ -12,7 +13,7 @@ import './App.css';
 
 const log = createLogger('app');
 
-const PAGES = ["math", "dashboard", "courses", "settings"];
+const PAGES = ["math", "dashboard", "courses", "settings", "diagnostic"];
 
 function pageFromHash() {
   const page = window.location.hash.replace(/^#\/?/, "");
@@ -52,6 +53,17 @@ function App() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // Keep the URL in sync with the page actually being shown. An empty or
+  // unrecognized hash resolves to "math", so canonicalize it (e.g. a fresh
+  // "solveki.vercel.app" becomes "solveki.vercel.app/#/math") once the user is
+  // authenticated. Only runs while logged in, so it never fights the login
+  // page's own hash handling.
+  useEffect(() => {
+    if (user && window.location.hash !== `#/${currentPage}`) {
+      window.location.hash = `#/${currentPage}`;
+    }
+  }, [user, currentPage]);
+
   function changeVisibility(page){
     if(PAGES.includes(page)){
       window.location.hash = `#/${page}`;
@@ -70,11 +82,23 @@ function App() {
 
   function handleLoggedOut() {
     setSession(null);
-    window.location.hash = "#/math";
+    // Send the user to the landing page (the login page's own default view)
+    // rather than a bare "#/math" that wouldn't match what's on screen.
+    window.location.hash = "#/";
     setCurrentPage("math");
   }
 
-  if (authLoading) return null;
+  // The session check hits the backend (Cloud Run), which can cold-start for
+  // several seconds. Show the same loading state as index.html rather than a
+  // blank screen while we wait.
+  if (authLoading) {
+    return (
+      <div className="app-boot">
+        <div className="app-boot__spinner" aria-hidden="true" />
+        <p className="app-boot__text">Loading…</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return <LoginPage onLoggedIn={handleLoggedIn} />;
@@ -86,7 +110,8 @@ function App() {
       <main className="app-main">
         {currentPage==="math" && <MathProblem />}
         {currentPage==="dashboard" && <Dashboard />}
-        {currentPage==="courses" && <CourseList />}
+        {currentPage==="courses" && <CourseList userId={user.id} onStartDiagnostic={()=>changeVisibility("diagnostic")} />}
+        {currentPage==="diagnostic" && <Diagnostic userId={user.id} onNavigate={(page)=>changeVisibility(page)} />}
         {currentPage==="settings" && <Settings onLoggedOut={handleLoggedOut} />}
       </main>
       <footer className="app-footer" />

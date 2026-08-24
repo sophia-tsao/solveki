@@ -10,6 +10,15 @@ const log = createLogger('login');
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
+// Landing views that carry their own URL hash so the address bar matches the
+// page on screen. Anything else (including an empty hash) is the landing page.
+const HASH_VIEWS = ['why', 'faq', 'login'];
+
+function viewFromHash() {
+  const h = window.location.hash.replace(/^#\/?/, '');
+  return HASH_VIEWS.includes(h) ? h : 'landing';
+}
+
 // Load the Google Identity Services script once, resolving when ready.
 let gsiPromise = null;
 function loadGsi() {
@@ -166,9 +175,22 @@ function Faq() {
 }
 
 function LoginPage({ onLoggedIn }) {
-  const [view, setView] = useState('landing'); // landing | login | why | faq
+  const [view, setView] = useState(viewFromHash); // landing | login | why | faq
   const [error, setError] = useState(null);
   const buttonRef = useRef(null);
+
+  // Drive the view from the URL hash so links are shareable and the browser
+  // back/forward buttons move between landing, "Why Solveki", FAQ, and login.
+  const navigate = (next) => {
+    window.location.hash = next === 'landing' ? '#/' : `#/${next}`;
+    setView(next);
+  };
+
+  useEffect(() => {
+    const onHashChange = () => setView(viewFromHash());
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
 
   useEffect(() => {
     if (view !== 'login') return;
@@ -211,7 +233,7 @@ function LoginPage({ onLoggedIn }) {
   if (view !== 'login') {
     return (
       <div className="landing">
-        <LandingHeader view={view} onNavigate={setView} />
+        <LandingHeader view={view} onNavigate={navigate} />
         <main className="landing-main">
           {view === 'landing' && (
             <div className="landing-hero">
@@ -219,7 +241,7 @@ function LoginPage({ onLoggedIn }) {
               <p className="login-subtitle">
                 Master math for grades 1&ndash;12 and AP with spaced repetition.
               </p>
-              <button className="login-cta" onClick={() => setView('login')}>
+              <button className="login-cta" onClick={() => navigate('login')}>
                 Log in / Register
               </button>
             </div>
@@ -237,7 +259,7 @@ function LoginPage({ onLoggedIn }) {
       <p className="login-subtitle">Log in or register to continue</p>
       <div ref={buttonRef} className="login-google-button" />
       {error && <p className="login-error">{error}</p>}
-      <button className="login-back" onClick={() => { setError(null); setView('landing'); }}>
+      <button className="login-back" onClick={() => { setError(null); navigate('landing'); }}>
         Back
       </button>
     </div>
