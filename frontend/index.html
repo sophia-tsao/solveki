@@ -7,7 +7,40 @@
     <title>Solveki</title>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Initial loading state, painted before the JS bundle loads and React
+         mounts. React replaces the whole #root subtree on mount, so this is
+         torn down automatically. Styles are inlined (no external CSS request)
+         so it renders on the very first frame. The backend runs on Cloud Run
+         which can cold-start for several seconds; without this the user stares
+         at a blank page until the session check resolves. -->
+    <div id="root">
+      <div class="app-boot">
+        <div class="app-boot__spinner" aria-hidden="true"></div>
+        <p class="app-boot__text">Loading…</p>
+      </div>
+    </div>
+    <style>
+      .app-boot {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        min-height: 100vh;
+        font-family: system-ui, sans-serif;
+        color: #475569;
+      }
+      .app-boot__spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #dbeafe;
+        border-top-color: #2563eb;
+        border-radius: 50%;
+        animation: app-boot-spin 0.8s linear infinite;
+      }
+      .app-boot__text { margin: 0; font-size: 15px; }
+      @keyframes app-boot-spin { to { transform: rotate(360deg); } }
+    </style>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
