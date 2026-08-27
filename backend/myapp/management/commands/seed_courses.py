@@ -219,7 +219,6 @@ CURRICULUM = [
     ("Algebra II", 11, [
         "Logarithm",
         "Multiplication of 2 complex numbers",
-        "Determinant to 2x2 Matrix",
         "Average Rate of Change over Interval",
         "Factorial",
         "Combinations of Objects",
@@ -236,7 +235,6 @@ CURRICULUM = [
         "Inverse of a Linear Function",
         "Z-Score of a Data Value",
         "Empirical Rule (68-95-99.7)",
-        "Solve a 2x2 Linear System",
         "Union, Intersection, Difference of Two Sets",
         "Logarithm Product Rule",
         "Logarithm Quotient Rule",
@@ -252,7 +250,6 @@ CURRICULUM = [
         "Inverse of a Non-Linear Function",
         "Rational Root Theorem",
         "System of Three Equations",
-        "Matrix Operation (2x2)",
         "Solve a Polynomial by Factoring",
         "Conic Equation from Features",
         "End Behavior of a Polynomial",
@@ -353,6 +350,9 @@ CURRICULUM = [
         "Separable Differential Equation",
         "Concavity Interval",
         "Taylor/Maclaurin Coefficient",
+        "Determinant to 2x2 Matrix",
+        "Matrix Operation (2x2)",
+        "Solve a 2x2 Linear System",
     ]),
 ]
 

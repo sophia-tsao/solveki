@@ -6,7 +6,7 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from ..models import Course, Topic, UserTopicSelection
-from ..diagnostic_config import topic_order_key
+from ..diagnostic_config import topic_order_key, unit_for_topic
 from .common import _require_auth
 from .deck import _regenerate_deck_tail, _client_today
 
@@ -66,15 +66,18 @@ def view_topics(request):
             topic_order_key(t.course.course_name if t.course else "", t.topic_name),
         ),
     )
-    topics = [
-        {
+    topics = []
+    for topic in ordered:
+        course_name = topic.course.course_name if topic.course else ""
+        unit = unit_for_topic(course_name, topic.topic_name)
+        topics.append({
             "id": topic.id,
             "topic_name": topic.topic_name,
             "course_id": topic.course_id,
             "is_selected": topic.id in selected_ids,
-        }
-        for topic in ordered
-    ]
+            "unit_key": unit["key"] if unit else None,
+            "unit_name": unit["name"] if unit else None,
+        })
     return JsonResponse({"topics": topics})
 
 
@@ -95,12 +98,15 @@ def view_course_topics(request, courseID):
     )
     topics = []
     for topic in course_topics:
+        unit = unit_for_topic(course.course_name, topic.topic_name)
         topics.append({
             "id": topic.id,
             "topic_name": topic.topic_name,
             "course_id": topic.course_id,
             "generator_name": topic.generator_name,
             "is_selected": topic.id in selected_ids,
+            "unit_key": unit["key"] if unit else None,
+            "unit_name": unit["name"] if unit else None,
         })
     return JsonResponse({"topics": topics})
 

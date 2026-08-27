@@ -64,4 +64,20 @@ describe('CourseBar', () => {
     const [courseCheckbox] = screen.getAllByRole('checkbox');
     expect(courseCheckbox).toBeChecked();
   });
+
+  it('groups topics under their unit title, preserving order', () => {
+    setup({
+      topics: [
+        { id: 1, topic_name: 'Addition', is_selected: false, unit_key: 'u1', unit_name: 'Number Sense' },
+        { id: 2, topic_name: 'Subtraction', is_selected: false, unit_key: 'u1', unit_name: 'Number Sense' },
+        { id: 3, topic_name: 'Solving Equations', is_selected: false, unit_key: 'u2', unit_name: 'Algebra Basics' },
+      ],
+    });
+    const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(titles).toEqual(['Number Sense', 'Algebra Basics']);
+    // Two topics live under the first unit heading, one under the second.
+    const units = document.querySelectorAll('.course-bar-unit');
+    expect(units[0].querySelectorAll('li')).toHaveLength(2);
+    expect(units[1].querySelectorAll('li')).toHaveLength(1);
+  });
 });

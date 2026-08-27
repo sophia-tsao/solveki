@@ -292,11 +292,10 @@ COURSE_UNITS = {
             "Expected Value of a Discrete Distribution"]},
     ],
     "Algebra II": [
-        {"key": "alg2-u1", "name": "Complex Numbers & Matrices", "topics": [
+        {"key": "alg2-u1", "name": "Complex Numbers & Systems", "topics": [
             "Add and Subtract Complex Numbers", "Multiplication of 2 complex numbers",
             "Complex Number Division", "Modulus of a Complex Number",
-            "Determinant to 2x2 Matrix", "Matrix Operation (2x2)",
-            "System of Three Equations", "Solve a 2x2 Linear System"]},
+            "System of Three Equations"]},
         {"key": "alg2-u2", "name": "Polynomial Functions", "topics": [
             "Evaluate a Polynomial", "Polynomial Division by a Linear Factor",
             "Remainder Theorem", "Rational Root Theorem",
@@ -394,6 +393,9 @@ COURSE_UNITS = {
             "Volume of a Solid of Revolution", "Separable Differential Equation"]},
         {"key": "calc-u6", "name": "Series", "topics": [
             "Taylor/Maclaurin Coefficient"]},
+        {"key": "calc-u7", "name": "Matrices", "topics": [
+            "Determinant to 2x2 Matrix", "Matrix Operation (2x2)",
+            "Solve a 2x2 Linear System"]},
     ],
 }
 
@@ -427,6 +429,28 @@ def topic_order_key(course_name, topic_name):
     """
     order = _TOPIC_ORDER.get(course_name, {})
     return (order.get(topic_name, len(order)), topic_name)
+
+
+# Per course, each topic name -> its unit dict (``{"key", "name"}``). Lets the
+# API tag each topic with the unit it belongs to, so the frontend can group
+# topics under unit headings.
+_TOPIC_UNIT = {
+    course_name: {
+        topic_name: {"key": unit["key"], "name": unit["name"]}
+        for unit in units
+        for topic_name in unit["topics"]
+    }
+    for course_name, units in COURSE_UNITS.items()
+}
+
+
+def unit_for_topic(course_name, topic_name):
+    """The unit (``{"key", "name"}``) a topic belongs to, or ``None``.
+
+    ``None`` for a topic outside the taxonomy (or an uncatalogued course), so the
+    frontend can group those stray topics on their own.
+    """
+    return _TOPIC_UNIT.get(course_name, {}).get(topic_name)
 
 
 def learned_unit_topic_names(course_name, unit_key):

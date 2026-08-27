@@ -40,6 +40,22 @@ function CourseBar(props) {
     props.onTopicToggle(props.id, topicID, e.target.checked);
   };
 
+  // Group topics under their unit, preserving the backend's curriculum-unit
+  // order. Topics with no unit (outside the taxonomy) collect under a null
+  // group rendered without a heading.
+  const unitGroups = [];
+  const groupIndex = new Map();
+  for (const topic of displayedTopics) {
+    const key = topic.unit_key ?? '__none__';
+    let group = groupIndex.get(key);
+    if (!group) {
+      group = { key, name: topic.unit_name || null, topics: [] };
+      groupIndex.set(key, group);
+      unitGroups.push(group);
+    }
+    group.topics.push(topic);
+  }
+
   return (
     <div
       className={`course-bar${props.isOpen ? ' open' : ''}`}
@@ -70,20 +86,27 @@ function CourseBar(props) {
         style={{ maxHeight: props.isOpen ? topicsHeight : 0 }}
       >
         <div className="course-bar-topics-inner" ref={topicsInnerRef}>
-          <ul>
-            {displayedTopics.map((topic) => (
-              <li key={topic.id}>
-                <span className="topic-name">{topic.topic_name}</span>
-                <input
-                  type="checkbox"
-                  className="topic-checkbox"
-                  checked={topic.is_selected}
-                  onChange={(e) => handleTopicCheckbox(e, topic.id)}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </li>
-            ))}
-          </ul>
+          {unitGroups.map((group) => (
+            <div className="course-bar-unit" key={group.key}>
+              {group.name && (
+                <h3 className="course-bar-unit-title">{group.name}</h3>
+              )}
+              <ul>
+                {group.topics.map((topic) => (
+                  <li key={topic.id}>
+                    <span className="topic-name">{topic.topic_name}</span>
+                    <input
+                      type="checkbox"
+                      className="topic-checkbox"
+                      checked={topic.is_selected}
+                      onChange={(e) => handleTopicCheckbox(e, topic.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       </div>
     </div>
