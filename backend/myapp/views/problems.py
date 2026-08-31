@@ -4,14 +4,18 @@ import re
 
 from django.http import JsonResponse
 
-import mathgenerator
-
 from ..models import Topic
-from ..generators import LOCAL_GENERATORS
-from ..generators._format import num as _num
 from .common import _require_auth
 
 logger = logging.getLogger(__name__)
+
+# NOTE: ``mathgenerator`` and the local ``..generators`` package are imported
+# lazily inside the functions below, not at module top level. Importing them
+# costs ~1s+, and — inflated by Cloud Run's throttled single vCPU during a cold
+# start — that import is the single largest slice of cold-start latency. Only
+# problem generation needs them; the URLconf load that every request (including
+# the trivial /auth/me/) pays for does not. Deferring the import moves that cost
+# off the cold-start path and onto the first /problem/ (or /deck/) request.
 
 # Matches an *over-precise* decimal (4+ fractional digits) anywhere in a string,
 # e.g. the ``523.5987755982989`` inside ``"523.5987755982989 m^3"``. Decimals
@@ -33,6 +37,7 @@ def _round_decimals(text):
     each is reformatted via the shared `num` helper (round to 3 places, drop a
     trailing ``.0``). Integers and already-short decimals pass through unchanged.
     """
+    from ..generators._format import num as _num  # lazy; see module-top note
     return _LONG_DECIMAL_RE.sub(lambda m: _num(m.group()), text)
 
 
@@ -47,6 +52,8 @@ def _make_problem_for_topic(topic):
     name = topic.generator_name
     if not name:
         return None
+    import mathgenerator  # lazy; see module-top note
+    from ..generators import LOCAL_GENERATORS  # lazy; see module-top note
     # Prefer our own generators, then fall back to the mathgenerator library.
     generator = LOCAL_GENERATORS.get(name) or getattr(mathgenerator, name, None)
     if generator is None:
