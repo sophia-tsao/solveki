@@ -8,7 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from ..models import Course, Topic, UserTopicSelection
 from ..diagnostic_config import topic_order_key, unit_for_topic
 from .common import _require_auth
-from .deck import _regenerate_deck_tail, _client_today
+from .deck import _mark_deck_stale, _client_today
 
 logger = logging.getLogger(__name__)
 
@@ -131,8 +131,10 @@ def toggle_topic(request, topicID):
         "User %s %s topic %s", request.user.id,
         "selected" if is_selected else "deselected", topic.id,
     )
-    # Apply the topic change to today's deck immediately (see helper docstring).
-    _regenerate_deck_tail(request.user, _client_today(request))
+    # Flag today's deck for lazy tail regeneration on the next practice-page
+    # load rather than rebuilding it here (see helper docstring). Keeps the
+    # toggle a fast, tiny write.
+    _mark_deck_stale(request.user, _client_today(request))
     return JsonResponse({"id": topic.id, "is_selected": is_selected})
 
 
@@ -160,6 +162,8 @@ def set_course_topics_selected(request, courseID):
         "User %s %s all %d topics in course %s", request.user.id,
         "selected" if new_value else "deselected", len(topics), courseID,
     )
-    # Apply the topic change to today's deck immediately (see helper docstring).
-    _regenerate_deck_tail(request.user, _client_today(request))
+    # Flag today's deck for lazy tail regeneration on the next practice-page
+    # load rather than rebuilding it here (see helper docstring). Keeps the
+    # toggle a fast, tiny write.
+    _mark_deck_stale(request.user, _client_today(request))
     return JsonResponse({"course_id": courseID, "is_selected": new_value})

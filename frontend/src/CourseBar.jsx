@@ -72,6 +72,7 @@ function CourseBar(props) {
             type="checkbox"
             className={`course-bar-checkbox${isPartial ? ' partial' : ''}`}
             checked={props.isCourseSelected}
+            disabled={props.isCoursePending}
             onChange={handleCourseCheckbox}
             onClick={(e) => e.stopPropagation()}
           />
@@ -99,6 +100,7 @@ function CourseBar(props) {
                       type="checkbox"
                       className="topic-checkbox"
                       checked={topic.is_selected}
+                      disabled={props.isTopicPending?.(topic.id)}
                       onChange={(e) => handleTopicCheckbox(e, topic.id)}
                       onClick={(e) => e.stopPropagation()}
                     />

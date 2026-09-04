@@ -43,6 +43,17 @@ function CourseList({ onStartDiagnostic, userId }) {
   const [topicsMap, setTopicsMap] = useState({});
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+  // Keys of controls with a selection request in flight (`course:<id>` /
+  // `topic:<id>`). Drives the disabled state so a control can't be re-clicked
+  // mid-request, and lets the handlers ignore a repeat click outright.
+  const [pending, setPending] = useState(() => new Set());
+  const setPendingKey = (key, on) =>
+    setPending((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(key);
+      else next.delete(key);
+      return next;
+    });
 
   const query = search.trim().toLowerCase();
   const searching = query.length > 0;
@@ -81,6 +92,14 @@ function CourseList({ onStartDiagnostic, userId }) {
     queryClient.setQueryData(['courses'], (prev = []) =>
       prev.map(c => c.id === courseID ? { ...c, is_selected: isSelected, is_partial: isPartial } : c));
 
+  // Derive and apply a course's header state (selected / partial) from its
+  // topics' selection flags.
+  const applyCourseStateFromTopics = (courseID, topics) => {
+    const allSelected = topics.every(t => t.is_selected);
+    const anySelected = topics.some(t => t.is_selected);
+    patchCourseSelected(courseID, allSelected, anySelected && !allSelected);
+  };
+
   const handleCourseBarClick = async (courseID) => {
     if (expandedCourses.has(courseID)) {
       setExpandedCourses(prev => { const next = new Set(prev); next.delete(courseID); return next; });
@@ -110,6 +129,16 @@ function CourseList({ onStartDiagnostic, userId }) {
   };
 
   const handleTopicToggle = async (courseID, topicID, newValue) => {
+    const key = `topic:${topicID}`;
+    if (pending.has(key)) return; // a request is already in flight for this topic
+    // Flip the UI *before* the request (true optimistic update) so the checkbox
+    // reacts instantly; a slow round-trip no longer looks like a dead click and
+    // invites a duplicate. Snapshot the prior state to roll back on failure.
+    const prevTopics = topicsMap[courseID];
+    const updatedTopics = prevTopics.map(t => t.id === topicID ? { ...t, is_selected: newValue } : t);
+    setTopicsMap(prev => ({ ...prev, [courseID]: updatedTopics }));
+    applyCourseStateFromTopics(courseID, updatedTopics);
+    setPendingKey(key, true);
     try {
       // Send today so the deck-tail regeneration this triggers targets the
       // user's local day, matching the deck the practice page shows.
@@ -120,18 +149,31 @@ function CourseList({ onStartDiagnostic, userId }) {
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       log.info(`Topic ${topicID} ${newValue ? 'selected' : 'deselected'}`);
-      const updatedTopics = topicsMap[courseID].map(t => t.id === topicID ? { ...t, is_selected: newValue } : t);
-      const allSelected = updatedTopics.every(t => t.is_selected);
-      const anySelected = updatedTopics.some(t => t.is_selected);
-      setTopicsMap(prev => ({ ...prev, [courseID]: updatedTopics }));
-      patchCourseSelected(courseID, allSelected, anySelected && !allSelected);
     } catch (err) {
+      setTopicsMap(prev => ({ ...prev, [courseID]: prevTopics })); // roll back
+      applyCourseStateFromTopics(courseID, prevTopics);
       log.error(`Failed to toggle topic ${topicID}:`, err.message);
       setError(err.message);
+    } finally {
+      setPendingKey(key, false);
     }
   };
 
   const handleCourseToggle = async (courseID, newValue) => {
+    const key = `course:${courseID}`;
+    if (pending.has(key)) return; // a request is already in flight for this course
+    // Optimistically flip the course header and all its loaded topics. Snapshot
+    // the prior header state (from the courses cache) to restore on failure.
+    const prevCourse = courses.find(c => c.id === courseID);
+    const prevTopics = topicsMap[courseID];
+    patchCourseSelected(courseID, newValue, false); // whole-course toggle -> no mixed state
+    if (prevTopics) {
+      setTopicsMap(prev => ({
+        ...prev,
+        [courseID]: prevTopics.map(t => ({ ...t, is_selected: newValue })),
+      }));
+    }
+    setPendingKey(key, true);
     try {
       const response = await apiFetch(`/courses/${courseID}/select?today=${localDay()}`, {
         method: 'PATCH',
@@ -140,17 +182,13 @@ function CourseList({ onStartDiagnostic, userId }) {
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       log.info(`Course ${courseID} ${newValue ? 'selected' : 'deselected'}`);
-      // Selecting/deselecting a whole course leaves no topics in a mixed state.
-      patchCourseSelected(courseID, newValue, false);
-      if (topicsMap[courseID]) {
-        setTopicsMap(prev => ({
-          ...prev,
-          [courseID]: prev[courseID].map(t => ({ ...t, is_selected: newValue })),
-        }));
-      }
     } catch (err) {
+      if (prevCourse) patchCourseSelected(courseID, prevCourse.is_selected, prevCourse.is_partial);
+      if (prevTopics) setTopicsMap(prev => ({ ...prev, [courseID]: prevTopics })); // roll back
       log.error(`Failed to toggle course ${courseID}:`, err.message);
       setError(err.message);
+    } finally {
+      setPendingKey(key, false);
     }
   };
 
@@ -223,6 +261,8 @@ function CourseList({ onStartDiagnostic, userId }) {
           onItemClick={handleCourseBarClick}
           onTopicToggle={handleTopicToggle}
           onCourseToggle={handleCourseToggle}
+          isCoursePending={pending.has(`course:${course.id}`)}
+          isTopicPending={(topicID) => pending.has(`topic:${topicID}`)}
         />
       ))}
     </div>

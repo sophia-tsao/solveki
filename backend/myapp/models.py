@@ -147,6 +147,10 @@ class DailyDeck(models.Model):
     date = models.DateField()
     problems = models.JSONField(default=list)
     current_index = models.IntegerField(default=0)
+    # Set when the user's topic selection changes so the unanswered tail is
+    # rebuilt lazily on the next practice-page load (see _mark_deck_stale /
+    # _get_or_create_today_deck) rather than synchronously on every toggle.
+    needs_regen = models.BooleanField(default=False)
 
     class Meta:
         constraints = [

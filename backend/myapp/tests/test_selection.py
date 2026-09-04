@@ -197,7 +197,11 @@ class SetCourseTopicsSelectedTests(TestCase):
 
 
 class TopicToggleDeckRegenerationTests(TestCase):
-    """Toggling a topic regenerates today's unanswered cards immediately.
+    """Toggling a topic regenerates today's unanswered cards on next deck load.
+
+    A toggle only flags the deck stale (a cheap write); the unanswered tail is
+    rebuilt lazily on the next `GET /deck` — the practice-page load — so these
+    tests fetch the deck before asserting the regenerated contents.
 
     Two topics use distinct generators so a regenerated tail is recognisable
     by which generator produced its problems.
@@ -230,10 +234,11 @@ class TopicToggleDeckRegenerationTests(TestCase):
         deck = DailyDeck.objects.get(user=self.user)
         self.assertTrue(all(p["solution"] == "2" for p in deck.problems))
 
-        # Advance one, then add subtraction: the unanswered tail is regenerated
-        # and can now include subtraction problems.
+        # Advance one, then add subtraction: on the next deck load the
+        # unanswered tail is regenerated and can now include subtraction.
         self.client.post("/deck/advance/")
         self._toggle(self.sub_topic.id, True)
+        self.client.get("/deck/")  # practice-page load triggers regeneration
 
         deck.refresh_from_db()
         self.assertEqual(len(deck.problems), 4)  # total preserved
@@ -247,8 +252,10 @@ class TopicToggleDeckRegenerationTests(TestCase):
         select(self.user, self.sub_topic)
         self.client.get("/deck/")
 
-        # Remove subtraction; the regenerated tail must contain only addition.
+        # Remove subtraction; on the next deck load the regenerated tail must
+        # contain only addition.
         self._toggle(self.sub_topic.id, False)
+        self.client.get("/deck/")  # practice-page load triggers regeneration
 
         deck = DailyDeck.objects.get(user=self.user)
         self.assertEqual(len(deck.problems), 4)
@@ -279,10 +286,11 @@ class TopicToggleDeckRegenerationTests(TestCase):
 
         self._toggle(self.sub_topic.id, True)  # pick the new topic
 
+        # Loading the practice page is where the tail is rebuilt.
+        data = self.client.get("/deck/").json()
         deck.refresh_from_db()
         self.assertEqual(len(deck.problems), 4)  # refilled to target
         self.assertEqual(deck.current_index, 2)  # progress preserved
-        data = self.client.get("/deck/").json()
         self.assertFalse(data.get("completed"))
         self.assertEqual(data["current_number"], 3)
         self.assertEqual(data["total"], 4)
@@ -369,7 +377,32 @@ class TopicToggleDeckRegenerationTests(TestCase):
             data=json.dumps({"is_selected": True}),
             content_type="application/json",
         )
+        self.client.get("/deck/")  # practice-page load triggers regeneration
 
         deck = DailyDeck.objects.get(user=self.user)
         self.assertEqual(len(deck.problems), 4)
         self.assertEqual(deck.current_index, 1)
+
+    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_toggle_defers_regeneration_until_deck_load(self, mock_add, mock_sub):
+        # A toggle only flags the deck stale — it must NOT rebuild the tail on
+        # the request path. The heavy regeneration happens on the next GET
+        # /deck. This is the perf fix: toggles stay cheap regardless of how
+        # many problems the deck holds or how fast the user clicks.
+        select(self.user, self.add_topic)
+        self.client.get("/deck/")  # build a full addition-only deck
+        deck = DailyDeck.objects.get(user=self.user)
+        before = deck.problems
+
+        self._toggle(self.sub_topic.id, True)
+
+        # No regeneration yet: problems untouched, deck flagged for later.
+        deck.refresh_from_db()
+        self.assertTrue(deck.needs_regen)
+        self.assertEqual(deck.problems, before)
+
+        # The next practice-page load reconciles the deck and clears the flag.
+        self.client.get("/deck/")
+        deck.refresh_from_db()
+        self.assertFalse(deck.needs_regen)

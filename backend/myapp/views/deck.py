@@ -353,6 +353,13 @@ def _get_or_create_today_deck(user, today):
         return DailyDeck.objects.create(
             user=user, date=today, problems=problems, current_index=0
         )
+    # A topic toggle since this deck was last loaded only flagged it stale (see
+    # _mark_deck_stale); reconcile the unanswered tail to the current selection
+    # now, on the practice-page load, rather than on every toggle. Refetch to
+    # pick up the regenerated problems and the cleared flag.
+    if deck.needs_regen:
+        _regenerate_deck_tail(user, today)
+        deck.refresh_from_db()
     missing = settings.questions_per_day - len(deck.problems)
     if missing > 0:
         existing = _deck_topic_ids(deck)
@@ -393,16 +400,42 @@ def _grow_today_deck(user, count, today):
         )
 
 
+def _mark_deck_stale(user, today):
+    """Flag today's deck so its tail is rebuilt on the next practice-page load.
+
+    Called when the user's topic selection changes. This is deliberately cheap
+    — a single boolean UPDATE, no problem generation — so a topic/course toggle
+    returns immediately instead of rebuilding the deck on the request path. The
+    actual regeneration is deferred to the next `GET /deck` (see
+    `_get_or_create_today_deck`), which is exactly when the student returns to
+    the practice page and would first see the new problems anyway.
+
+    Does nothing if there's no deck for today yet: that deck is built fresh from
+    the current selection on first access, so it's never stale. Deferring also
+    coalesces a burst of toggles (deselect-old-then-select-new, rapid clicks)
+    into a single regeneration at load time rather than one per toggle.
+    """
+    DailyDeck.objects.filter(user=user, date=today).update(needs_regen=True)
+
+
+def _clear_needs_regen(deck):
+    """Clear a deck's stale flag if set, without touching its problems."""
+    if deck.needs_regen:
+        deck.needs_regen = False
+        deck.save(update_fields=["needs_regen"])
+
+
 def _regenerate_deck_tail(user, today):
     """Rebuild today's not-yet-answered problems from the current topic set.
 
     Problems the student has already worked through (everything before
     `current_index`) are kept; the remaining cards are regenerated from the
     topics currently selected, refilling the deck back up to the target count
-    (`questions_per_day`) and preserving the student's position. This lets a
-    topic toggle take effect immediately — stored problems only carry their
-    text/solution, not the topic they came from, so an individual topic's
-    cards can't be surgically removed; we regenerate the tail instead.
+    (`questions_per_day`) and preserving the student's position. Stored problems
+    only carry their text/solution, not the topic they came from, so an
+    individual topic's cards can't be surgically removed; we regenerate the tail
+    instead. Clears the `needs_regen` flag once the deck has been reconciled to
+    the current selection (this is the lazy handler for `_mark_deck_stale`).
 
     The tail size is derived from the target count rather than the current
     deck length, so refilling always aims for `questions_per_day`.
@@ -424,18 +457,26 @@ def _regenerate_deck_tail(user, today):
     target = Settings.load(user).questions_per_day
     remaining = target - answered
     if remaining <= 0:
+        # Nothing left to regenerate (the student already finished today's
+        # target), so the selection change can't affect this deck. Still clear
+        # the flag so a stale deck isn't reconsidered on every load.
+        _clear_needs_regen(deck)
         return
     new_tail = _generate_problems(user, remaining, today)
     if not new_tail:
         # No topics currently selected — can't regenerate. Preserve the deck
-        # rather than truncating away its unanswered tail.
+        # rather than truncating away its unanswered tail. Clear the flag so
+        # the transient empty state (mid topic-swap) isn't retried forever; the
+        # following selection marks the deck stale again.
         logger.debug(
             "Skipped deck tail regeneration for user %s: no problems generated",
             user.id,
         )
+        _clear_needs_regen(deck)
         return
     deck.problems = deck.problems[:answered] + new_tail
-    deck.save(update_fields=["problems"])
+    deck.needs_regen = False
+    deck.save(update_fields=["problems", "needs_regen"])
     logger.info(
         "Regenerated deck tail for user %s: kept %d answered, %d new",
         user.id, answered, len(new_tail),
