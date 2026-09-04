@@ -58,8 +58,11 @@ dependency-free `_load_dotenv()` to read `backend/.env`.
   answers recompute from a fixed base instead of compounding.
 - **Settings** — one-to-one per user; `language`, `questions_per_day`.
 - **DailyDeck** — per user + date; `problems` (JSON list of `{problem, solution,
-  topic_id}`) and `current_index`. `topic_id` attributes each stored problem
-  back to its source topic so an answer can be graded against that topic.
+  topic_id}`), `current_index`, and `needs_regen`. `topic_id` attributes each
+  stored problem back to its source topic so an answer can be graded against that
+  topic. `needs_regen` is a dirty flag: a topic/course selection change sets it
+  (a tiny write) instead of rebuilding the deck inline, and the unanswered tail
+  is regenerated lazily on the next `GET /deck` (see "Filling the deck" below).
 
 ### Endpoints (`backend/myapp/urls.py`)
 
@@ -78,6 +81,16 @@ dependency-free `_load_dotenv()` to read `backend/.env`.
 | GET | `courses/<id>/topics` | `view_course_topics` |
 | PATCH | `courses/<id>/select` | `set_course_topics_selected` |
 | PATCH | `topics/<id>/select` | `toggle_topic` |
+
+Selection is exposed as strings, not booleans. Each topic in `view_topics` /
+`view_course_topics` carries a `selection_status` of `"selected"` |
+`"unselected"`, and each course in `view_courses` a `topic_selection_status` of
+`"all"` | `"partial"` | `"none"` derived from its topics (`_course_selection`).
+The `PATCH .../select` endpoints are the exception: they still take a boolean
+`is_selected` body because they express a select/deselect *command*, distinct
+from the displayed state. The frontend applies these optimistically (flip the
+checkbox before the request, roll back on failure) so a slow round-trip doesn't
+read as a dead click.
 
 Deck logic (`_get_or_create_today_deck`, `_generate_problems`, `_deck_payload`)
 builds a per-day deck of `questions_per_day` problems and discards stale
@@ -143,6 +156,21 @@ This carries SM-2's core signal — practice the due thing more — into the *wi
 day dose*, not just the ordering: after a lapse, that topic both leads the deck
 and occupies more of it the next day, while a mastered topic recedes to its floor
 slot. Equal-priority topics reduce to an even split.
+
+### Regenerating on selection changes: the dirty flag
+
+When a student changes their topic selection mid-day, the deck's *unanswered
+tail* has to be rebuilt against the new set (answered cards are kept). Doing that
+inline on every `PATCH .../select` was the wrong place for it: regeneration runs
+the problem generators, whose first call per process warms up the (sympy-backed)
+generator library — a one-off cost that made the first toggle after a cold start
+take ~12s while later ones were sub-second, and rapid clicks piled up. So a
+toggle now only sets `DailyDeck.needs_regen` (`_mark_deck_stale`, a boolean
+`UPDATE`), and the next `GET /deck` — the practice-page load — sees the flag,
+rebuilds the tail once (`_regenerate_deck_tail`), and clears it. This keeps
+toggles cheap regardless of deck size or click speed, and moves the heavy work to
+a page load where a brief spinner is expected. (The diagnostic still regenerates
+eagerly: it's a one-shot after onboarding, not a hot path.)
 
 ### The once-per-day grading rule
 
@@ -323,11 +351,19 @@ be configured versus local dev (where both sit on `localhost`):
 
 - **Backend.** A `Dockerfile` (`python:3.13-slim` → `pip install .` →
   `collectstatic` → `gunicorn --bind :$PORT config.wsgi:application`) defines the
-  image; `gcloud run deploy --source .` builds and deploys it. Production config
-  (secret, database URL, allowed hosts, origins) is passed as Cloud Run env vars.
+  image. Deploy from the `backend/` directory with the service named explicitly:
+  `gcloud run deploy solveki-backend --project solveki --region us-central1
+  --source .`. Naming it matters — a bare `gcloud run deploy` defaults the service
+  name to the current folder, which creates a *new* service (new URL) instead of
+  redeploying. Production config (secret, database URL, allowed hosts, origins) is
+  passed as Cloud Run env vars.
 - **Database.** A Neon project provides the Postgres instance; use its **pooled**
   connection string (host contains `-pooler`) for serverless compute. Migrations
-  are run once against Neon (`DATABASE_URL=… python manage.py migrate`).
+  are a **separate step from the code deploy** and must be run against Neon
+  whenever a deploy includes a new migration (`DATABASE_URL=… python manage.py
+  migrate`). The deployed image does *not* run `migrate` on boot, so shipping code
+  that references a new column without applying its migration first 500s every
+  request that touches that table (`UndefinedColumn`) until the migration is run.
 - **Frontend.** Vercel builds with root directory `frontend`, framework preset
   Vite. `VITE_API_URL` (the Cloud Run URL) and `VITE_GOOGLE_CLIENT_ID` are set as
   build-time env vars — Vite inlines `VITE_*` values at build time.
