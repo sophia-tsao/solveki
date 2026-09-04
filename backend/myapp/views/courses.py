@@ -19,12 +19,17 @@ def _course_selection(course, selected_ids):
     # issues one query per course (an N+1 against the DB), whereas .all() returns
     # the already-in-memory topics, keeping the whole view at 2 queries total.
     #
-    # is_selected: every topic selected. is_partial: some but not all selected.
+    # Collapsed to a single tri-state string instead of two booleans:
+    #   "all"     – every topic selected
+    #   "partial" – some but not all selected
+    #   "none"    – nothing selected (or the course has no topics)
     topic_ids = [topic.id for topic in course.topics.all()]
     selected_count = sum(1 for tid in topic_ids if tid in selected_ids)
-    is_selected = bool(topic_ids) and selected_count == len(topic_ids)
-    is_partial = selected_count > 0 and not is_selected
-    return is_selected, is_partial
+    if topic_ids and selected_count == len(topic_ids):
+        return "all"
+    if selected_count > 0:
+        return "partial"
+    return "none"
 
 
 def view_courses(request):
@@ -36,13 +41,11 @@ def view_courses(request):
     )
     courses = []
     for course in Course.objects.all().prefetch_related("topics"):
-        is_selected, is_partial = _course_selection(course, selected_ids)
         courses.append({
             "id": course.id,
             "course_name": course.course_name,
             "grade_level": course.grade_level,
-            "is_selected": is_selected,
-            "is_partial": is_partial,
+            "topic_selection_status": _course_selection(course, selected_ids),
         })
     return JsonResponse({"courses": courses})
 
@@ -74,7 +77,7 @@ def view_topics(request):
             "id": topic.id,
             "topic_name": topic.topic_name,
             "course_id": topic.course_id,
-            "is_selected": topic.id in selected_ids,
+            "selection_status": "selected" if topic.id in selected_ids else "unselected",
             "unit_key": unit["key"] if unit else None,
             "unit_name": unit["name"] if unit else None,
         })
@@ -104,7 +107,7 @@ def view_course_topics(request, courseID):
             "topic_name": topic.topic_name,
             "course_id": topic.course_id,
             "generator_name": topic.generator_name,
-            "is_selected": topic.id in selected_ids,
+            "selection_status": "selected" if topic.id in selected_ids else "unselected",
             "unit_key": unit["key"] if unit else None,
             "unit_name": unit["name"] if unit else None,
         })

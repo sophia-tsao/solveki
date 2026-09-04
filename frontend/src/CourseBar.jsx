@@ -7,10 +7,11 @@ function CourseBar(props) {
   const [topicsHeight, setTopicsHeight] = useState(0);
   const checkboxRef = useRef(null);
 
+  // Tri-state course selection: 'all' | 'partial' | 'none'.
+  const isSelected = props.courseSelection === 'all';
+  const isPartial = props.courseSelection === 'partial';
   // `indeterminate` (the checkbox's dash) is a DOM-only property with no React
-  // attribute, so drive it imperatively. It shows only when some — but not
-  // all — of the course's topics are selected.
-  const isPartial = !props.isCourseSelected && !!props.isCoursePartial;
+  // attribute, so drive it imperatively. It shows only for the 'partial' state.
   useEffect(() => {
     if (checkboxRef.current) checkboxRef.current.indeterminate = isPartial;
   }, [isPartial]);
@@ -71,7 +72,7 @@ function CourseBar(props) {
             ref={checkboxRef}
             type="checkbox"
             className={`course-bar-checkbox${isPartial ? ' partial' : ''}`}
-            checked={props.isCourseSelected}
+            checked={isSelected}
             disabled={props.isCoursePending}
             onChange={handleCourseCheckbox}
             onClick={(e) => e.stopPropagation()}
@@ -99,7 +100,7 @@ function CourseBar(props) {
                     <input
                       type="checkbox"
                       className="topic-checkbox"
-                      checked={topic.is_selected}
+                      checked={topic.selection_status === 'selected'}
                       disabled={props.isTopicPending?.(topic.id)}
                       onChange={(e) => handleTopicCheckbox(e, topic.id)}
                       onClick={(e) => e.stopPropagation()}

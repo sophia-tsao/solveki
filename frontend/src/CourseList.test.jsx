@@ -14,19 +14,19 @@ function jsonResponse(payload, { ok = true, status = 200 } = {}) {
 }
 
 const COURSES = [
-  { id: 1, course_name: 'Algebra', grade_level: 8, is_selected: false },
-  { id: 2, course_name: 'Geometry', grade_level: 9, is_selected: false },
+  { id: 1, course_name: 'Algebra', grade_level: 8, topic_selection_status: 'none' },
+  { id: 2, course_name: 'Geometry', grade_level: 9, topic_selection_status: 'none' },
 ];
 
 const ALGEBRA_TOPICS = [
-  { id: 10, topic_name: 'Linear equations', is_selected: false },
-  { id: 11, topic_name: 'Quadratics', is_selected: false },
+  { id: 10, topic_name: 'Linear equations', selection_status: 'unselected' },
+  { id: 11, topic_name: 'Quadratics', selection_status: 'unselected' },
 ];
 
 const ALL_TOPICS = [
-  { id: 10, topic_name: 'Linear equations', course_id: 1, is_selected: false },
-  { id: 11, topic_name: 'Quadratics', course_id: 1, is_selected: false },
-  { id: 20, topic_name: 'Triangles', course_id: 2, is_selected: false },
+  { id: 10, topic_name: 'Linear equations', course_id: 1, selection_status: 'unselected' },
+  { id: 11, topic_name: 'Quadratics', course_id: 1, selection_status: 'unselected' },
+  { id: 20, topic_name: 'Triangles', course_id: 2, selection_status: 'unselected' },
 ];
 
 beforeEach(() => {
@@ -150,7 +150,7 @@ describe('CourseList', () => {
       if (url === '/courses/') return Promise.resolve(jsonResponse({ courses: COURSES }));
       if (url === '/courses/1/topics')
         return Promise.resolve(
-          jsonResponse({ topics: [{ id: 10, topic_name: 'Linear equations', is_selected: true }] }),
+          jsonResponse({ topics: [{ id: 10, topic_name: 'Linear equations', selection_status: 'selected' }] }),
         );
       return Promise.resolve(jsonResponse({ ok: true })); // /topics/ prefetch + topic select PATCH
     });

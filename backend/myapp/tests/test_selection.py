@@ -21,39 +21,36 @@ class ViewCoursesTests(TestCase):
     def test_course_selected_only_when_all_topics_selected(self):
         select(self.user, self.t1)
         courses = self.client.get("/courses/").json()["courses"]
-        self.assertFalse(courses[0]["is_selected"])
+        self.assertNotEqual(courses[0]["topic_selection_status"], "all")
 
         select(self.user, self.t2)
         courses = self.client.get("/courses/").json()["courses"]
-        self.assertTrue(courses[0]["is_selected"])
+        self.assertEqual(courses[0]["topic_selection_status"], "all")
 
     def test_course_with_no_topics_is_not_selected(self):
         empty = make_course(course_name="Empty", grade_level=5)
         courses = {c["id"]: c for c in self.client.get("/courses/").json()["courses"]}
-        self.assertFalse(courses[empty.id]["is_selected"])
+        self.assertEqual(courses[empty.id]["topic_selection_status"], "none")
 
-    def test_course_is_partial_when_some_but_not_all_topics_selected(self):
-        # Nothing selected: neither fully nor partially selected.
+    def test_course_selection_state_tracks_topic_selection(self):
+        # Nothing selected.
         course = self.client.get("/courses/").json()["courses"][0]
-        self.assertFalse(course["is_selected"])
-        self.assertFalse(course["is_partial"])
+        self.assertEqual(course["topic_selection_status"], "none")
 
-        # One of two topics selected: partial, not fully selected.
+        # One of two topics selected: partial.
         select(self.user, self.t1)
         course = self.client.get("/courses/").json()["courses"][0]
-        self.assertFalse(course["is_selected"])
-        self.assertTrue(course["is_partial"])
+        self.assertEqual(course["topic_selection_status"], "partial")
 
-        # Both selected: fully selected, no longer partial.
+        # Both selected: fully selected.
         select(self.user, self.t2)
         course = self.client.get("/courses/").json()["courses"][0]
-        self.assertTrue(course["is_selected"])
-        self.assertFalse(course["is_partial"])
+        self.assertEqual(course["topic_selection_status"], "all")
 
     def test_course_with_no_topics_is_not_partial(self):
         empty = make_course(course_name="Empty", grade_level=5)
         courses = {c["id"]: c for c in self.client.get("/courses/").json()["courses"]}
-        self.assertFalse(courses[empty.id]["is_partial"])
+        self.assertEqual(courses[empty.id]["topic_selection_status"], "none")
 
 
 class ViewCourseTopicsTests(TestCase):
@@ -67,15 +64,15 @@ class ViewCourseTopicsTests(TestCase):
     def test_topics_include_selection_state(self):
         select(self.user, self.topic)
         data = self.client.get(f"/courses/{self.course.id}/topics").json()
-        self.assertIn("is_selected", data["topics"][0])
-        self.assertTrue(data["topics"][0]["is_selected"])
+        self.assertIn("selection_status", data["topics"][0])
+        self.assertEqual(data["topics"][0]["selection_status"], "selected")
 
     def test_selection_is_per_user(self):
         other = make_user()
         select(other, self.topic)
         # Current user has not selected it, so it reads as unselected.
         data = self.client.get(f"/courses/{self.course.id}/topics").json()
-        self.assertFalse(data["topics"][0]["is_selected"])
+        self.assertEqual(data["topics"][0]["selection_status"], "unselected")
 
 
 class ViewTopicsTests(TestCase):
@@ -98,14 +95,14 @@ class ViewTopicsTests(TestCase):
     def test_includes_per_user_selection_state(self):
         select(self.user, self.linear)
         by_id = {t["id"]: t for t in self.client.get("/topics/").json()["topics"]}
-        self.assertTrue(by_id[self.linear.id]["is_selected"])
-        self.assertFalse(by_id[self.triangles.id]["is_selected"])
+        self.assertEqual(by_id[self.linear.id]["selection_status"], "selected")
+        self.assertEqual(by_id[self.triangles.id]["selection_status"], "unselected")
 
     def test_selection_is_per_user(self):
         other = make_user()
         select(other, self.linear)
         by_id = {t["id"]: t for t in self.client.get("/topics/").json()["topics"]}
-        self.assertFalse(by_id[self.linear.id]["is_selected"])
+        self.assertEqual(by_id[self.linear.id]["selection_status"], "unselected")
 
 
 class ToggleTopicTests(TestCase):

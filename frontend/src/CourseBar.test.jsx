@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import CourseBar from './CourseBar.jsx';
 
 const TOPICS = [
-  { id: 1, topic_name: 'Addition', is_selected: true },
-  { id: 2, topic_name: 'Subtraction', is_selected: false },
+  { id: 1, topic_name: 'Addition', selection_status: 'selected' },
+  { id: 2, topic_name: 'Subtraction', selection_status: 'unselected' },
 ];
 
 function setup(overrides = {}) {
@@ -15,7 +15,7 @@ function setup(overrides = {}) {
     gradeLevel: 8,
     topics: TOPICS,
     isOpen: false,
-    isCourseSelected: false,
+    courseSelection: 'none',
     onItemClick: vi.fn(),
     onTopicToggle: vi.fn(),
     onCourseToggle: vi.fn(),
@@ -60,17 +60,24 @@ describe('CourseBar', () => {
   });
 
   it('reflects the course-selected checkbox state', () => {
-    setup({ isCourseSelected: true });
+    setup({ courseSelection: 'all' });
     const [courseCheckbox] = screen.getAllByRole('checkbox');
     expect(courseCheckbox).toBeChecked();
+  });
+
+  it('shows the indeterminate dash when the course is partially selected', () => {
+    setup({ courseSelection: 'partial' });
+    const [courseCheckbox] = screen.getAllByRole('checkbox');
+    expect(courseCheckbox).not.toBeChecked();
+    expect(courseCheckbox.indeterminate).toBe(true);
   });
 
   it('groups topics under their unit title, preserving order', () => {
     setup({
       topics: [
-        { id: 1, topic_name: 'Addition', is_selected: false, unit_key: 'u1', unit_name: 'Number Sense' },
-        { id: 2, topic_name: 'Subtraction', is_selected: false, unit_key: 'u1', unit_name: 'Number Sense' },
-        { id: 3, topic_name: 'Solving Equations', is_selected: false, unit_key: 'u2', unit_name: 'Algebra Basics' },
+        { id: 1, topic_name: 'Addition', selection_status: 'unselected', unit_key: 'u1', unit_name: 'Number Sense' },
+        { id: 2, topic_name: 'Subtraction', selection_status: 'unselected', unit_key: 'u1', unit_name: 'Number Sense' },
+        { id: 3, topic_name: 'Solving Equations', selection_status: 'unselected', unit_key: 'u2', unit_name: 'Algebra Basics' },
       ],
     });
     const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);

@@ -87,18 +87,21 @@ function CourseList({ onStartDiagnostic, userId }) {
     });
   }, [allTopics]);
 
-  // Optimistically flip a course's selection state in the cached courses list.
-  const patchCourseSelected = (courseID, isSelected, isPartial) =>
+  // Optimistically set a course's tri-state topic-selection status
+  // ('all' | 'partial' | 'none') in the cached courses list.
+  const patchCourseSelection = (courseID, status) =>
     queryClient.setQueryData(['courses'], (prev = []) =>
-      prev.map(c => c.id === courseID ? { ...c, is_selected: isSelected, is_partial: isPartial } : c));
+      prev.map(c => c.id === courseID ? { ...c, topic_selection_status: status } : c));
 
-  // Derive and apply a course's header state (selected / partial) from its
-  // topics' selection flags.
-  const applyCourseStateFromTopics = (courseID, topics) => {
-    const allSelected = topics.every(t => t.is_selected);
-    const anySelected = topics.some(t => t.is_selected);
-    patchCourseSelected(courseID, allSelected, anySelected && !allSelected);
+  // Derive a course's header status from its topics' selection statuses.
+  const selectionStatusFromTopics = (topics) => {
+    if (topics.length && topics.every(t => t.selection_status === 'selected')) return 'all';
+    if (topics.some(t => t.selection_status === 'selected')) return 'partial';
+    return 'none';
   };
+
+  const applyCourseStateFromTopics = (courseID, topics) =>
+    patchCourseSelection(courseID, selectionStatusFromTopics(topics));
 
   const handleCourseBarClick = async (courseID) => {
     if (expandedCourses.has(courseID)) {
@@ -135,7 +138,8 @@ function CourseList({ onStartDiagnostic, userId }) {
     // reacts instantly; a slow round-trip no longer looks like a dead click and
     // invites a duplicate. Snapshot the prior state to roll back on failure.
     const prevTopics = topicsMap[courseID];
-    const updatedTopics = prevTopics.map(t => t.id === topicID ? { ...t, is_selected: newValue } : t);
+    const updatedTopics = prevTopics.map(t =>
+      t.id === topicID ? { ...t, selection_status: newValue ? 'selected' : 'unselected' } : t);
     setTopicsMap(prev => ({ ...prev, [courseID]: updatedTopics }));
     applyCourseStateFromTopics(courseID, updatedTopics);
     setPendingKey(key, true);
@@ -166,11 +170,11 @@ function CourseList({ onStartDiagnostic, userId }) {
     // the prior header state (from the courses cache) to restore on failure.
     const prevCourse = courses.find(c => c.id === courseID);
     const prevTopics = topicsMap[courseID];
-    patchCourseSelected(courseID, newValue, false); // whole-course toggle -> no mixed state
+    patchCourseSelection(courseID, newValue ? 'all' : 'none'); // whole-course toggle -> no mixed state
     if (prevTopics) {
       setTopicsMap(prev => ({
         ...prev,
-        [courseID]: prevTopics.map(t => ({ ...t, is_selected: newValue })),
+        [courseID]: prevTopics.map(t => ({ ...t, selection_status: newValue ? 'selected' : 'unselected' })),
       }));
     }
     setPendingKey(key, true);
@@ -183,7 +187,7 @@ function CourseList({ onStartDiagnostic, userId }) {
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       log.info(`Course ${courseID} ${newValue ? 'selected' : 'deselected'}`);
     } catch (err) {
-      if (prevCourse) patchCourseSelected(courseID, prevCourse.is_selected, prevCourse.is_partial);
+      if (prevCourse) patchCourseSelection(courseID, prevCourse.topic_selection_status);
       if (prevTopics) setTopicsMap(prev => ({ ...prev, [courseID]: prevTopics })); // roll back
       log.error(`Failed to toggle course ${courseID}:`, err.message);
       setError(err.message);
@@ -256,8 +260,7 @@ function CourseList({ onStartDiagnostic, userId }) {
           gradeLevel={course.grade_level}
           topics={visibleTopics}
           isOpen={searching || expandedCourses.has(course.id)}
-          isCourseSelected={course.is_selected}
-          isCoursePartial={course.is_partial}
+          courseSelection={course.topic_selection_status}
           onItemClick={handleCourseBarClick}
           onTopicToggle={handleTopicToggle}
           onCourseToggle={handleCourseToggle}
