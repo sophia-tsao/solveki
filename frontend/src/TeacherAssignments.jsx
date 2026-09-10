@@ -37,13 +37,12 @@ function TeacherAssignments({ onCreate, onOpen, onEdit }) {
       ) : (
         <table className="teacher-table">
           <thead>
-            <tr><th>Title</th><th>SM-2</th><th></th></tr>
+            <tr><th>Title</th><th></th></tr>
           </thead>
           <tbody>
             {data.assignments.map((a) => (
               <tr key={a.id}>
                 <td className="clickable" onClick={() => onOpen(a.id)}>{a.title}</td>
-                <td>{a.mode?.endsWith('_sm2') ? 'On' : 'Off'}</td>
                 <td style={{ display: 'flex', gap: '0.4rem' }}>
                   <button className="teacher-button secondary" onClick={() => onOpen(a.id)}>Results</button>
                   <button className="teacher-button secondary" onClick={() => onEdit(a.id)}>Edit</button>

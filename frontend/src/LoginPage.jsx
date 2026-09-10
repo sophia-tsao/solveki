@@ -158,19 +158,19 @@ function WhySolveki() {
           </p>
         </div>
         <div className="landing-feature">
-          <h2>Assign practice your way</h2>
+          <h2>Assign topics to practice</h2>
           <p>
-            Build assignments from specific topics with set question counts, or
-            hand students a spaced-repetition deck. Optionally let an
-            assignment feed each student's own review schedule, and give every
+            Pick the topics you want a class working on and how many cards a day
+            their deck should hold. Solveki adds those topics to each student's
+            practice and schedules them with spaced repetition &mdash; give every
             class its own due date.
           </p>
         </div>
         <div className="landing-feature">
           <h2>See who needs help</h2>
           <p>
-            Track completion and accuracy across each class, see which topics
-            students struggle with most, and open any student to view their
+            Watch familiarity climb across each class over time, see who's
+            practiced by the due date, and open any student to view their
             progress and assignment history.
           </p>
         </div>
@@ -215,11 +215,11 @@ function Faq() {
     },
     {
       q: 'What can teachers assign?',
-      a: 'Two kinds of assignment: a fixed set of topics with a chosen number of questions each, or a spaced-repetition deck drawn from the student’s selected topics. Each can optionally feed the student’s own review schedule, and you can give every class its own due date.',
+      a: 'You pick the topics you want a class practicing and how many cards a day their deck should hold. Those topics are added to each student’s practice and scheduled with spaced repetition, and you can give every class its own due date.',
     },
     {
       q: 'What can teachers see?',
-      a: 'Completion and average accuracy for each class, the topics students struggle with most, and a per-student view of their progress and assignment history — the same spaced-repetition progress the student sees on their own dashboard.',
+      a: 'Familiarity across each class over time, who has practiced the assigned topics by the due date, and a per-student view of their progress and assignment history — the same spaced-repetition progress the student sees on their own dashboard.',
     },
   ];
   return (

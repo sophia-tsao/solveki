@@ -127,6 +127,36 @@ class DailyPractice(models.Model):
     def __str__(self):
         return f"Practice({self.user} on {self.date}: {self.answered}/{self.total})"
 
+class ProficiencySnapshot(models.Model):
+    """A daily count of how many of a user's selected topics sit in each proficiency band.
+
+    The dashboard/teacher views bucket a topic's SM-2 `interval` into four
+    proficiency bands (New / Learning / Familiar / Proficient). That's a *current*
+    view; to chart familiarity over time we persist one row per (user, date)
+    holding the band counts as of that day. Written on active days (deck load and
+    after grading — see ``_snapshot_proficiency``); a day with no row means the
+    student wasn't active, and readers forward-fill the last known snapshot.
+
+    Counts are over the user's currently-selected, usable topics (matching the
+    dashboard donut's "topics selected" total), so `total` == new + learning +
+    familiar + proficient.
+    """
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="proficiency_snapshots")
+    date = models.DateField()
+    new = models.IntegerField(default=0)
+    learning = models.IntegerField(default=0)
+    familiar = models.IntegerField(default=0)
+    proficient = models.IntegerField(default=0)
+    total = models.IntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "date"], name="unique_user_date_proficiency"),
+        ]
+
+    def __str__(self):
+        return f"Proficiency({self.user} on {self.date}: {self.total} topics)"
+
 class Settings(models.Model):
     """Per-user settings.
 
@@ -195,90 +225,31 @@ class ClassEnrollment(models.Model):
 class Assignment(models.Model):
     """A teacher-authored task, assignable to one or more classes.
 
-    Two kinds:
-      - `topics`: the teacher picks specific topics and how many questions of
-        each (see `AssignmentTopic`).
-      - `deck`: the student completes their own spaced-repetition deck of size
-        `deck_size`, either across all their selected topics (`deck_scope='all'`)
-        or limited to a teacher-picked set of topics (`deck_scope='topics'`, the
-        set stored as `AssignmentTopic` rows). The legacy `course`/`unit` scopes
-        remain for older assignments.
+    An assignment is a single idea: the teacher picks a set of topics to add to
+    students' spaced-repetition decks (stored as `AssignmentTopic` rows) and how
+    many cards the daily practice deck should hold (`deck_size`). Opening an
+    assignment adds its topics to the student's own selections and grows today's
+    practice deck to `deck_size`; the student then practices through their normal
+    deck, so SM-2 always schedules the work. The assignment's topics also drive
+    its progress report (proficiency on those topics by the due date).
 
-    When SM-2 is enabled (a `*_sm2` mode), completing the assignment applies one
-    SM-2 grade per topic derived from the student's accuracy; otherwise assignment
-    answers never touch the student's `TopicReview` schedule. An assignment is
-    authored once and handed to classes through `AssignmentClass`, so
-    editing/deleting it affects every class it was assigned to.
-
-    The delivery kind (topics vs deck) and whether SM-2 is applied are stored
-    together in a single `mode` field. Use the `is_topics`/`is_deck`/`sm2_enabled`
-    properties to read either dimension, and `Assignment.make_mode` to compose a
-    mode from the two.
+    An assignment is authored once and handed to classes through
+    `AssignmentClass`, so editing/deleting it affects every class it reached.
     """
-    TOPICS = "topics"
-    TOPICS_SM2 = "topics_sm2"
-    DECK = "deck"
-    DECK_SM2 = "deck_sm2"
-    MODE_CHOICES = [
-        (TOPICS, "Topics"),
-        (TOPICS_SM2, "Topics + SM-2"),
-        (DECK, "Deck"),
-        (DECK_SM2, "Deck + SM-2"),
-    ]
-    _DECK_MODES = frozenset({DECK, DECK_SM2})
-    _SM2_MODES = frozenset({TOPICS_SM2, DECK_SM2})
-
-    SCOPE_ALL = "all"
-    SCOPE_TOPICS = "topics"
-    SCOPE_COURSE = "course"  # legacy
-    SCOPE_UNIT = "unit"  # legacy
-    SCOPE_CHOICES = [
-        (SCOPE_ALL, "All selected"),
-        (SCOPE_TOPICS, "Teacher-picked topics"),
-        (SCOPE_COURSE, "Course"),
-        (SCOPE_UNIT, "Unit"),
-    ]
-
     teacher = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="authored_assignments")
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, default="")
-    mode = models.CharField(max_length=16, choices=MODE_CHOICES, default=TOPICS)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    # Deck-kind scoping (ignored for topics-kind assignments).
-    deck_scope = models.CharField(max_length=10, choices=SCOPE_CHOICES, blank=True, null=True)
-    course = models.ForeignKey('Course', blank=True, null=True, on_delete=models.SET_NULL, related_name="deck_assignments")
-    unit_key = models.CharField(max_length=64, blank=True, null=True)
     deck_size = models.IntegerField(default=10)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Assignment({self.title} by {self.teacher})"
 
-    @property
-    def is_deck(self):
-        return self.mode in self._DECK_MODES
-
-    @property
-    def is_topics(self):
-        return not self.is_deck
-
-    @property
-    def sm2_enabled(self):
-        return self.mode in self._SM2_MODES
-
-    @classmethod
-    def make_mode(cls, kind, sm2_enabled):
-        """Compose a `mode` value from a base kind (topics/deck) and an SM-2 flag."""
-        if kind == cls.DECK:
-            return cls.DECK_SM2 if sm2_enabled else cls.DECK
-        return cls.TOPICS_SM2 if sm2_enabled else cls.TOPICS
-
 
 class AssignmentTopic(models.Model):
-    """One topic in a topics-kind `Assignment`, with its question count."""
+    """One topic an `Assignment` adds to each assigned student's practice deck."""
     assignment = models.ForeignKey('Assignment', on_delete=models.CASCADE, related_name="assignment_topics")
     topic = models.ForeignKey('Topic', on_delete=models.CASCADE, related_name="assignment_topics")
-    num_questions = models.IntegerField(default=1)
 
     class Meta:
         constraints = [
@@ -286,7 +257,7 @@ class AssignmentTopic(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.assignment} :: {self.topic} x{self.num_questions}"
+        return f"{self.assignment} :: {self.topic}"
 
 
 class AssignmentClass(models.Model):
@@ -312,14 +283,14 @@ class AssignmentClass(models.Model):
 
 
 class StudentAssignment(models.Model):
-    """One student's instance of an assignment: their generated problems + progress.
+    """A lightweight record that a student has opened an assignment.
 
-    Problems are generated per-student on first open (same topics/counts as the
-    assignment spec, freshly generated numbers) and stored inline as JSON in the
-    same shape as `DailyDeck.problems` (a list of {problem, solution, topic_id}).
-    Per-problem results are recorded in `AssignmentAttempt`. `classroom` records
-    which class context the student took it under (an assignment may reach a
-    student through exactly one of their classes).
+    Opening an assignment routes the student to their normal practice page (its
+    topics are added to their selections and today's deck is grown to the
+    assignment's `deck_size`), so there's no separate assignment quiz to store.
+    This row just marks that the student started, and through which class, for
+    the teacher's report. Progress itself is read from the student's SM-2 state
+    on the assignment's topics (`TopicReview` / `DailyTopicGrade`).
     """
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
@@ -330,10 +301,7 @@ class StudentAssignment(models.Model):
     classroom = models.ForeignKey('Classroom', on_delete=models.CASCADE, related_name="student_assignments")
     student = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="student_assignments")
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=NOT_STARTED)
-    problems = models.JSONField(default=list)
-    current_index = models.IntegerField(default=0)
     started_at = models.DateTimeField(blank=True, null=True)
-    completed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         constraints = [
@@ -342,31 +310,6 @@ class StudentAssignment(models.Model):
 
     def __str__(self):
         return f"StudentAssignment({self.student} :: {self.assignment}, {self.status})"
-
-
-class AssignmentAttempt(models.Model):
-    """A single answered problem within a `StudentAssignment`.
-
-    Normalized (one row per answered problem) so teacher analytics aggregate with
-    the ORM: per-topic accuracy ("most struggled with"), per-student accuracy, and
-    overall averages. `outcome` mirrors the deck's outcome strings; `attempts` is
-    1 or 2 (the practice UI allows two tries).
-    """
-    student_assignment = models.ForeignKey('StudentAssignment', on_delete=models.CASCADE, related_name="attempts")
-    topic = models.ForeignKey('Topic', on_delete=models.SET_NULL, blank=True, null=True, related_name="assignment_attempts")
-    problem_index = models.IntegerField()
-    is_correct = models.BooleanField()
-    attempts = models.IntegerField(default=1)
-    outcome = models.CharField(max_length=20)
-    answered_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=["student_assignment", "problem_index"], name="unique_studentassignment_problem"),
-        ]
-
-    def __str__(self):
-        return f"Attempt(sa={self.student_assignment_id} #{self.problem_index}, correct={self.is_correct})"
 
 
 class DailyDeck(models.Model):

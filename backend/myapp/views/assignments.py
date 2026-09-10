@@ -1,6 +1,7 @@
 import json
 import logging
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.http import JsonResponse
 from django.utils import timezone
@@ -10,30 +11,31 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
     Assignment, AssignmentTopic, AssignmentClass, Classroom, ClassEnrollment,
-    StudentAssignment, AssignmentAttempt, Topic, UserTopicSelection,
+    StudentAssignment, Topic, UserTopicSelection, TopicReview, DailyTopicGrade,
 )
-from ..diagnostic_config import unit_for_topic
 from .common import _require_auth, _require_teacher
-from .deck import _effective_due_dates, _weighted_slot_counts, _client_today, _apply_quality
-from .problems import _make_problem_for_topic
+from .deck import _client_today, _get_or_create_today_deck, _grow_today_deck, _interval_band
 
 logger = logging.getLogger(__name__)
 
-# Same outcome->quality/correctness mapping the deck uses; an assignment card is
-# answered with the same two-attempt UI.
-_OUTCOME_CORRECT = {"correct_first": True, "correct_second": True, "incorrect": False}
-_OUTCOME_ATTEMPTS = {"correct_first": 1, "correct_second": 2, "incorrect": 2}
-
 
 # ---------------------------------------------------------------------------
-# Problem generation for a student's instance of an assignment
+# Assignment model, simplified
 # ---------------------------------------------------------------------------
+#
+# An assignment is a single idea: the teacher picks topics to add to students'
+# spaced-repetition decks, and how many cards the deck should hold. The
+# teacher-picked topics (stored as `AssignmentTopic` rows) are added to each
+# assigned student's own selections when they open the assignment — so the work
+# flows through the student's normal daily practice, with SM-2 always scheduling
+# it — and those same topics drive the progress report.
+
 
 def _ensure_selected(student, topics):
     """Add `topics` to `student`'s own selections (idempotent).
 
-    Selecting a deck assignment's teacher-picked topics adds them to the
-    student's selections, so they also show up in the student's daily practice.
+    Opening an assignment adds its teacher-picked topics to the student's
+    selections, so they show up in the student's normal daily practice deck.
     """
     if not topics:
         return
@@ -50,80 +52,10 @@ def _ensure_selected(student, topics):
         UserTopicSelection.objects.bulk_create(to_create, ignore_conflicts=True)
 
 
-def _scoped_deck_topics(assignment, student):
-    """The student's selected, usable topics filtered to a deck assignment's scope."""
-    topics = Topic.objects.filter(
-        selections__user=student, generator_name__isnull=False
-    )
-    if assignment.deck_scope == Assignment.SCOPE_TOPICS:
-        # Teacher-picked topics are included regardless of the student's prior
-        # selections, and are added to those selections so they carry over into
-        # the student's own daily practice.
-        topic_ids = list(assignment.assignment_topics.values_list("topic_id", flat=True))
-        picked = list(Topic.objects.filter(id__in=topic_ids, generator_name__isnull=False))
-        _ensure_selected(student, picked)
-        return picked
-    if assignment.deck_scope == Assignment.SCOPE_COURSE and assignment.course_id:
-        topics = topics.filter(course_id=assignment.course_id)
-    elif assignment.deck_scope == Assignment.SCOPE_UNIT and assignment.unit_key:
-        topics = topics.select_related("course")
-        matched = []
-        for t in topics:
-            course_name = t.course.course_name if t.course else ""
-            unit = unit_for_topic(course_name, t.topic_name)
-            if unit and unit["key"] == assignment.unit_key:
-                matched.append(t)
-        return matched
-    return list(topics)
-
-
-def _emit_weighted(user, topics, count, today):
-    """Generate up to `count` problems across `topics`, weighted by SM-2 due priority.
-
-    Reuses the deck's due-weighting (`_effective_due_dates`/`_weighted_slot_counts`)
-    so a deck-kind assignment mirrors normal practice: overdue topics get more of
-    the questions. Returns a list of {problem, solution, topic_id}.
-    """
-    if count <= 0 or not topics:
-        return []
-    due = _effective_due_dates(user, topics, today)
-    ordered = sorted(topics, key=lambda t: (due[t.id], t.id))
-    counts = _weighted_slot_counts(ordered, due, count, today)
-    sequence = []
-    left = dict(counts)
-    while len(sequence) < sum(counts.values()):
-        for topic in ordered:
-            if left.get(topic.id, 0) > 0:
-                sequence.append(topic)
-                left[topic.id] -= 1
-    return _generate_for_sequence(sequence)
-
-
-def _generate_for_sequence(sequence):
-    """Generate one problem per topic in `sequence`, skipping broken generators."""
-    problems = []
-    broken = set()
-    for topic in sequence:
-        if topic.id in broken:
-            continue
-        made = _make_problem_for_topic(topic)
-        if made is None:
-            broken.add(topic.id)
-            continue
-        problems.append(made)
-    return problems
-
-
-def _generate_problems_for_student(assignment, student, today):
-    """Build the concrete problem list for one student's instance of an assignment."""
-    if assignment.is_deck:
-        topics = _scoped_deck_topics(assignment, student)
-        return _emit_weighted(student, topics, assignment.deck_size, today)
-    # Topics kind: a fixed number of freshly generated problems per chosen topic.
-    sequence = []
-    for at in assignment.assignment_topics.select_related("topic").order_by("id"):
-        sequence.extend([at.topic] * max(0, at.num_questions))
-    return _generate_for_sequence(sequence)
+def _assignment_topics(assignment):
+    """The assignment's teacher-picked topics that have a usable generator."""
+    topic_ids = list(assignment.assignment_topics.values_list("topic_id", flat=True))
+    return list(Topic.objects.filter(id__in=topic_ids, generator_name__isnull=False))
 
 
 # ---------------------------------------------------------------------------
@@ -135,10 +67,6 @@ def _serialize_assignment(assignment, include_topics=True):
         "id": assignment.id,
         "title": assignment.title,
         "description": assignment.description,
-        "mode": assignment.mode,
-        "deck_scope": assignment.deck_scope,
-        "course_id": assignment.course_id,
-        "unit_key": assignment.unit_key,
         "deck_size": assignment.deck_size,
         "created_at": assignment.created_at.isoformat(),
     }
@@ -148,7 +76,6 @@ def _serialize_assignment(assignment, include_topics=True):
                 "topic_id": at.topic_id,
                 "topic_name": at.topic.topic_name,
                 "course_id": at.topic.course_id,
-                "num_questions": at.num_questions,
             }
             for at in assignment.assignment_topics.select_related("topic").order_by("id")
         ]
@@ -164,16 +91,17 @@ def _serialize_assignment(assignment, include_topics=True):
     return data
 
 
-def _accuracy(correct, total):
-    return round(correct / total, 4) if total else None
-
-
 # ---------------------------------------------------------------------------
 # Teacher: assignment authoring
 # ---------------------------------------------------------------------------
 
 def _apply_assignment_body(assignment, body):
-    """Set assignment fields from a create/update body. Returns None or an error response."""
+    """Set assignment fields from a create/update body. Returns None or an error response.
+
+    Delivery is fixed: every assignment is a spaced-repetition deck scoped to all
+    of each student's selected topics, with SM-2 on. Only the title, description,
+    and deck size (the teacher's card count) are teacher-editable.
+    """
     if "title" in body:
         title = (body.get("title") or "").strip()
         if not title:
@@ -181,50 +109,32 @@ def _apply_assignment_body(assignment, body):
         assignment.title = title
     if "description" in body:
         assignment.description = body.get("description") or ""
-    if "mode" in body:
-        if body["mode"] not in dict(Assignment.MODE_CHOICES):
-            return JsonResponse({"error": "invalid mode"}, status=400)
-        assignment.mode = body["mode"]
-    if assignment.is_deck:
-        assignment.deck_scope = body.get("deck_scope", assignment.deck_scope or Assignment.SCOPE_ALL)
-        assignment.course_id = body.get("course_id", assignment.course_id)
-        assignment.unit_key = body.get("unit_key", assignment.unit_key)
-        if "deck_size" in body:
-            try:
-                assignment.deck_size = max(1, int(body["deck_size"]))
-            except (ValueError, TypeError):
-                return JsonResponse({"error": "deck_size must be an integer"}, status=400)
+    if "deck_size" in body:
+        try:
+            assignment.deck_size = max(1, int(body["deck_size"]))
+        except (ValueError, TypeError):
+            return JsonResponse({"error": "deck_size must be an integer"}, status=400)
     return None
 
 
 def _set_assignment_topics(assignment, topics_spec):
-    """Replace an assignment's topic list from [{topic_id, num_questions}, ...]."""
+    """Replace an assignment's topic list from [{topic_id}, ...].
+
+    These are the topics added to each assigned student's deck. Per-topic counts
+    no longer apply (deck size governs the total), so only the topic id matters.
+    """
     assignment.assignment_topics.all().delete()
+    seen = set()
     rows = []
     for spec in topics_spec or []:
         topic_id = spec.get("topic_id")
-        try:
-            num = max(1, int(spec.get("num_questions", 1)))
-        except (ValueError, TypeError):
-            num = 1
-        if topic_id is None:
+        if topic_id is None or topic_id in seen:
             continue
         if not Topic.objects.filter(id=topic_id).exists():
             continue
-        rows.append(AssignmentTopic(assignment=assignment, topic_id=topic_id, num_questions=num))
+        seen.add(topic_id)
+        rows.append(AssignmentTopic(assignment=assignment, topic_id=topic_id))
     AssignmentTopic.objects.bulk_create(rows)
-
-
-def _uses_topic_list(assignment):
-    """Whether the assignment stores an explicit topic list (`AssignmentTopic`).
-
-    True for the topics kind, and for a deck scoped to teacher-picked topics —
-    both drive their topic set from the same `AssignmentTopic` rows.
-    """
-    return assignment.is_topics or (
-        assignment.is_deck
-        and assignment.deck_scope == Assignment.SCOPE_TOPICS
-    )
 
 
 def _get_owned_assignment(request, assignment_id):
@@ -256,8 +166,7 @@ def assignments(request):
             if not assignment.title:
                 return JsonResponse({"error": "title is required"}, status=400)
             assignment.save()
-            if _uses_topic_list(assignment):
-                _set_assignment_topics(assignment, body.get("topics"))
+            _set_assignment_topics(assignment, body.get("topics"))
         logger.info("Teacher %s created assignment %s", request.user.id, assignment.id)
         return JsonResponse(_serialize_assignment(assignment), status=201)
 
@@ -288,7 +197,7 @@ def assignment_detail(request, assignment_id):
             if err:
                 return err
             assignment.save()
-            if _uses_topic_list(assignment) and "topics" in body:
+            if "topics" in body:
                 _set_assignment_topics(assignment, body.get("topics"))
     return JsonResponse(_serialize_assignment(assignment))
 
@@ -334,46 +243,49 @@ def assign_to_classes(request, assignment_id):
     return JsonResponse(_serialize_assignment(assignment))
 
 
-@csrf_exempt
-@require_http_methods(["GET"])
-def assignment_preview(request, assignment_id):
-    """A sample generation of the assignment's problems (teacher preview).
-
-    For a topics-kind assignment this is a real generation of the spec. For a
-    deck-kind assignment there's no fixed problem set (it draws from each
-    student's own selected topics), so we describe the scope instead.
-    """
-    guard = _require_teacher(request)
-    if guard:
-        return guard
-    assignment, err = _get_owned_assignment(request, assignment_id)
-    if err:
-        return err
-    if assignment.is_deck:
-        return JsonResponse({
-            "kind": "deck",
-            "deck_scope": assignment.deck_scope,
-            "deck_size": assignment.deck_size,
-            "note": "Deck assignments draw from each student's own selected topics; no fixed preview.",
-        })
-    problems = _generate_problems_for_student(assignment, request.user, _client_today(request))
-    # Show the problem text only (hide solutions in the preview list is optional;
-    # the teacher owns the assignment, so we include them for review).
-    return JsonResponse({"kind": "topics", "problems": problems})
-
-
 # ---------------------------------------------------------------------------
 # Teacher: analytics
 # ---------------------------------------------------------------------------
 
+_BANDS = ("new", "learning", "familiar", "proficient")
+
+
+def _empty_bands():
+    return {b: 0 for b in _BANDS}
+
+
+def _student_due_map(assignment):
+    """Map each assigned student's id -> (class_id, due_at), earliest due wins.
+
+    A student reaches an assignment through a class they're enrolled in that the
+    assignment was assigned to; if several match, the earliest-due link wins (the
+    same rule as `_assignment_link_for_student`), giving one due date per student.
+    """
+    out = {}  # student_id -> (class_id, due_at)
+    links = (
+        AssignmentClass.objects.filter(assignment=assignment)
+        .select_related("classroom")
+        .order_by("due_at", "id")
+    )
+    for link in links:
+        for student_id in ClassEnrollment.objects.filter(
+            classroom_id=link.classroom_id
+        ).values_list("student_id", flat=True):
+            # First link wins because links are already ordered earliest-due.
+            out.setdefault(student_id, (link.classroom_id, link.due_at))
+    return out
+
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def assignment_results(request, assignment_id):
-    """Analytics for one assignment, optionally filtered to a single class.
+    """Familiarity report for one assignment, optionally filtered to a class.
 
-    Reports: average accuracy across the assigned students, per-topic accuracy
-    (worst first — "most struggled with"), and each student's accuracy plus when
-    they began and how long they took.
+    Reports, over the assignment's topics: each student's proficiency-band mix on
+    those topics (from their SM-2 state), whether they've practiced the topics,
+    and whether they're overdue (past due date without practicing). Assignments
+    are now practiced through the student's normal deck, so progress is measured
+    by the SM-2 schedule the practice builds — not a one-off quiz score.
     """
     guard = _require_teacher(request)
     if guard:
@@ -381,61 +293,75 @@ def assignment_results(request, assignment_id):
     assignment, err = _get_owned_assignment(request, assignment_id)
     if err:
         return err
-    class_id = request.GET.get("class")
-    sa_qs = StudentAssignment.objects.filter(assignment=assignment).select_related("student", "classroom")
-    if class_id:
-        sa_qs = sa_qs.filter(classroom_id=class_id)
 
-    students = []
-    overall_correct = overall_total = 0
-    # Per-topic tallies for the "most struggled with" list.
-    topic_tally = {}  # topic_id -> [correct, total, name]
-    for sa in sa_qs:
-        attempts = list(sa.attempts.select_related("topic"))
-        correct = sum(1 for a in attempts if a.is_correct)
-        total = len(attempts)
-        overall_correct += correct
-        overall_total += total
-        for a in attempts:
-            key = a.topic_id
-            name = a.topic.topic_name if a.topic else "(deleted topic)"
-            tally = topic_tally.setdefault(key, [0, 0, name])
-            tally[0] += 1 if a.is_correct else 0
-            tally[1] += 1
-        time_taken = None
-        if sa.started_at and sa.completed_at:
-            time_taken = int((sa.completed_at - sa.started_at).total_seconds())
-        u = sa.student
-        students.append({
-            "student_id": u.id,
-            "name": (u.get_full_name() or u.username or u.email),
-            "class_id": sa.classroom_id,
-            "status": sa.status,
-            "accuracy": _accuracy(correct, total),
-            "answered": total,
-            "started_at": sa.started_at.isoformat() if sa.started_at else None,
-            "completed_at": sa.completed_at.isoformat() if sa.completed_at else None,
-            "time_taken_seconds": time_taken,
-        })
+    topics = _assignment_topics(assignment)
+    topic_ids = [t.id for t in topics]
 
-    topics = sorted(
-        (
-            {"topic_id": tid, "topic_name": t[2], "accuracy": _accuracy(t[0], t[1]), "answered": t[1]}
-            for tid, t in topic_tally.items()
-        ),
-        key=lambda d: (d["accuracy"] if d["accuracy"] is not None else 1),
+    due_map = _student_due_map(assignment)
+    class_filter = request.GET.get("class")
+    if class_filter:
+        try:
+            cid = int(class_filter)
+            due_map = {sid: v for sid, v in due_map.items() if v[0] == cid}
+        except (ValueError, TypeError):
+            pass
+    student_ids = list(due_map.keys())
+
+    # Bulk-fetch the SM-2 state and practice signal for every (student, topic).
+    intervals = {}  # (student_id, topic_id) -> interval
+    for uid, tid, interval in TopicReview.objects.filter(
+        user_id__in=student_ids, topic_id__in=topic_ids
+    ).values_list("user_id", "topic_id", "interval"):
+        intervals[(uid, tid)] = interval
+    graded = set(  # (student_id, topic_id) that has been practiced at least once
+        DailyTopicGrade.objects.filter(
+            user_id__in=student_ids, topic_id__in=topic_ids
+        ).values_list("user_id", "topic_id")
     )
+
+    User = get_user_model()
+    names = {
+        u.id: (u.get_full_name() or u.username or u.email)
+        for u in User.objects.filter(id__in=student_ids)
+    }
+
+    now = timezone.now()
+    students_out = []
+    totals = _empty_bands()
+    num_practiced = 0
+    for sid in student_ids:
+        class_id, due_at = due_map[sid]
+        bands = _empty_bands()
+        for tid in topic_ids:
+            bands[_interval_band(intervals.get((sid, tid), 0))] += 1
+        practiced_any = any((sid, tid) in graded for tid in topic_ids)
+        if practiced_any:
+            num_practiced += 1
+        for b in _BANDS:
+            totals[b] += bands[b]
+        students_out.append({
+            "student_id": sid,
+            "name": names.get(sid, "(unknown)"),
+            "class_id": class_id,
+            "due_at": due_at.isoformat() if due_at else None,
+            "practiced": practiced_any,
+            "overdue": bool(due_at and due_at < now and not practiced_any),
+            "proficiency": bands,
+        })
+    students_out.sort(key=lambda s: s["name"].lower())
+
     return JsonResponse({
         "assignment": _serialize_assignment(assignment),
-        "average_accuracy": _accuracy(overall_correct, overall_total),
-        "num_submissions": len(students),
-        "topics_struggled": topics,
-        "students": students,
+        "topics": [{"topic_id": t.id, "topic_name": t.topic_name} for t in topics],
+        "num_students": len(student_ids),
+        "num_practiced": num_practiced,
+        "band_totals": totals,
+        "students": students_out,
     })
 
 
 # ---------------------------------------------------------------------------
-# Student: viewing and taking assignments
+# Student: viewing and starting assignments
 # ---------------------------------------------------------------------------
 
 def _assignment_link_for_student(assignment, student):
@@ -456,7 +382,12 @@ def _assignment_link_for_student(assignment, student):
 @csrf_exempt
 @require_http_methods(["GET"])
 def my_assignments(request):
-    """The current student's assignments: upcoming (not completed) and completed."""
+    """The current student's assignments: to-do and done.
+
+    An assignment is "done" once the student has practiced all of its topics at
+    least once; otherwise it's outstanding. Progress is tracked through the
+    student's normal deck, so there's no separate assignment quiz to complete.
+    """
     auth = _require_auth(request)
     if auth:
         return auth
@@ -468,10 +399,7 @@ def my_assignments(request):
         .select_related("assignment", "classroom")
         .order_by("due_at", "id")
     )
-    existing = {
-        sa.assignment_id: sa
-        for sa in StudentAssignment.objects.filter(student=request.user)
-    }
+    now = timezone.now()
     seen = set()
     upcoming, completed = [], []
     for link in links:
@@ -479,53 +407,38 @@ def my_assignments(request):
         if a.id in seen:
             continue
         seen.add(a.id)
-        sa = existing.get(a.id)
-        accuracy = None
-        if sa and sa.status == StudentAssignment.COMPLETED:
-            total = sa.attempts.count()
-            correct = sa.attempts.filter(is_correct=True).count()
-            accuracy = _accuracy(correct, total)
+        topic_ids = set(a.assignment_topics.values_list("topic_id", flat=True))
+        practiced = set(
+            DailyTopicGrade.objects.filter(
+                user=request.user, topic_id__in=topic_ids
+            ).values_list("topic_id", flat=True)
+        ) if topic_ids else set()
+        done = bool(topic_ids) and topic_ids.issubset(practiced)
+        started = bool(practiced)
         row = {
             "assignment_id": a.id,
             "title": a.title,
-            "mode": a.mode,
             "class_name": link.classroom.name,
             "due_at": link.due_at.isoformat() if link.due_at else None,
-            "status": sa.status if sa else StudentAssignment.NOT_STARTED,
-            "accuracy": accuracy,
+            "num_topics": len(topic_ids),
+            "num_practiced": len(topic_ids & practiced),
+            "status": "done" if done else ("in_progress" if started else "not_started"),
+            "overdue": bool(link.due_at and link.due_at < now and not done),
         }
-        if sa and sa.status == StudentAssignment.COMPLETED:
-            completed.append(row)
-        else:
-            upcoming.append(row)
+        (completed if done else upcoming).append(row)
     return JsonResponse({"upcoming": upcoming, "completed": completed})
 
 
-def _student_assignment_payload(sa):
-    """Current-card payload for a student taking an assignment (mirrors the deck)."""
-    total = len(sa.problems)
-    if sa.current_index >= total:
-        return {"completed": True, "total": total}
-    current = sa.problems[sa.current_index]
-    topic_id = current.get("topic_id")
-    topic_name = Topic.objects.filter(id=topic_id).values_list("topic_name", flat=True).first() if topic_id else None
-    return {
-        "completed": False,
-        "problem": current["problem"],
-        "solution": current["solution"],
-        "topic_name": topic_name,
-        "current_number": sa.current_index + 1,
-        "total": total,
-    }
-
-
 @csrf_exempt
-@require_http_methods(["GET"])
+@require_http_methods(["POST"])
 def play_assignment(request, assignment_id):
-    """Start or resume the current student's instance of an assignment.
+    """Start an assignment for the current student, then send them to practice.
 
-    Creates the StudentAssignment (generating this student's problems) on first
-    open, marks it in-progress, and returns the current card.
+    Adds the assignment's topics to the student's own selections and grows
+    today's practice deck to the teacher's chosen card count, so opening an
+    assignment simply routes the student to their normal practice page with the
+    assigned topics in scope. Returns {"goto": "practice"} for the client to
+    navigate; the actual practice happens through the deck endpoints.
     """
     auth = _require_auth(request)
     if auth:
@@ -537,134 +450,27 @@ def play_assignment(request, assignment_id):
     if link is None:
         return JsonResponse({"error": "This assignment is not assigned to you"}, status=403)
 
+    today = _client_today(request)
+    topics = _assignment_topics(assignment)
+    _ensure_selected(request.user, topics)
+    # Ensure today's deck exists (built from the now-selected topics), then grow
+    # it — never shrink — to the teacher's card count so the student's practice
+    # session covers the assigned work. Creating first matters when the student
+    # opens the assignment before practicing today: `_grow_today_deck` alone is a
+    # no-op with no deck yet.
+    _get_or_create_today_deck(request.user, today)
+    _grow_today_deck(request.user, assignment.deck_size, today)
+
     sa = StudentAssignment.objects.filter(assignment=assignment, student=request.user).first()
-    # (Re)generate when there's no instance yet, or when a prior open produced an
-    # empty problem list (e.g. a deck assignment opened before the student had any
-    # selected topics in scope). Regenerating lets a stuck empty instance recover
-    # once the student has selected topics, instead of being frozen as "completed".
-    needs_problems = sa is None or (
-        not sa.problems and sa.status != StudentAssignment.COMPLETED
-    )
-    if needs_problems:
-        problems = _generate_problems_for_student(assignment, request.user, _client_today(request))
-        if not problems:
-            # Nothing could be generated. Don't persist a zero-problem instance
-            # (which would read as instantly "completed"); tell the client so it
-            # can explain rather than congratulate.
-            logger.info(
-                "Student %s opened assignment %s but no problems could be generated",
-                request.user.id, assignment_id,
-            )
-            return JsonResponse({
-                "empty": True,
-                "title": assignment.title,
-                "reason": "no_topics_in_scope" if assignment.is_deck else "no_problems",
-            })
-        if sa is None:
-            sa = StudentAssignment.objects.create(
-                assignment=assignment, classroom=link.classroom, student=request.user,
-                problems=problems, status=StudentAssignment.IN_PROGRESS,
-                started_at=timezone.now(),
-            )
-            logger.info("Student %s started assignment %s (%d problems)", request.user.id, assignment_id, len(problems))
-        else:
-            sa.problems = problems
-            sa.status = StudentAssignment.IN_PROGRESS
-            sa.started_at = sa.started_at or timezone.now()
-            sa.save(update_fields=["problems", "status", "started_at"])
+    if sa is None:
+        StudentAssignment.objects.create(
+            assignment=assignment, classroom=link.classroom, student=request.user,
+            status=StudentAssignment.IN_PROGRESS, started_at=timezone.now(),
+        )
     elif sa.status == StudentAssignment.NOT_STARTED:
         sa.status = StudentAssignment.IN_PROGRESS
         sa.started_at = sa.started_at or timezone.now()
         sa.save(update_fields=["status", "started_at"])
 
-    payload = _student_assignment_payload(sa)
-    payload["title"] = assignment.title
-    return JsonResponse(payload)
-
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def advance_assignment(request, assignment_id):
-    """Record the current card's outcome and step forward; finish on the last card.
-
-    Body: {"outcome": "...", "from_number": N}. On completion, if the assignment
-    has SM-2 enabled, applies one accuracy-derived SM-2 grade per topic.
-    """
-    auth = _require_auth(request)
-    if auth:
-        return auth
-    assignment = Assignment.objects.filter(id=assignment_id).first()
-    if assignment is None:
-        return JsonResponse({"error": "Assignment not found"}, status=404)
-    sa = StudentAssignment.objects.filter(assignment=assignment, student=request.user).first()
-    if sa is None:
-        return JsonResponse({"error": "Assignment not started"}, status=400)
-
-    try:
-        body = json.loads(request.body) if request.body else {}
-    except (ValueError, TypeError):
-        body = {}
-    outcome = body.get("outcome")
-    from_number = body.get("from_number")
-
-    total = len(sa.problems)
-    position_ok = from_number is None or from_number == sa.current_index + 1
-    if sa.current_index < total and position_ok:
-        card = sa.problems[sa.current_index]
-        if outcome in _OUTCOME_CORRECT:
-            AssignmentAttempt.objects.update_or_create(
-                student_assignment=sa, problem_index=sa.current_index,
-                defaults={
-                    "topic_id": card.get("topic_id"),
-                    "is_correct": _OUTCOME_CORRECT[outcome],
-                    "attempts": _OUTCOME_ATTEMPTS[outcome],
-                    "outcome": outcome,
-                },
-            )
-        sa.current_index += 1
-        if sa.current_index >= total:
-            sa.status = StudentAssignment.COMPLETED
-            sa.completed_at = timezone.now()
-            sa.save(update_fields=["current_index", "status", "completed_at"])
-            if assignment.sm2_enabled:
-                _apply_sm2_from_accuracy(sa, _client_today(request))
-        else:
-            sa.save(update_fields=["current_index"])
-
-    return JsonResponse(_student_assignment_payload(sa))
-
-
-def _apply_sm2_from_accuracy(sa, today):
-    """On completion, apply one SM-2 grade per topic from the student's accuracy.
-
-    Only called for SM-2-enabled assignments. Per topic, accuracy = correct/total
-    across that topic's attempts in this assignment; it maps to an SM-2 quality
-    which is applied once via the deck's shared scheduling path (`_apply_quality`),
-    so it obeys the same once-per-day rule as normal practice.
-    """
-    tally = {}  # topic_id -> [correct, total]
-    for a in sa.attempts.all():
-        if a.topic_id is None:
-            continue
-        t = tally.setdefault(a.topic_id, [0, 0])
-        t[0] += 1 if a.is_correct else 0
-        t[1] += 1
-    for topic_id, (correct, total) in tally.items():
-        if total == 0:
-            continue
-        quality = _accuracy_to_quality(correct / total)
-        _apply_quality(sa.student, topic_id, quality, today)
-    logger.info("Applied SM-2 grades from accuracy for student assignment %s", sa.id)
-
-
-def _accuracy_to_quality(acc):
-    """Map an accuracy fraction (0..1) to an SM-2 quality grade (1..5)."""
-    if acc >= 0.9:
-        return 5
-    if acc >= 0.75:
-        return 4
-    if acc >= 0.6:
-        return 3
-    if acc >= 0.4:
-        return 2
-    return 1
+    logger.info("Student %s started assignment %s", request.user.id, assignment_id)
+    return JsonResponse({"goto": "practice", "title": assignment.title, "deck_size": assignment.deck_size})

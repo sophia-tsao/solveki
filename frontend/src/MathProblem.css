@@ -322,27 +322,6 @@
     box-shadow: 0 3px 10px rgba(22, 163, 74, 0.2);
 }
 
-/* Exit an in-progress assignment back to the list. Sits above the card stack,
-   understated so it doesn't compete with the answer controls. */
-.assignment-play-back {
-    display: inline-block;
-    margin-bottom: 12px;
-    padding: 6px 10px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #4b5563;
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
-}
-
-.assignment-play-back:hover {
-    color: #1f2937;
-    background: #eef2ff;
-}
-
 .confetti {
     position: absolute;
     top: 0;

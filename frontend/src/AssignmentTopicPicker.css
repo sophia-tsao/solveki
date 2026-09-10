@@ -137,31 +137,6 @@
   flex-shrink: 0;
 }
 
-/* Question-count control sits left of the (right-anchored) checkbox, so
-   selecting a topic never nudges the checkbox column. */
-.atp-count-field {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.atp-count-input {
-  width: 42px;
-  padding: 2px 4px;
-  border: 1px solid #cbd5e1;
-  border-radius: 5px;
-  font: inherit;
-  font-size: 13px;
-  text-align: center;
-  -moz-appearance: textfield;
-}
-
-.atp-count-suffix {
-  font-size: 11px;
-  color: #94a3b8;
-}
-
 .atp-topic-checkbox {
   width: 15px;
   height: 15px;

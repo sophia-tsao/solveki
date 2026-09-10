@@ -35,13 +35,12 @@ urlpatterns = [
     path('assignments/mine/', views.my_assignments, name="my_assignments"),
     path('assignments/<int:assignment_id>/', views.assignment_detail, name="assignment_detail"),
     path('assignments/<int:assignment_id>/assign/', views.assign_to_classes, name="assign_to_classes"),
-    path('assignments/<int:assignment_id>/preview/', views.assignment_preview, name="assignment_preview"),
     path('assignments/<int:assignment_id>/results/', views.assignment_results, name="assignment_results"),
-    # Student taking an assignment.
+    # Student starting an assignment (routes them to their practice deck).
     path('assignments/<int:assignment_id>/play/', views.play_assignment, name="play_assignment"),
-    path('assignments/<int:assignment_id>/advance/', views.advance_assignment, name="advance_assignment"),
 
     # Teacher analytics.
     path('teacher/overview/', views.teacher_overview, name="teacher_overview"),
+    path('teacher/proficiency-history/', views.proficiency_history, name="proficiency_history"),
     path('teacher/students/<int:student_id>/', views.student_detail, name="student_detail"),
 ]

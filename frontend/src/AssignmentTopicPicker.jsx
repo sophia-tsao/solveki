@@ -33,13 +33,12 @@ function groupByUnit(topics) {
 
 /**
  * A courses-page-style picker for choosing topics across multiple courses.
- * Selection lives in the parent as `topicCounts` (topic_id -> count); this
- * component only reads it and calls back to mutate it. With `showCounts` (the
- * default) each selected topic carries a per-topic question count; pass
- * `showCounts={false}` for a selection-only picker (e.g. a deck scoped to a set
- * of topics, where a single deck size governs the total).
+ * Selection lives in the parent as `selected` (a topic_id -> truthy map); this
+ * component only reads it and calls `onToggleTopic` to mutate it. It's a
+ * selection-only picker — assignments add the chosen topics to students' decks,
+ * and a single deck size (set elsewhere) governs how many cards they hold.
  */
-function AssignmentTopicPicker({ topicCounts, onToggleTopic, onSetCount, showCounts = true }) {
+function AssignmentTopicPicker({ selected, onToggleTopic }) {
   const [expanded, setExpanded] = useState(() => new Set());
   const [search, setSearch] = useState('');
 
@@ -89,7 +88,7 @@ function AssignmentTopicPicker({ topicCounts, onToggleTopic, onSetCount, showCou
     .filter((r) => (searching ? r.topics.length > 0 : true));
 
   const selectedCount = (course) =>
-    (topicsByCourse.get(course.id) ?? []).filter((t) => topicCounts[t.id] != null).length;
+    (topicsByCourse.get(course.id) ?? []).filter((t) => selected[t.id] != null).length;
 
   return (
     <div className="atp">
@@ -128,28 +127,14 @@ function AssignmentTopicPicker({ topicCounts, onToggleTopic, onSetCount, showCou
                     {group.name && <h4 className="atp-unit-title">{group.name}</h4>}
                     <ul>
                       {group.topics.map((t) => {
-                        const selected = topicCounts[t.id] != null;
+                        const isSelected = selected[t.id] != null;
                         return (
                           <li key={t.id}>
                             <span className="atp-topic-name">{t.topic_name}</span>
-                            {selected && showCounts && (
-                              <span className="atp-count-field">
-                                <input
-                                  type="number"
-                                  min={1}
-                                  className="atp-count-input"
-                                  value={topicCounts[t.id]}
-                                  onChange={(e) => onSetCount(t.id, e.target.value)}
-                                  onClick={(e) => e.stopPropagation()}
-                                  aria-label={`Number of questions for ${t.topic_name}`}
-                                />
-                                <span className="atp-count-suffix">Qs</span>
-                              </span>
-                            )}
                             <input
                               type="checkbox"
                               className="atp-topic-checkbox"
-                              checked={selected}
+                              checked={isSelected}
                               onChange={() => onToggleTopic(t.id)}
                               aria-label={t.topic_name}
                             />

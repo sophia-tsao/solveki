@@ -9,7 +9,6 @@ import Diagnostic from './Diagnostic.jsx';
 import LoginPage from './LoginPage.jsx';
 import RolePicker from './RolePicker.jsx';
 import Assignments from './Assignments.jsx';
-import AssignmentPlayer from './AssignmentPlayer.jsx';
 import StudentClasses from './StudentClasses.jsx';
 import TeacherOverview from './TeacherOverview.jsx';
 import ClassList from './ClassList.jsx';
@@ -28,7 +27,7 @@ const log = createLogger('app');
 // Pages available per role. The hash router validates the requested page
 // against the current user's set, so a student can't navigate to a teacher
 // page by editing the URL (the backend also enforces this on every endpoint).
-const STUDENT_PAGES = ["math", "dashboard", "courses", "settings", "diagnostic", "assignments", "assignment-play", "student-classes"];
+const STUDENT_PAGES = ["math", "dashboard", "courses", "settings", "diagnostic", "assignments", "student-classes"];
 const TEACHER_PAGES = ["teacher-overview", "classes", "class-detail", "student-detail", "teacher-assignments", "assignment-builder", "assignment-detail", "teacher-guide", "settings"];
 
 function pagesForRole(role) {
@@ -171,8 +170,7 @@ function App() {
         {page === "dashboard" && <Dashboard />}
         {page === "courses" && <CourseList userId={user.id} onStartDiagnostic={() => navigate("diagnostic")} />}
         {page === "diagnostic" && <Diagnostic userId={user.id} onNavigate={(p) => navigate(p)} />}
-        {page === "assignments" && <Assignments onOpen={(assignmentId) => navigate("assignment-play", assignmentId)} />}
-        {page === "assignment-play" && <AssignmentPlayer assignmentId={id} onDone={() => navigate("assignments")} />}
+        {page === "assignments" && <Assignments onStarted={() => navigate("math")} />}
         {page === "student-classes" && <StudentClasses />}
         {/* Teacher pages */}
         {page === "teacher-overview" && <TeacherOverview onOpenClass={(cid) => navigate("class-detail", cid)} />}

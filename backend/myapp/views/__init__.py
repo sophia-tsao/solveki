@@ -45,13 +45,11 @@ from .assignments import (
     assignments,
     assignment_detail,
     assign_to_classes,
-    assignment_preview,
     assignment_results,
     my_assignments,
     play_assignment,
-    advance_assignment,
 )
-from .teacher import teacher_overview, student_detail
+from .teacher import teacher_overview, student_detail, proficiency_history
 
 def __getattr__(name):
     """Lazily expose ``mathgenerator`` as ``myapp.views.mathgenerator``.
@@ -100,11 +98,10 @@ __all__ = [
     "assignments",
     "assignment_detail",
     "assign_to_classes",
-    "assignment_preview",
     "assignment_results",
     "my_assignments",
     "play_assignment",
-    "advance_assignment",
     "teacher_overview",
     "student_detail",
+    "proficiency_history",
 ]

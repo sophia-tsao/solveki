@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import (
     Course, Topic, Settings, Classroom, ClassEnrollment, Assignment,
-    AssignmentTopic, AssignmentClass, StudentAssignment, AssignmentAttempt,
+    AssignmentTopic, AssignmentClass, StudentAssignment,
 )
 
 
@@ -54,15 +54,11 @@ class AssignmentClassInline(admin.TabularInline):
 
 @admin.register(Assignment)
 class AssignmentAdmin(admin.ModelAdmin):
-    list_display = ("title", "teacher", "mode")
-    list_filter = ("mode",)
+    list_display = ("title", "teacher", "deck_size")
     inlines = [AssignmentTopicInline, AssignmentClassInline]
 
 
 @admin.register(StudentAssignment)
 class StudentAssignmentAdmin(admin.ModelAdmin):
-    list_display = ("student", "assignment", "classroom", "status", "current_index")
+    list_display = ("student", "assignment", "classroom", "status")
     list_filter = ("status",)
-
-
-admin.site.register(AssignmentAttempt)

@@ -7,7 +7,10 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
-from ..models import Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade, DailyPractice
+from ..models import (
+    Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade, DailyPractice,
+    ProficiencySnapshot,
+)
 from .common import _require_auth
 from .problems import _make_problem_for_topic
 from .. import srs
@@ -55,6 +58,56 @@ def _has_topics(user):
     return Topic.objects.filter(
         selections__user=user, generator_name__isnull=False
     ).exists()
+
+
+# Proficiency bands, keyed off a topic's SM-2 `interval` (days until next review).
+# These thresholds mirror the frontend's `intervalLevel` (TopicProgress.jsx) so
+# the donut, the teacher views, and the historical snapshots all bucket topics
+# the same way. A never-reviewed topic has interval 0 and lands in "new".
+def _interval_band(interval):
+    if interval <= 1:
+        return "new"
+    if interval < 6:
+        return "learning"
+    if interval < 21:
+        return "familiar"
+    return "proficient"
+
+
+def _snapshot_proficiency(user, today):
+    """Upsert today's `ProficiencySnapshot` for `user` from current SM-2 state.
+
+    Counts the user's currently-selected, usable topics by proficiency band so
+    the teacher's familiarity-over-time charts have a per-day data point. Cheap:
+    one query for the selected topics, one for their reviews, then a single
+    upsert. Called on active days (deck load and after grading); days the student
+    isn't active simply have no row and are forward-filled by readers.
+    """
+    topics = list(
+        Topic.objects.filter(
+            selections__user=user, generator_name__isnull=False
+        ).values_list("id", flat=True)
+    )
+    if not topics:
+        # No usable selection: record an empty snapshot so a day the student
+        # cleared their topics still reads as "0 topics" rather than carrying
+        # forward a stale mix.
+        ProficiencySnapshot.objects.update_or_create(
+            user=user, date=today,
+            defaults={"new": 0, "learning": 0, "familiar": 0, "proficient": 0, "total": 0},
+        )
+        return
+    intervals = dict(
+        TopicReview.objects.filter(user=user, topic_id__in=topics)
+        .values_list("topic_id", "interval")
+    )
+    counts = {"new": 0, "learning": 0, "familiar": 0, "proficient": 0}
+    for topic_id in topics:
+        counts[_interval_band(intervals.get(topic_id, 0))] += 1
+    ProficiencySnapshot.objects.update_or_create(
+        user=user, date=today,
+        defaults={**counts, "total": len(topics)},
+    )
 
 
 def _effective_due_dates(user, topics, today):
@@ -543,7 +596,9 @@ def get_deck(request):
     auth = _require_auth(request)
     if auth:
         return auth
-    deck = _get_or_create_today_deck(request.user, _client_today(request))
+    today = _client_today(request)
+    deck = _get_or_create_today_deck(request.user, today)
+    _snapshot_proficiency(request.user, today)
     return JsonResponse(_deck_payload(request.user, deck))
 
 
@@ -601,6 +656,8 @@ def advance_deck(request):
         deck.current_index += 1
         deck.save(update_fields=["current_index"])
         _record_practice(request.user, deck, today)
+        # Grading may have moved a topic between bands; recapture today's mix.
+        _snapshot_proficiency(request.user, today)
         logger.debug(
             "User %s advanced deck to %d/%d",
             request.user.id, deck.current_index, len(deck.problems),

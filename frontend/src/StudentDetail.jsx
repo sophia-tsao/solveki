@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
 import TopicProgress from './TopicProgress.jsx';
+import ProficiencyTrend from './ProficiencyTrend.jsx';
 import './Teacher.css';
 
-function pct(acc) {
-  return acc == null ? '—' : `${Math.round(acc * 100)}%`;
+function fmtStatus(s) {
+  return s.replace('_', ' ');
 }
 
 function StudentDetail({ studentId }) {
@@ -26,22 +27,31 @@ function StudentDetail({ studentId }) {
       <h1>{data.student.name}</h1>
       <p className="teacher-card-stat">{data.student.email}</p>
 
+      <ProficiencyTrend
+        title="Familiarity over time"
+        description="Share of this student's topics in each proficiency band, day by day."
+        scope="student"
+        studentId={data.student.id}
+      />
+
       <h2>Assignments</h2>
       {data.assignments.length === 0 ? (
         <p className="teacher-empty">No assignments yet.</p>
       ) : (
         <table className="teacher-table">
           <thead>
-            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Accuracy</th><th>Answered</th></tr>
+            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Topics practiced</th></tr>
           </thead>
           <tbody>
             {data.assignments.map((a) => (
               <tr key={a.assignment_id}>
                 <td>{a.title}</td>
                 <td>{a.class_name}</td>
-                <td>{a.status.replace('_', ' ')}</td>
-                <td>{pct(a.accuracy)}</td>
-                <td>{a.answered}</td>
+                <td>
+                  {fmtStatus(a.status)}
+                  {a.overdue && <span className="teacher-overdue"> · overdue</span>}
+                </td>
+                <td>{a.num_practiced}/{a.num_topics}</td>
               </tr>
             ))}
           </tbody>

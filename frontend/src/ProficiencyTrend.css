@@ -1,0 +1,166 @@
+.ptrend {
+  margin: 0 0 1.5rem;
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.ptrend-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.ptrend-title {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #111827;
+}
+
+.ptrend-desc {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.ptrend-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0 0 0.5rem;
+  padding: 0;
+  font-size: 0.8rem;
+  color: #374151;
+}
+
+.ptrend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ptrend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.ptrend-note {
+  font-size: 0.9rem;
+  color: #6b7280;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.ptrend-error {
+  color: #b91c1c;
+}
+
+.ptrend-plot-wrap {
+  position: relative;
+}
+
+.ptrend-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.ptrend-grid {
+  stroke: #eef0f2;
+  stroke-width: 1;
+}
+
+.ptrend-axis {
+  fill: #9ca3af;
+  font-size: 11px;
+}
+
+.ptrend-axis-y {
+  text-anchor: end;
+}
+
+.ptrend-axis-x {
+  text-anchor: middle;
+}
+
+.ptrend-line-label {
+  font-size: 11px;
+  font-weight: 600;
+  dominant-baseline: middle;
+}
+
+.ptrend-crosshair {
+  stroke: #cbd5e1;
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.ptrend-tooltip {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: #111827;
+  color: #f9fafb;
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  font-size: 0.78rem;
+  min-width: 120px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  z-index: 2;
+}
+
+.ptrend-tooltip-date {
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.ptrend-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  line-height: 1.5;
+}
+
+.ptrend-tooltip-label {
+  flex: 1;
+}
+
+.ptrend-tooltip-val {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.ptrend-table-toggle {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.ptrend-table-toggle summary {
+  cursor: pointer;
+  color: #4b5563;
+}
+
+.ptrend-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+}
+
+.ptrend-table th,
+.ptrend-table td {
+  border: 1px solid #e5e7eb;
+  padding: 0.25rem 0.5rem;
+  text-align: right;
+}
+
+.ptrend-table th:first-child,
+.ptrend-table td:first-child {
+  text-align: left;
+}

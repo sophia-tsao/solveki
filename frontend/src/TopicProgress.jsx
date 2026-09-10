@@ -24,7 +24,7 @@ const CATEGORIES = [
 
 // Shared with the CSS .dash-dot-* classes so the pie, dots, and deck accents
 // all read as the same system.
-const LEVEL_COLOR = {
+export const LEVEL_COLOR = {
   new: '#ef4444',
   learning: '#f59e0b',
   young: '#3b82f6',

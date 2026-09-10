@@ -92,12 +92,17 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 - **Classroom** / **ClassEnrollment** — a teacher-owned class with a unique
   `join_code`, and one enrollment row per (class, student).
 - **Assignment** / **AssignmentTopic** / **AssignmentClass** — a teacher-authored
-  task (its `mode` encodes both *topics vs deck* and *whether SM-2 is applied*),
-  its optional explicit topic list with per-topic question counts, and the links
-  handing it to classes with per-class `available_at`/`due_at`.
-- **StudentAssignment** / **AssignmentAttempt** — one student's instance of an
-  assignment (their generated `problems` + progress, same JSON shape as
-  `DailyDeck`), and one normalized row per answered problem for analytics.
+  task (a `title`/`description` and a `deck_size`, the number of cards a day the
+  student's deck should hold while it's active), its picked topic set, and the
+  links handing it to classes with per-class `available_at`/`due_at`.
+- **StudentAssignment** — a lightweight record that a student has opened an
+  assignment (`status`, `started_at`), used for the "who has practiced" report.
+  There's no per-assignment problem set: opening one just feeds the student's
+  normal practice (see below).
+- **ProficiencySnapshot** — one row per (user, date) with a count of the user's
+  selected topics in each proficiency band (`new`/`learning`/`familiar`/
+  `proficient`), captured daily so the teacher's familiarity-over-time charts have
+  history to draw.
 
 ### Endpoints (`backend/myapp/urls.py`)
 
@@ -132,12 +137,11 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 | GET/POST | `assignments/` | `assignments` (teacher: list/create) |
 | GET/PATCH/DELETE | `assignments/<id>/` | `assignment_detail` (teacher) |
 | POST | `assignments/<id>/assign/` | `assign_to_classes` (teacher) |
-| GET | `assignments/<id>/preview/` | `assignment_preview` (teacher) |
 | GET | `assignments/<id>/results/` | `assignment_results` (teacher analytics) |
 | GET | `assignments/mine/` | `my_assignments` (student) |
-| GET | `assignments/<id>/play/` | `play_assignment` (student) |
-| POST | `assignments/<id>/advance/` | `advance_assignment` (student) |
+| GET | `assignments/<id>/play/` | `play_assignment` (student: start → practice deck) |
 | GET | `teacher/overview/` | `teacher_overview` (teacher analytics) |
+| GET | `teacher/proficiency-history/` | `proficiency_history` (teacher analytics) |
 | GET | `teacher/students/<sid>/` | `student_detail` (teacher analytics) |
 
 Selection is exposed as strings, not booleans. Each topic in `view_topics` /
@@ -299,49 +303,55 @@ them).
 
 An **Assignment** is authored once and handed to any number of classes through
 **AssignmentClass** links (each carrying that class's `available_at`/`due_at`),
-so editing or deleting the assignment affects every class it reached. It has two
-orthogonal dimensions, packed into a single `mode` field (read via the
-`is_topics`/`is_deck`/`sm2_enabled` properties, composed via `make_mode`):
-
-- **Delivery kind.** *Topics* — the teacher picks specific topics and a question
-  count each (`AssignmentTopic` rows). *Deck* — the student gets a
-  spaced-repetition deck of `deck_size` problems, either across all their
-  selected topics (`deck_scope='all'`) or limited to a teacher-picked topic set
-  (`deck_scope='topics'`, which is also added to the student's own selections so
-  it carries into their daily practice). Legacy `course`/`unit` scopes remain for
-  older assignments.
-- **SM-2 or not.** A `*_sm2` mode feeds the result back into the student's
-  `TopicReview` schedule on completion; otherwise assignment answers never touch
-  their schedule.
+so editing or deleting the assignment affects every class it reached. The model
+is deliberately a single idea: a teacher picks a set of topics
+(`AssignmentTopic` rows) and a `deck_size` — how many cards a day the student's
+practice deck should hold while the assignment is active. There is no separate
+delivery kind or SM-2 toggle; assignments always flow through the student's
+normal practice, which SM-2 always schedules.
 
 ### Taking an assignment
 
-Problems are generated **per student on first open** (`play_assignment`) and
-stored inline on a **StudentAssignment** in the same JSON shape as `DailyDeck`
-(`{problem, solution, topic_id}`), so each student gets fresh numbers. A deck-kind
-assignment reuses the deck layer's due-weighting (`_effective_due_dates` /
-`_weighted_slot_counts`) so overdue topics get more of the questions — exactly
-like normal practice. The student answers card-by-card with the same two-attempt
-UI; `advance_assignment` records one **AssignmentAttempt** per problem (outcome +
-correctness, mirroring the deck's outcome strings) and, on the final card, marks
-the instance completed.
+There is no per-assignment problem set and no separate player. When a student
+opens an assignment (`play_assignment`) the view:
 
-If SM-2 is enabled, completion applies **one grade per topic derived from
-accuracy** (`_apply_sm2_from_accuracy` → `_accuracy_to_quality`), routed through
-the deck's shared `_apply_quality` so it obeys the same once-per-day rule as
-normal practice. A student who opens a deck assignment with no topics in scope
-yet isn't persisted as an instantly-"completed" zero-problem instance; the view
-returns an `empty` marker so the client can explain rather than congratulate.
+1. verifies the student is assigned it (`_assignment_link_for_student`);
+2. adds the assignment's topics to the student's own selections (`_ensure_selected`);
+3. ensures today's deck exists and grows it to `assignment.deck_size`
+   (`_get_or_create_today_deck` then `_grow_today_deck` — growth only, never
+   shrinking the student's personal setting);
+4. upserts a lightweight **StudentAssignment** marker (`IN_PROGRESS`, `started_at`);
+5. returns `{ "goto": "practice" }`, so the client just routes to the normal
+   practice page.
+
+From there the assigned topics are indistinguishable from the rest of the
+student's practice: the same daily deck, the same two-attempt UI, the same
+`_grade_topic` SM-2 grading and once-per-day rule. The teacher's card count sets
+the size of that day's deck, and the topics they picked are simply added to what
+the student practices and reviews.
 
 ### Teacher analytics
 
-`AssignmentAttempt` is normalized (one row per answered problem) so analytics are
-ORM aggregations rather than JSON scans. `assignment_results` reports average
-accuracy, per-topic accuracy sorted worst-first ("most struggled with"), and each
-student's accuracy and time taken. `teacher_overview` rolls those up across all
-of a teacher's classes; `student_detail` combines a student's SM-2 topic stats —
-the *same* view their own dashboard shows — with their assignment history, and is
-gated so a teacher can only open a student enrolled in one of their classes.
+Because assignment work *is* normal practice, analytics read the same
+spaced-repetition state rather than a separate attempt log. A daily
+**ProficiencySnapshot** per student (counts of their selected topics by band)
+gives the charts history to draw.
+
+- `assignment_results` is a proficiency report over the assignment's topic set:
+  per student, whether they've practiced the assigned topics (a `DailyTopicGrade`
+  or a non-zero `TopicReview`), a proficiency-band breakdown of those topics
+  (from each `TopicReview.interval`), whether they're overdue, and a class-wide
+  band summary.
+- `teacher_overview` returns class sizes and student counts; the
+  familiarity-over-time chart is served separately by `proficiency_history`,
+  which forward-fills each student's latest snapshot per day and averages the
+  band percentages across a chosen scope (all students / one class / one student).
+- `student_detail` combines a student's SM-2 topic stats — the *same* view their
+  own dashboard shows — with their assignment practice status, gated so a teacher
+  can only open a student enrolled in one of their classes.
+
+Proficiency bands follow `TopicReview.interval`: `<= 1` → New, `< 6` → Learning,
+`< 21` → Familiar, else → Proficient.
 
 ## Frontend (React 19 + Vite 8)
 
@@ -356,11 +366,12 @@ page by editing the URL — and the backend enforces the same on every endpoint.
 - **Student pages.** Practice UI in `MathProblem.jsx` /
   `MathProblemDisplay.jsx` / `MathProblemResponse.jsx` (problem rendering, answer
   box, two-attempt flow); course selection in `CourseList.jsx` / `CourseBar.jsx`;
-  `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` /
-  `AssignmentPlayer.jsx`; `StudentClasses.jsx`.
+  `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` (opening an
+  assignment just routes to the practice page); `StudentClasses.jsx`.
 - **Teacher pages.** `TeacherOverview.jsx`, `ClassList.jsx` / `ClassDetail.jsx`,
   `StudentDetail.jsx`, `TeacherAssignments.jsx` / `AssignmentBuilder.jsx` /
-  `AssignmentDetail.jsx`, and a `TeacherGuide.jsx` new teachers land on first.
+  `AssignmentDetail.jsx`, the `ProficiencyTrend.jsx` familiarity-over-time chart,
+  and a `TeacherGuide.jsx` new teachers land on first.
 
 Auth helpers (including the `apiFetch` credentialed wrapper) live in `auth.js`.
 

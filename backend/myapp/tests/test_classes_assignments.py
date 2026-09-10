@@ -1,24 +1,26 @@
 """Tests for the teacher/student roles, classes, and assignments feature.
 
 Covers role gating, class create/join/roster, assignment authoring and
-assign-to-multiple-classes, per-student problem generation, attempt recording,
-teacher analytics (accuracy + "most struggled with"), and the SM-2
-accuracy->quality integration (applied once when enabled; untouched when off).
+assign-to-multiple-classes, and the simplified student flow: opening an
+assignment adds its topics to the student's selections, grows today's practice
+deck to the teacher's card count, and sends the student to normal practice.
+Progress is read from the student's SM-2 state, so the teacher report and the
+student's to-do/done split are proficiency/practiced based, not quiz scores.
 
-The `addition` generator the test topics use is mocked so generated problems are
+The `addition` generator the test topics use is mocked so deck generation is
 deterministic, mirroring test_deck.py.
 """
 import json
 from unittest import mock
 
 from django.test import TestCase, Client
+from django.utils import timezone
 
 from myapp.models import (
     Settings, Classroom, ClassEnrollment, Assignment, AssignmentTopic,
-    AssignmentClass, StudentAssignment, AssignmentAttempt, TopicReview,
-    UserTopicSelection,
+    AssignmentClass, StudentAssignment, TopicReview, DailyTopicGrade,
+    UserTopicSelection, DailyDeck,
 )
-from myapp.views.assignments import _accuracy_to_quality
 from .factories import make_user, make_course, make_topic, select
 
 
@@ -29,6 +31,26 @@ def make_teacher(**kwargs):
     settings.role_chosen = True
     settings.save()
     return user
+
+
+def mark_practiced(user, topic, interval=10, quality=5):
+    """Simulate the student having practiced `topic`: an SM-2 review + a graded day.
+
+    The report reads practice from `DailyTopicGrade` and proficiency from
+    `TopicReview.interval`, so seeding both mirrors what real practice would
+    leave behind without stepping through the deck.
+    """
+    TopicReview.objects.update_or_create(
+        user=user, topic=topic,
+        defaults={"interval": interval, "repetitions": 1, "ease": 2.5},
+    )
+    DailyTopicGrade.objects.update_or_create(
+        user=user, topic=topic, date=timezone.localdate(),
+        defaults={
+            "applied_quality": quality, "snapshot_ease": 2.5,
+            "snapshot_interval": 0, "snapshot_repetitions": 0,
+        },
+    )
 
 
 class RoleGatingTests(TestCase):
@@ -207,8 +229,7 @@ class AssignmentAuthoringTests(TestCase):
     def _create_assignment(self, **overrides):
         body = {
             "title": "Homework 1",
-            "mode": "topics",
-            "topics": [{"topic_id": self.topic.id, "num_questions": 3}],
+            "topics": [{"topic_id": self.topic.id}],
         }
         body.update(overrides)
         res = self.client.post(
@@ -218,10 +239,21 @@ class AssignmentAuthoringTests(TestCase):
         return res.json()
 
     def test_create_assignment_with_topics(self):
-        a = self._create_assignment()
-        self.assertEqual(a["mode"], "topics")
+        a = self._create_assignment(deck_size=15)
+        self.assertEqual(a["deck_size"], 15)
         self.assertEqual(len(a["topics"]), 1)
-        self.assertEqual(a["topics"][0]["num_questions"], 3)
+        self.assertEqual(a["topics"][0]["topic_id"], self.topic.id)
+
+    def test_deck_size_defaults(self):
+        a = self._create_assignment()
+        self.assertEqual(a["deck_size"], 10)
+
+    def test_title_required(self):
+        res = self.client.post(
+            "/assignments/", data=json.dumps({"topics": [{"topic_id": self.topic.id}]}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 400)
 
     def test_assign_to_multiple_classes(self):
         a = self._create_assignment()
@@ -260,6 +292,20 @@ class AssignmentAuthoringTests(TestCase):
         self.assertEqual(res.status_code, 200)
         self.assertFalse(Assignment.objects.filter(id=a["id"]).exists())
 
+    def test_edit_topics_replaces_set(self):
+        other = make_topic(self.course, topic_name="Other", generator_name="addition")
+        a = self._create_assignment()
+        res = self.client.patch(
+            f"/assignments/{a['id']}/",
+            data=json.dumps({"topics": [{"topic_id": other.id}]}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 200)
+        topic_ids = set(
+            AssignmentTopic.objects.filter(assignment_id=a["id"]).values_list("topic_id", flat=True)
+        )
+        self.assertEqual(topic_ids, {other.id})
+
     def test_cannot_edit_others_assignment(self):
         a = self._create_assignment()
         other = make_teacher()
@@ -273,106 +319,8 @@ class AssignmentAuthoringTests(TestCase):
 
 
 @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
-class TakingAssignmentTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        self.teacher = make_teacher()
-        self.student = make_user()
-        self.course = make_course()
-        self.topic = make_topic(self.course, generator_name="addition")
-
-    def _setup_assignment(self, num_questions=2, sm2_enabled=False):
-        self.client.force_login(self.teacher)
-        cls = self.client.post(
-            "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
-        ).json()
-        a = self.client.post(
-            "/assignments/",
-            data=json.dumps({
-                "title": "HW", "mode": "topics_sm2" if sm2_enabled else "topics",
-                "topics": [{"topic_id": self.topic.id, "num_questions": num_questions}],
-            }),
-            content_type="application/json",
-        ).json()
-        self.client.post(
-            f"/assignments/{a['id']}/assign/",
-            data=json.dumps({"classes": [{"class_id": cls["id"]}]}),
-            content_type="application/json",
-        )
-        # Student joins.
-        self.client.force_login(self.student)
-        self.client.post(
-            "/classes/join/", data=json.dumps({"code": cls["join_code"]}),
-            content_type="application/json",
-        )
-        return a, cls
-
-    def test_play_generates_problems_and_marks_in_progress(self, _gen):
-        a, _ = self._setup_assignment(num_questions=2)
-        res = self.client.get(f"/assignments/{a['id']}/play/")
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertEqual(data["total"], 2)
-        self.assertEqual(data["current_number"], 1)
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
-        self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
-        self.assertEqual(len(sa.problems), 2)
-
-    def test_unassigned_student_cannot_play(self, _gen):
-        a, _ = self._setup_assignment()
-        other = make_user()
-        self.client.force_login(other)
-        self.assertEqual(self.client.get(f"/assignments/{a['id']}/play/").status_code, 403)
-
-    def test_advance_records_attempts_and_completes(self, _gen):
-        a, _ = self._setup_assignment(num_questions=2)
-        self.client.get(f"/assignments/{a['id']}/play/")
-        self.client.post(
-            f"/assignments/{a['id']}/advance/",
-            data=json.dumps({"outcome": "correct_first", "from_number": 1}),
-            content_type="application/json",
-        )
-        last = self.client.post(
-            f"/assignments/{a['id']}/advance/",
-            data=json.dumps({"outcome": "incorrect", "from_number": 2}),
-            content_type="application/json",
-        ).json()
-        self.assertTrue(last["completed"])
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
-        self.assertEqual(sa.status, StudentAssignment.COMPLETED)
-        self.assertIsNotNone(sa.completed_at)
-        self.assertEqual(AssignmentAttempt.objects.filter(student_assignment=sa).count(), 2)
-
-    def test_sm2_disabled_does_not_touch_topic_review(self, _gen):
-        a, _ = self._setup_assignment(num_questions=1, sm2_enabled=False)
-        self.client.get(f"/assignments/{a['id']}/play/")
-        self.client.post(
-            f"/assignments/{a['id']}/advance/",
-            data=json.dumps({"outcome": "correct_first", "from_number": 1}),
-            content_type="application/json",
-        )
-        self.assertFalse(TopicReview.objects.filter(user=self.student, topic=self.topic).exists())
-
-    def test_sm2_enabled_applies_one_grade(self, _gen):
-        a, _ = self._setup_assignment(num_questions=2, sm2_enabled=True)
-        self.client.get(f"/assignments/{a['id']}/play/?today=2026-01-15")
-        self.client.post(
-            f"/assignments/{a['id']}/advance/?today=2026-01-15",
-            data=json.dumps({"outcome": "correct_first", "from_number": 1}),
-            content_type="application/json",
-        )
-        self.client.post(
-            f"/assignments/{a['id']}/advance/?today=2026-01-15",
-            data=json.dumps({"outcome": "correct_first", "from_number": 2}),
-            content_type="application/json",
-        )
-        review = TopicReview.objects.filter(user=self.student, topic=self.topic)
-        self.assertEqual(review.count(), 1)
-
-
-@mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
-class DeckAssignmentTests(TestCase):
-    """Deck-kind assignments: 'all' vs teacher-picked 'topics' scope."""
+class StartAssignmentTests(TestCase):
+    """Opening an assignment adds its topics, grows the deck, and routes to practice."""
 
     def setUp(self):
         self.client = Client()
@@ -380,129 +328,8 @@ class DeckAssignmentTests(TestCase):
         self.student = make_user()
         self.course = make_course()
         self.picked = make_topic(self.course, topic_name="Picked", generator_name="addition")
-        self.other = make_topic(self.course, topic_name="Other", generator_name="addition")
-        # The student has both topics selected; scope decides which the deck draws.
-        select(self.student, self.picked)
-        select(self.student, self.other)
 
-    def _deck_assignment(self, scope, topics=None, size=6):
-        self.client.force_login(self.teacher)
-        cls = self.client.post(
-            "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
-        ).json()
-        body = {"title": "Deck HW", "mode": "deck", "deck_scope": scope, "deck_size": size}
-        if topics is not None:
-            body["topics"] = [{"topic_id": t.id, "num_questions": 1} for t in topics]
-        a = self.client.post(
-            "/assignments/", data=json.dumps(body), content_type="application/json"
-        ).json()
-        self.client.post(
-            f"/assignments/{a['id']}/assign/",
-            data=json.dumps({"classes": [{"class_id": cls["id"]}]}),
-            content_type="application/json",
-        )
-        self._last_join_code = cls["join_code"]
-        self.client.force_login(self.student)
-        self.client.post(
-            "/classes/join/", data=json.dumps({"code": cls["join_code"]}),
-            content_type="application/json",
-        )
-        return a
-
-    def test_topics_scope_draws_only_picked_topics(self, _gen):
-        a = self._deck_assignment("topics", topics=[self.picked])
-        self.assertEqual(
-            AssignmentTopic.objects.filter(assignment_id=a["id"]).count(), 1
-        )
-        self.client.get(f"/assignments/{a['id']}/play/")
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
-        self.assertTrue(sa.problems)
-        self.assertTrue(all(p["topic_id"] == self.picked.id for p in sa.problems))
-
-    def test_all_scope_draws_from_all_selected(self, _gen):
-        a = self._deck_assignment("all")
-        self.client.get(f"/assignments/{a['id']}/play/")
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
-        topic_ids = {p["topic_id"] for p in sa.problems}
-        self.assertEqual(topic_ids, {self.picked.id, self.other.id})
-
-    def test_picked_topics_included_and_auto_selected_when_not_selected(self, _gen):
-        # A teacher picks a topic the student has NOT selected: it must still be
-        # included in the deck, and it should become one of the student's own
-        # selections (so it carries into daily practice).
-        unpicked_course = make_course(course_name="Geometry")
-        fresh = make_topic(unpicked_course, topic_name="Fresh", generator_name="addition")
-        newbie = make_user()  # no selections at all
-        a = self._deck_assignment("topics", topics=[fresh])
-        # _deck_assignment logs the default student in; join as the newbie instead.
-        self.client.force_login(newbie)
-        self.client.post(
-            "/classes/join/", data=json.dumps({"code": self._last_join_code}),
-            content_type="application/json",
-        )
-        res = self.client.get(f"/assignments/{a['id']}/play/")
-        data = res.json()
-        self.assertNotIn("empty", data)
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=newbie)
-        self.assertTrue(sa.problems)
-        self.assertTrue(all(p["topic_id"] == fresh.id for p in sa.problems))
-        self.assertTrue(
-            UserTopicSelection.objects.filter(user=newbie, topic=fresh).exists()
-        )
-
-    def test_no_selected_topics_reports_empty_without_completing(self, _gen):
-        # A student with no selected topics opens a deck assignment: nothing can be
-        # generated, so it must report empty rather than persist an instantly
-        # "completed" zero-problem instance.
-        a = self._deck_assignment("all")
-        loner = make_user()
-        self.client.force_login(loner)
-        self.client.post(
-            "/classes/join/", data=json.dumps({"code": self._last_join_code}),
-            content_type="application/json",
-        )
-        res = self.client.get(f"/assignments/{a['id']}/play/")
-        self.assertEqual(res.status_code, 200)
-        data = res.json()
-        self.assertTrue(data["empty"])
-        self.assertEqual(data["reason"], "no_topics_in_scope")
-        self.assertNotIn("completed", data)
-        self.assertFalse(
-            StudentAssignment.objects.filter(assignment_id=a["id"], student=loner).exists()
-        )
-
-    def test_empty_instance_recovers_after_selecting_topics(self, _gen):
-        # Opening empty (no selections) then selecting a topic and reopening should
-        # generate problems, not stay frozen on the completion/empty screen.
-        a = self._deck_assignment("all")
-        loner = make_user()
-        self.client.force_login(loner)
-        self.client.post(
-            "/classes/join/", data=json.dumps({"code": self._last_join_code}),
-            content_type="application/json",
-        )
-        self.assertTrue(self.client.get(f"/assignments/{a['id']}/play/").json()["empty"])
-
-        select(loner, self.picked)
-        res = self.client.get(f"/assignments/{a['id']}/play/")
-        data = res.json()
-        self.assertNotIn("empty", data)
-        self.assertEqual(data["current_number"], 1)
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=loner)
-        self.assertTrue(sa.problems)
-        self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
-
-
-@mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
-class AssignmentResultsTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        self.teacher = make_teacher()
-        self.course = make_course()
-        self.easy = make_topic(self.course, topic_name="Easy", generator_name="addition")
-        self.hard = make_topic(self.course, topic_name="Hard", generator_name="addition")
-
-    def test_results_aggregate_accuracy_and_struggle(self, _gen):
+    def _setup_assignment(self, deck_size=6, topics=None):
         self.client.force_login(self.teacher)
         cls = self.client.post(
             "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
@@ -510,11 +337,8 @@ class AssignmentResultsTests(TestCase):
         a = self.client.post(
             "/assignments/",
             data=json.dumps({
-                "title": "HW", "mode": "topics",
-                "topics": [
-                    {"topic_id": self.easy.id, "num_questions": 1},
-                    {"topic_id": self.hard.id, "num_questions": 1},
-                ],
+                "title": "HW", "deck_size": deck_size,
+                "topics": [{"topic_id": t.id} for t in (topics or [self.picked])],
             }),
             content_type="application/json",
         ).json()
@@ -523,42 +347,151 @@ class AssignmentResultsTests(TestCase):
             data=json.dumps({"classes": [{"class_id": cls["id"]}]}),
             content_type="application/json",
         )
+        self.client.force_login(self.student)
+        self.client.post(
+            "/classes/join/", data=json.dumps({"code": cls["join_code"]}),
+            content_type="application/json",
+        )
+        return a, cls
 
-        student = make_user()
+    def test_start_selects_topics_grows_deck_and_routes(self, _gen):
+        # Pin the student's daily size below the assignment's card count so the
+        # grow (never shrink) is actually exercised.
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 5
+        settings.save(update_fields=["questions_per_day"])
+
+        a, _ = self._setup_assignment(deck_size=8)
+        res = self.client.post(f"/assignments/{a['id']}/play/")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["goto"], "practice")
+        self.assertEqual(data["deck_size"], 8)
+        # The picked topic is now one of the student's own selections.
+        self.assertTrue(
+            UserTopicSelection.objects.filter(user=self.student, topic=self.picked).exists()
+        )
+        # Today's deck grew to the teacher's card count.
+        deck = DailyDeck.objects.get(user=self.student)
+        self.assertEqual(len(deck.problems), 8)
+        # A lightweight opened marker is recorded.
+        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+        self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
+
+    def test_unassigned_student_cannot_start(self, _gen):
+        a, _ = self._setup_assignment()
+        other = make_user()
+        self.client.force_login(other)
+        self.assertEqual(
+            self.client.post(f"/assignments/{a['id']}/play/").status_code, 403
+        )
+
+
+class AssignmentResultsTests(TestCase):
+    """The proficiency report: who practiced, band mix on the assigned topics."""
+
+    def setUp(self):
+        self.client = Client()
+        self.teacher = make_teacher()
+        self.course = make_course()
+        self.easy = make_topic(self.course, topic_name="Easy", generator_name="addition")
+        self.hard = make_topic(self.course, topic_name="Hard", generator_name="addition")
+
+    def _assign_to_student(self, student, due_at=None):
+        self.client.force_login(self.teacher)
+        cls = self.client.post(
+            "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
+        ).json()
+        a = self.client.post(
+            "/assignments/",
+            data=json.dumps({
+                "title": "HW",
+                "topics": [{"topic_id": self.easy.id}, {"topic_id": self.hard.id}],
+            }),
+            content_type="application/json",
+        ).json()
+        self.client.post(
+            f"/assignments/{a['id']}/assign/",
+            data=json.dumps({"classes": [{"class_id": cls["id"], "due_at": due_at}]}),
+            content_type="application/json",
+        )
         self.client.force_login(student)
         self.client.post(
             "/classes/join/", data=json.dumps({"code": cls["join_code"]}),
             content_type="application/json",
         )
-        self.client.get(f"/assignments/{a['id']}/play/")
-        # First problem (Easy) correct, second (Hard) incorrect.
-        self.client.post(
-            f"/assignments/{a['id']}/advance/",
-            data=json.dumps({"outcome": "correct_first", "from_number": 1}),
-            content_type="application/json",
-        )
-        self.client.post(
-            f"/assignments/{a['id']}/advance/",
-            data=json.dumps({"outcome": "incorrect", "from_number": 2}),
-            content_type="application/json",
-        )
+        return a
+
+    def test_report_counts_bands_and_practice(self):
+        student = make_user()
+        a = self._assign_to_student(student)
+        # Practiced Easy (interval 10 -> familiar); never practiced Hard (-> new).
+        mark_practiced(student, self.easy, interval=10)
 
         self.client.force_login(self.teacher)
-        results = self.client.get(f"/assignments/{a['id']}/results/").json()
-        self.assertEqual(results["average_accuracy"], 0.5)
-        self.assertEqual(results["num_submissions"], 1)
-        # "Most struggled with" is sorted worst-first: Hard (0.0) before Easy (1.0).
-        self.assertEqual(results["topics_struggled"][0]["topic_name"], "Hard")
-        self.assertEqual(results["topics_struggled"][0]["accuracy"], 0.0)
-        self.assertEqual(results["students"][0]["accuracy"], 0.5)
+        res = self.client.get(f"/assignments/{a['id']}/results/").json()
+        self.assertEqual(res["num_students"], 1)
+        self.assertEqual(res["num_practiced"], 1)
+        self.assertEqual(res["band_totals"]["familiar"], 1)
+        self.assertEqual(res["band_totals"]["new"], 1)
+        row = res["students"][0]
+        self.assertTrue(row["practiced"])
+        self.assertEqual(row["proficiency"]["familiar"], 1)
+        self.assertEqual(row["proficiency"]["new"], 1)
+
+    def test_overdue_when_unpracticed_past_due(self):
+        student = make_user()
+        past = (timezone.now() - timezone.timedelta(days=1)).isoformat()
+        a = self._assign_to_student(student, due_at=past)
+
+        self.client.force_login(self.teacher)
+        res = self.client.get(f"/assignments/{a['id']}/results/").json()
+        row = res["students"][0]
+        self.assertFalse(row["practiced"])
+        self.assertTrue(row["overdue"])
 
 
-class AccuracyToQualityTests(TestCase):
-    def test_mapping(self):
-        self.assertEqual(_accuracy_to_quality(1.0), 5)
-        self.assertEqual(_accuracy_to_quality(0.9), 5)
-        self.assertEqual(_accuracy_to_quality(0.8), 4)
-        self.assertEqual(_accuracy_to_quality(0.7), 3)
-        self.assertEqual(_accuracy_to_quality(0.5), 2)
-        self.assertEqual(_accuracy_to_quality(0.3), 1)
-        self.assertEqual(_accuracy_to_quality(0.0), 1)
+class MyAssignmentsTests(TestCase):
+    """A student's to-do / done split, driven by whether topics were practiced."""
+
+    def setUp(self):
+        self.client = Client()
+        self.teacher = make_teacher()
+        self.student = make_user()
+        self.course = make_course()
+        self.topic = make_topic(self.course, generator_name="addition")
+
+    def _assign(self):
+        self.client.force_login(self.teacher)
+        cls = self.client.post(
+            "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
+        ).json()
+        a = self.client.post(
+            "/assignments/",
+            data=json.dumps({"title": "HW", "topics": [{"topic_id": self.topic.id}]}),
+            content_type="application/json",
+        ).json()
+        self.client.post(
+            f"/assignments/{a['id']}/assign/",
+            data=json.dumps({"classes": [{"class_id": cls["id"]}]}),
+            content_type="application/json",
+        )
+        self.client.force_login(self.student)
+        self.client.post(
+            "/classes/join/", data=json.dumps({"code": cls["join_code"]}),
+            content_type="application/json",
+        )
+        return a
+
+    def test_unpracticed_is_upcoming_then_moves_to_done(self):
+        a = self._assign()
+        data = self.client.get("/assignments/mine/").json()
+        self.assertEqual(len(data["upcoming"]), 1)
+        self.assertEqual(len(data["completed"]), 0)
+        self.assertEqual(data["upcoming"][0]["num_topics"], 1)
+
+        # Practicing the only topic moves it to done.
+        mark_practiced(self.student, self.topic)
+        data = self.client.get("/assignments/mine/").json()
+        self.assertEqual(len(data["upcoming"]), 0)
+        self.assertEqual(len(data["completed"]), 1)

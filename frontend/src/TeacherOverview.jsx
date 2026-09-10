@@ -1,12 +1,13 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
+import ProficiencyTrend from './ProficiencyTrend.jsx';
 import './Teacher.css';
 
-function pct(acc) {
-  return acc == null ? '—' : `${Math.round(acc * 100)}%`;
-}
-
 function TeacherOverview({ onOpenClass }) {
+  // "" = all students across every class; otherwise a specific class id.
+  const [trendClass, setTrendClass] = useState('');
+
   const { data, isPending, error } = useQuery({
     queryKey: ['teacher', 'overview'],
     queryFn: async () => {
@@ -24,9 +25,44 @@ function TeacherOverview({ onOpenClass }) {
       {data && (
         <>
           <p className="teacher-card-stat">
-            {data.total_students} student{data.total_students === 1 ? '' : 's'} across your classes ·
-            overall accuracy {pct(data.average_accuracy)}
+            {data.total_students} student{data.total_students === 1 ? '' : 's'} across your classes
           </p>
+
+          {/* Familiarity over time — one chart, scoped by the class dropdown. */}
+          {(() => {
+            const selected = data.classes.find((c) => String(c.id) === trendClass);
+            return (
+              <>
+                {data.classes.length > 0 && (
+                  <div className="teacher-field" style={{ maxWidth: '260px' }}>
+                    <label htmlFor="trend-class">Show familiarity for</label>
+                    <select
+                      id="trend-class"
+                      value={trendClass}
+                      onChange={(e) => setTrendClass(e.target.value)}
+                    >
+                      <option value="">All classes</option>
+                      {data.classes.map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <ProficiencyTrend
+                  key={trendClass || 'all'}
+                  title={selected ? `Familiarity over time — ${selected.name}` : 'Familiarity over time — all students'}
+                  description={
+                    selected
+                      ? 'Average share of topics in each proficiency band across this class.'
+                      : 'Average share of topics in each proficiency band, across every student in your classes.'
+                  }
+                  scope={selected ? 'class' : 'all'}
+                  classId={selected ? selected.id : undefined}
+                />
+              </>
+            );
+          })()}
+
           {data.classes.length === 0 ? (
             <p className="teacher-empty">You haven't created any classes yet.</p>
           ) : (
@@ -35,8 +71,6 @@ function TeacherOverview({ onOpenClass }) {
                 <button key={c.id} className="teacher-card" onClick={() => onOpenClass(c.id)}>
                   <div className="teacher-card-title">{c.name}</div>
                   <div className="teacher-card-stat">{c.student_count} students</div>
-                  <div className="teacher-card-stat">Avg accuracy: {pct(c.average_accuracy)}</div>
-                  <div className="teacher-card-stat">{c.completed_assignments} completed assignments</div>
                 </button>
               ))}
             </div>

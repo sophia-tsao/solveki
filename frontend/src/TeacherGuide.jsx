@@ -65,10 +65,11 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
       <section className="guide-section">
         <h2>2. Why spaced repetition (SM-2)</h2>
         <p>
-          SM-2 is the scheduling algorithm behind Solveki's practice, and it's worth
-          understanding before you build assignments. It schedules each <strong>topic</strong>
+          SM-2 is the scheduling algorithm behind Solveki's practice — it runs automatically,
+          with nothing to switch on. It schedules each <strong>topic</strong>
           {' '}(not individual problems), so a topic resurfaces right before a student is likely
-          to forget it — frequent when shaky, rare once mastered.
+          to forget it — frequent when shaky, rare once mastered. Every assignment simply adds
+          topics to a student's practice, so the work they do on it feeds this same schedule.
         </p>
 
         <div className="guide-compare">
@@ -90,102 +91,73 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
           </div>
         </div>
 
-        <p style={{ marginTop: '1.25rem' }}><strong>What's different when an assignment "counts toward SM-2":</strong></p>
-        <div className="tg-flow">
-          <span className="tg-pill">Student finishes</span>
-          <span className="tg-arrow">→</span>
-          <span className="tg-pill">1 grade per topic, from their accuracy</span>
-          <span className="tg-arrow">→</span>
-          <span className="tg-pill">Next review date shifts</span>
-        </div>
-        <div className="tg-branch">
-          <span className="tg-branch-key tg-up">Higher accuracy ↑</span>
-          <span>topic comes back <strong>later</strong> (longer gap)</span>
-          <span className="tg-branch-key tg-down">Lower accuracy ↓</span>
-          <span>topic comes back <strong>sooner</strong> (shorter gap)</span>
-        </div>
-        <div className="tg-scale" aria-label="Accuracy to review grade">
-          <span className="tg-scale-seg" style={{ background: '#dc2626' }}>&lt;40%<small>grade 1</small></span>
-          <span className="tg-scale-seg" style={{ background: '#f97316' }}>40–59%<small>grade 2</small></span>
-          <span className="tg-scale-seg" style={{ background: '#eab308' }}>60–74%<small>grade 3</small></span>
-          <span className="tg-scale-seg" style={{ background: '#84cc16' }}>75–89%<small>grade 4</small></span>
-          <span className="tg-scale-seg" style={{ background: '#16a34a' }}>90–100%<small>grade 5</small></span>
-        </div>
-        <p className="tg-fine">
-          Applied once per topic when the assignment is finished, and at most once per day per
-          topic — shared with the student's normal daily practice, so an assignment can't grade
-          the same topic twice in a day.
+        <p style={{ marginTop: '1.25rem' }}>
+          As a student practices, each topic climbs through four familiarity bands. Your
+          progress graphs show the mix shifting toward the right over time:
         </p>
-
-        <div className="tg-note warn" style={{ marginTop: '0.75rem' }}>
-          <span className="tg-note-icon">⚠</span>
-          <span>
-            With SM-2 <strong>off</strong>, an assignment is standalone practice: it's recorded
-            for your analytics but never changes any topic's review schedule. Turn it on when the work should shape ongoing review.
-          </span>
+        <div className="tg-scale" aria-label="Proficiency bands by review interval">
+          <span className="tg-scale-seg" style={{ background: '#ef4444' }}>New<small>seen daily</small></span>
+          <span className="tg-scale-seg" style={{ background: '#f59e0b' }}>Learning<small>every few days</small></span>
+          <span className="tg-scale-seg" style={{ background: '#3b82f6' }}>Familiar<small>a week or two</small></span>
+          <span className="tg-scale-seg" style={{ background: '#22c55e' }}>Proficient<small>weeks+ apart</small></span>
         </div>
       </section>
 
       {/* 3. Assignments */}
       <section className="guide-section">
         <h2>3. Build an assignment</h2>
-        <p>Assignments come in two types. Pick the one that fits what you want students doing.</p>
-
-        <div className="guide-compare">
-          <div className="guide-box">
-            <h4>Pick topics &amp; counts</h4>
-            <p>
-              You choose the topics and how many questions of each. Every student gets
-              freshly generated problems on those same topics — same difficulty, different numbers.
-              Best for a targeted worksheet.
-            </p>
-          </div>
-          <div className="guide-box">
-            <h4>Spaced-repetition deck</h4>
-            <p>
-              Pulls from each student's own practice topics, weighted by what's due for
-              them today. You just set how many questions. Best for ongoing review that
-              meets each student where they are.
-            </p>
-          </div>
-        </div>
+        <p>
+          An assignment is a short set of topics you want a class to work on. You pick the
+          topics and how many cards a day the deck should hold; Solveki adds those topics to
+          each student's practice and grows their daily deck to that size.
+        </p>
 
         <ol className="guide-steps">
           <li>
             <span className="guide-step-num">1</span>
             <div className="guide-step-body">
-              <strong>Title it and pick a type</strong>
-              <p>Give it a name and description, then choose "Pick topics" or "Deck".</p>
+              <strong>Title it</strong>
+              <p>Give it a name and an optional description so students know what it's for.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">2</span>
             <div className="guide-step-body">
-              <strong>Choose content</strong>
-              <p>For topics: check topics and set question counts. For a deck: choose whether it draws from all of the student's selected topics or a set you pick, and set the deck size.</p>
+              <strong>Pick topics</strong>
+              <p>Check the topics you want the class practicing. These are the topics the report tracks familiarity on.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">3</span>
             <div className="guide-step-body">
-              <strong>Decide whether it counts toward spaced repetition (SM-2)</strong>
-              <p>A single checkbox — see section 2 above for exactly what changes when it's on.</p>
+              <strong>Set the number of cards</strong>
+              <p>Choose how many cards a day the practice deck should hold while the assignment is active. SM-2 (section 2) picks which cards, so what's due surfaces first.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">4</span>
             <div className="guide-step-body">
               <strong>Assign to classes &amp; set due dates</strong>
-              <p>Check the classes that should get it and (optionally) a due date per class. Everyone enrolled receives it; each student's problems are generated the first time they open it.</p>
+              <p>Check the classes that should get it and (optionally) a due date per class. Everyone enrolled receives it; the topics are added the first time each student opens it.</p>
             </div>
           </li>
         </ol>
 
+        <div className="tg-flow" aria-label="What happens when a student opens an assignment">
+          <span className="tg-pill">Student opens it</span>
+          <span className="tg-arrow">→</span>
+          <span className="tg-pill">Topics added to their deck</span>
+          <span className="tg-arrow">→</span>
+          <span className="tg-pill">They practice as normal</span>
+          <span className="tg-arrow">→</span>
+          <span className="tg-pill">SM-2 schedules the topics</span>
+        </div>
+
         <div className="tg-note info">
           <span className="tg-note-icon">ℹ</span>
           <span>
-            The two type choices and the SM-2 checkbox combine freely — so an assignment can be
-            topics-with-SM-2, a plain deck, and so on.
+            Your report shows how familiar they've grown with the assigned
+            topics by the due date.
           </span>
         </div>
       </section>
@@ -197,7 +169,7 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
         <div className="tg-flow" aria-label="How to drill into progress">
           <span className="tg-pill">Overview: all classes</span>
           <span className="tg-arrow">→</span>
-          <span className="tg-pill">A class: roster &amp; accuracy</span>
+          <span className="tg-pill">An assignment: familiarity by topic</span>
           <span className="tg-arrow">→</span>
           <span className="tg-pill">A student: topics &amp; history</span>
         </div>
@@ -206,21 +178,21 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
             <span className="guide-step-num">1</span>
             <div className="guide-step-body">
               <strong>Overview</strong>
-              <p>Total students and overall accuracy, plus a card per class with size and completed-assignment counts.</p>
+              <p>Your total student count plus a familiarity-over-time graph for all your students and one per class, so you can watch topics climb from New toward Proficient.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">2</span>
             <div className="guide-step-body">
               <strong>Assignment results</strong>
-              <p>Open any assignment to see average accuracy, the topics students struggled with most, and each student's accuracy and time taken.</p>
+              <p>Open any assignment to see how familiar the class has grown with its topics, and, per student, whether they've practiced by the due date and where each of the assigned topics sits.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">3</span>
             <div className="guide-step-body">
               <strong>Student detail</strong>
-              <p>Click a student to see their per-topic mastery and full assignment history — the same view they see on their own dashboard.</p>
+              <p>Click a student to see their familiarity trend, per-topic mastery, and assignment history — the same view they see on their own dashboard.</p>
             </div>
           </li>
         </ol>
