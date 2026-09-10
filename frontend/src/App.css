@@ -1,6 +1,13 @@
 /* Full-height app shell: header at the top, the page content growing to fill
    whatever height is left, and the footer pinned to the bottom of the viewport
    so no page ever leaves a band of blank space above it. */
+/* Always reserve the vertical scrollbar's gutter so growing a page's content
+   (e.g. expanding the assignment topic picker) never adds a scrollbar that
+   re-centers and narrows the fixed-width, margin-auto page. */
+html {
+    scrollbar-gutter: stable;
+}
+
 body {
     margin: 0;
 }

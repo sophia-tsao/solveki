@@ -29,10 +29,29 @@ from .courses import (
     set_course_topics_selected,
 )
 from .problems import generate_problem, _make_problem
-from .settings import settings_view
+from .settings import settings_view, set_role
 from .deck import get_deck, advance_deck
 from .dashboard import view_dashboard, view_practice_calendar
 from .diagnostic import diagnostic_config, diagnostic_start, diagnostic_submit
+from .classes import (
+    classes,
+    class_detail,
+    class_students,
+    remove_student,
+    join_class,
+    my_classes,
+)
+from .assignments import (
+    assignments,
+    assignment_detail,
+    assign_to_classes,
+    assignment_preview,
+    assignment_results,
+    my_assignments,
+    play_assignment,
+    advance_assignment,
+)
+from .teacher import teacher_overview, student_detail
 
 def __getattr__(name):
     """Lazily expose ``mathgenerator`` as ``myapp.views.mathgenerator``.
@@ -64,6 +83,7 @@ __all__ = [
     "set_course_topics_selected",
     "generate_problem",
     "settings_view",
+    "set_role",
     "get_deck",
     "advance_deck",
     "view_dashboard",
@@ -71,4 +91,20 @@ __all__ = [
     "diagnostic_config",
     "diagnostic_start",
     "diagnostic_submit",
+    "classes",
+    "class_detail",
+    "class_students",
+    "remove_student",
+    "join_class",
+    "my_classes",
+    "assignments",
+    "assignment_detail",
+    "assign_to_classes",
+    "assignment_preview",
+    "assignment_results",
+    "my_assignments",
+    "play_assignment",
+    "advance_assignment",
+    "teacher_overview",
+    "student_detail",
 ]

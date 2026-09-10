@@ -124,11 +124,54 @@ function WhySolveki() {
           </p>
         </div>
         <div className="landing-feature">
+          <h2>Start at the right level</h2>
+          <p>
+            A short diagnostic asks where you are and generates a few real
+            problems to gauge your level &mdash; then it picks your starting
+            topics and seeds your review schedule, so you skip what you've
+            mastered and begin where it counts.
+          </p>
+        </div>
+        <div className="landing-feature">
           <h2>Free, and always saved</h2>
           <p>
             Sign in with your Google account to get started. Your progress and
             review schedule are saved automatically, so you can pick up right
             where you left off.
+          </p>
+        </div>
+      </div>
+
+      <h2 className="landing-subhead">For teachers and classrooms</h2>
+      <p>
+        Choose a teacher account at sign-up to create classes and set work for
+        your students &mdash; all on the same spaced-repetition engine your
+        students practice on.
+      </p>
+
+      <div className="landing-features">
+        <div className="landing-feature">
+          <h2>Create a class, share a code</h2>
+          <p>
+            Spin up a class and hand out its join code. Students enter the code
+            to join &mdash; no rosters to upload, no invites to chase.
+          </p>
+        </div>
+        <div className="landing-feature">
+          <h2>Assign practice your way</h2>
+          <p>
+            Build assignments from specific topics with set question counts, or
+            hand students a spaced-repetition deck. Optionally let an
+            assignment feed each student's own review schedule, and give every
+            class its own due date.
+          </p>
+        </div>
+        <div className="landing-feature">
+          <h2>See who needs help</h2>
+          <p>
+            Track completion and accuracy across each class, see which topics
+            students struggle with most, and open any student to view their
+            progress and assignment history.
           </p>
         </div>
       </div>
@@ -157,6 +200,26 @@ function Faq() {
     {
       q: 'How much does it cost?',
       a: 'Sign in with your Google account to get started. Your progress and review schedule are saved so you can pick up right where you left off.',
+    },
+    {
+      q: 'Do I have to pick topics myself?',
+      a: 'You can, but you do not have to. A short diagnostic asks a couple of questions and gives you a few real problems, then chooses your starting topics and seeds your review schedule for you. You can adjust your selected topics any time afterward.',
+    },
+    {
+      q: 'Am I a student or a teacher?',
+      a: 'You choose once when you first sign in. Students practice and take assignments; teachers create classes, assign work, and track progress. The choice is set at sign-up and does not change afterward.',
+    },
+    {
+      q: 'How do students join my class?',
+      a: 'As a teacher, create a class and share its join code. Students enter that code to join — there are no rosters to upload or invitations to send.',
+    },
+    {
+      q: 'What can teachers assign?',
+      a: 'Two kinds of assignment: a fixed set of topics with a chosen number of questions each, or a spaced-repetition deck drawn from the student’s selected topics. Each can optionally feed the student’s own review schedule, and you can give every class its own due date.',
+    },
+    {
+      q: 'What can teachers see?',
+      a: 'Completion and average accuracy for each class, the topics students struggle with most, and a per-student view of their progress and assignment history — the same spaced-repetition progress the student sees on their own dashboard.',
     },
   ];
   return (

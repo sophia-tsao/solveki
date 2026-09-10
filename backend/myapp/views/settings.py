@@ -13,7 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def _serialize_settings(settings):
-    return {"language": settings.language, "questions_per_day": settings.questions_per_day}
+    return {
+        "language": settings.language,
+        "questions_per_day": settings.questions_per_day,
+        "role": settings.role,
+        "role_chosen": settings.role_chosen,
+    }
 
 
 @csrf_exempt
@@ -46,3 +51,49 @@ def settings_view(request):
         # smaller count leaves today's deck untouched (it applies next day).
         _grow_today_deck(request.user, settings.questions_per_day, _client_today(request))
     return JsonResponse(_serialize_settings(settings))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def set_role(request):
+    """Set the user's role once, at signup.
+
+    The frontend shows a student/teacher picker only to brand-new users, but the
+    endpoint is the real guard: it refuses to change a role that's already been
+    chosen (`role_chosen`), so a student can't later promote themselves to
+    teacher and read other students' data. Changing a role afterwards is an
+    admin action.
+    """
+    auth = _require_auth(request)
+    if auth:
+        return auth
+    try:
+        body = json.loads(request.body)
+    except (ValueError, TypeError):
+        return JsonResponse({"error": "Invalid request body"}, status=400)
+    role = body.get("role")
+    if role not in (Settings.STUDENT, Settings.TEACHER):
+        return JsonResponse({"error": "role must be 'student' or 'teacher'"}, status=400)
+    settings = Settings.load(request.user)
+    if settings.role_chosen:
+        return JsonResponse({"error": "Role has already been set"}, status=403)
+    settings.role = role
+    settings.role_chosen = True
+    settings.save(update_fields=["role", "role_chosen"])
+
+    # Students supply their own first/last name at signup (teachers only ever see
+    # a student by name, so this is the name teachers will see). Django's
+    # first_name/last_name are capped at 150 chars.
+    first = body.get("first_name")
+    last = body.get("last_name")
+    if first is not None or last is not None:
+        if first is not None:
+            request.user.first_name = str(first).strip()[:150]
+        if last is not None:
+            request.user.last_name = str(last).strip()[:150]
+        request.user.save(update_fields=["first_name", "last_name"])
+
+    logger.info("User %s chose role %s", request.user.id, role)
+    data = _serialize_settings(settings)
+    data["name"] = (request.user.get_full_name() or request.user.username or request.user.email)
+    return JsonResponse(data)

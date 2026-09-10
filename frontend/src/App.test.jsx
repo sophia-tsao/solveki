@@ -27,15 +27,26 @@ vi.mock('./LoginPage.jsx', () => ({
   default: ({ onLoggedIn }) => (
     <div>
       login-page
-      <button onClick={() => onLoggedIn({ user: { name: 'Ada' } })}>
+      <button onClick={() => onLoggedIn({ user: { name: 'Ada', role: 'student', role_chosen: true } })}>
         do-login
       </button>
-      <button onClick={() => onLoggedIn({ user: { name: 'Ada' }, is_new_user: true })}>
+      <button onClick={() => onLoggedIn({ user: { name: 'Ada', role_chosen: false }, is_new_user: true })}>
         do-login-new
       </button>
     </div>
   ),
 }));
+vi.mock('./RolePicker.jsx', () => ({
+  default: ({ onChosen }) => (
+    <div>
+      role-picker
+      <button onClick={() => onChosen('student')}>choose-student</button>
+      <button onClick={() => onChosen('teacher')}>choose-teacher</button>
+    </div>
+  ),
+}));
+vi.mock('./ClassList.jsx', () => ({ default: () => <div>classes-page</div> }));
+vi.mock('./TeacherGuide.jsx', () => ({ default: () => <div>teacher-guide-page</div> }));
 vi.mock('./Header.jsx', () => ({
   default: ({ currentPage, linkClicked }) => (
     <div>
@@ -52,7 +63,7 @@ vi.mock('./Header.jsx', () => ({
 import { fetchMe } from './auth.js';
 import App from './App.jsx';
 
-const AUTHED = { authenticated: true, user: { name: 'Ada' } };
+const AUTHED = { authenticated: true, user: { name: 'Ada', role: 'student', role_chosen: true } };
 const ANON = { authenticated: false };
 
 beforeEach(() => {
@@ -93,13 +104,32 @@ describe('App — auth gate', () => {
     expect(await screen.findByText('header-on-math')).toBeInTheDocument();
   });
 
-  it('sends a first-time user to the courses page after login', async () => {
+  it('sends a brand-new user to the role picker after login', async () => {
     fetchMe.mockResolvedValue(ANON);
     const user = userEvent.setup();
     renderWithClient(<App />);
     await user.click(await screen.findByText('do-login-new'));
+    expect(await screen.findByText('role-picker')).toBeInTheDocument();
+  });
+
+  it('routes a new user to courses once they choose the student role', async () => {
+    fetchMe.mockResolvedValue(ANON);
+    const user = userEvent.setup();
+    renderWithClient(<App />);
+    await user.click(await screen.findByText('do-login-new'));
+    await user.click(await screen.findByText('choose-student'));
     expect(await screen.findByText('courses-page')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/courses');
+  });
+
+  it('routes a new teacher to the guide once they choose the teacher role', async () => {
+    fetchMe.mockResolvedValue(ANON);
+    const user = userEvent.setup();
+    renderWithClient(<App />);
+    await user.click(await screen.findByText('do-login-new'));
+    await user.click(await screen.findByText('choose-teacher'));
+    expect(await screen.findByText('teacher-guide-page')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/teacher-guide');
   });
 });
 

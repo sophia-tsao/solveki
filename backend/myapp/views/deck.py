@@ -292,7 +292,18 @@ def _grade_topic(user, topic_id, outcome, today):
     quality = _OUTCOME_QUALITY.get(outcome)
     if quality is None:
         return
+    _apply_quality(user, topic_id, quality, today)
 
+
+def _apply_quality(user, topic_id, quality, today):
+    """Apply an SM-2 `quality` (0-5) to a topic's schedule under the once-per-day rule.
+
+    The scheduling write shared by the deck's outcome path (`_grade_topic`) and
+    the assignment SM-2 path (one accuracy-derived quality per topic). The
+    once-per-day rule is the same in both: the first grade of the day snapshots
+    the pre-grade state and applies; later grades may only pull the schedule
+    *down*, recomputed from the fixed snapshot so repeats never compound.
+    """
     review, _ = TopicReview.objects.get_or_create(user=user, topic_id=topic_id)
     grade = DailyTopicGrade.objects.filter(
         user=user, topic_id=topic_id, date=today

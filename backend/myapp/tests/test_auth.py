@@ -153,11 +153,16 @@ class TestLoginTests(TestCase):
         Settings.objects.update_or_create(user=user, defaults={"questions_per_day": 3})
         DailyDeck.objects.create(user=user, date=timezone.localdate(), problems=[], current_index=0)
 
-        # A fresh login wipes selections, decks, and settings.
+        # A fresh login wipes selections, decks, and resets settings to defaults.
+        # (Serializing the user lazily re-creates a default Settings row, so the
+        # row exists again but carries default values, not the seeded ones.)
         self.client.post("/auth/test-login/")
         self.assertFalse(UserTopicSelection.objects.filter(user=user).exists())
         self.assertFalse(DailyDeck.objects.filter(user=user).exists())
-        self.assertFalse(Settings.objects.filter(user=user).exists())
+        reset = Settings.objects.get(user=user)
+        self.assertEqual(reset.questions_per_day, 10)
+        self.assertEqual(reset.role, Settings.STUDENT)
+        self.assertFalse(reset.role_chosen)
 
 
 class LogoutAndDeleteTests(TestCase):

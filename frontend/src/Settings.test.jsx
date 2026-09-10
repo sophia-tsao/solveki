@@ -40,6 +40,35 @@ describe('Settings — loading', () => {
     renderWithClient(<Settings onLoggedOut={() => {}} />);
     await screen.findByText(/Error: HTTP error! Status: 500/);
   });
+
+  it('hides the questions-per-practice field for teachers', async () => {
+    apiFetch.mockResolvedValueOnce(
+      jsonResponse({ language: 'en', questions_per_day: 10, role: 'teacher' }),
+    );
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('en'));
+    expect(screen.queryByText('Questions per practice')).not.toBeInTheDocument();
+    expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+  });
+
+  it('omits questions_per_day from a teacher save', async () => {
+    apiFetch.mockResolvedValueOnce(
+      jsonResponse({ language: 'en', questions_per_day: 10, role: 'teacher' }),
+    );
+    const user = userEvent.setup();
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('en'));
+
+    apiFetch.mockResolvedValueOnce(
+      jsonResponse({ language: 'es', questions_per_day: 10, role: 'teacher' }),
+    );
+    await user.selectOptions(screen.getByRole('combobox'), 'es');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await screen.findByText('Settings saved.');
+    const patchCall = apiFetch.mock.calls.find((c) => c[1]?.method === 'PATCH');
+    expect(JSON.parse(patchCall[1].body)).toEqual({ language: 'es' });
+  });
 });
 
 describe('Settings — saving', () => {

@@ -77,6 +77,16 @@
     margin: 0 0 32px;
 }
 
+/* Section header separating the teacher-focused features from the student
+   ones on the "Why Solveki" page. */
+.landing-subhead {
+    margin: 48px 0 12px;
+    font-size: 26px;
+    font-weight: 700;
+    color: #111827;
+    letter-spacing: -0.01em;
+}
+
 .landing-features {
     display: flex;
     flex-direction: column;

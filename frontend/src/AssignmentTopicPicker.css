@@ -1,0 +1,171 @@
+.atp {
+  margin-bottom: 1rem;
+}
+
+.atp-search {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #dde3ed;
+  border-radius: 8px;
+  font: inherit;
+  margin-bottom: 0.75rem;
+  box-sizing: border-box;
+}
+
+/* Course bar — mirrors the courses page (blue left rail, soft shadow). */
+.atp-course {
+  background: #ffffff;
+  border: 1px solid #dde3ed;
+  border-left: 4px solid #2563eb;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.atp-course:hover,
+.atp-course.open {
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.15);
+  border-left-color: #1d4ed8;
+}
+
+.atp-course-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  gap: 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.atp-course-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+.atp-course-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.atp-course-count {
+  font-size: 12px;
+  font-weight: 500;
+  color: #2563eb;
+  background: #eff4ff;
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.atp-chevron {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  color: #6b7280;
+  transition: transform 0.2s ease, color 0.15s ease;
+}
+
+.atp-course.open .atp-chevron {
+  transform: rotate(180deg);
+  color: #2563eb;
+}
+
+/* Topics section */
+.atp-topics {
+  padding: 12px 16px 14px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #dde3ed;
+}
+
+.atp-unit + .atp-unit {
+  margin-top: 14px;
+}
+
+.atp-unit-title {
+  margin: 0 0 8px 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #2563eb;
+}
+
+.atp-topics ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.atp-topics li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13.5px;
+  color: #374151;
+  padding-right: 2px;
+}
+
+.atp-topic-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.atp-topic-name::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2563eb;
+  flex-shrink: 0;
+}
+
+/* Question-count control sits left of the (right-anchored) checkbox, so
+   selecting a topic never nudges the checkbox column. */
+.atp-count-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.atp-count-input {
+  width: 42px;
+  padding: 2px 4px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font: inherit;
+  font-size: 13px;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.atp-count-suffix {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.atp-topic-checkbox {
+  width: 15px;
+  height: 15px;
+  accent-color: #2563eb;
+  cursor: pointer;
+  flex-shrink: 0;
+}

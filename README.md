@@ -2,7 +2,8 @@
 
 Solveki is a math practice web app. It serves an endless deck of auto-generated
 math problems organized into courses and topics, checks answers, and lets each
-signed-in user pick which topics they want to practice.
+signed-in user pick which topics they want to practice. Everyone chooses a role
+once at sign-up — **student** or **teacher** — which decides what they see.
 
 Practice is scheduled with spaced repetition: each answer grades the underlying
 topic on the SM-2 algorithm, and the daily deck surfaces topics in due order and
@@ -12,7 +13,18 @@ often.
 
 A progress dashboard shows each selected topic's SM-2 state (ease, interval,
 repetitions, due date), what's coming up in the next deck, and a per-day
-practice calendar that marks each day as completed, partial, or unpracticed.
+practice calendar that marks each day as completed, partial, or unpracticed. New
+students can skip manual topic-picking with a short **diagnostic**: a couple of
+profile questions plus a few generated problems infer their level per math
+category and pick starting topics with a pre-seeded review schedule.
+
+Teachers get a separate side of the app: create **classes** that students join
+with a code, author **assignments** (a fixed set of topics with per-topic
+question counts, or a spaced-repetition deck), assign them to classes with due
+dates, and track progress — class-level completion and accuracy, the topics
+students struggle with most, and a per-student view of their SM-2 progress and
+assignment history. An assignment can optionally feed the student's own SM-2
+schedule when completed.
 
 Problems are produced by [mathgenerator](https://github.com/lukew3/mathgenerator),
 a library of parameterized math-problem generators (a pip dependency), plus a
@@ -91,7 +103,20 @@ The backend exposes a small JSON API under the app's URLs, including:
 - `GET /practice-calendar/` — per-day practice status for a calendar month
 - `GET /courses/`, `GET /courses/<id>/topics`, `PATCH /courses/<id>/select`,
   `GET /topics/`, `PATCH /topics/<id>/select` — course/topic browsing and selection
-- `GET|PATCH /settings/` — user settings
+- `GET|PATCH /settings/`, `POST /settings/role/` — user settings and the one-time
+  role choice (student/teacher)
+- `GET /diagnostic/config/`, `POST /diagnostic/start/`, `POST /diagnostic/submit/`
+  — the onboarding diagnostic (infers level, then selects and seeds topics)
+- **Teacher — classes:** `GET|POST /classes/`, `GET|PATCH|DELETE /classes/<id>/`,
+  `GET /classes/<id>/students/`, `DELETE /classes/<id>/students/<sid>/`
+- **Teacher — assignments:** `GET|POST /assignments/`,
+  `GET|PATCH|DELETE /assignments/<id>/`, `POST /assignments/<id>/assign/`,
+  `GET /assignments/<id>/preview/`, `GET /assignments/<id>/results/`
+- **Teacher — analytics:** `GET /teacher/overview/`,
+  `GET /teacher/students/<sid>/`
+- **Student — classes & assignments:** `POST /classes/join/`, `GET /classes/mine/`,
+  `GET /assignments/mine/`, `GET /assignments/<id>/play/`,
+  `POST /assignments/<id>/advance/`
 
 See [backend/myapp/urls.py](backend/myapp/urls.py) for the full list. The
 [bruno/](bruno/) collection contains ready-to-run requests against these

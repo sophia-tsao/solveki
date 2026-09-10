@@ -43,13 +43,21 @@ function Settings({ onLoggedOut }) {
     }
   }, [loaded]);
 
+  // Teachers don't practice, so the per-practice question count is irrelevant to
+  // them — hide it and leave it out of what we save.
+  const isTeacher = loaded?.role === 'teacher';
+
   const saveSettings = async () => {
     setStatus(null);
     setError(null);
-    const count = parseInt(questionsPerDay, 10);
-    if (isNaN(count) || count < 1) {
-      setError('Number of questions must be at least 1.');
-      return;
+    const body = { language };
+    if (!isTeacher) {
+      const count = parseInt(questionsPerDay, 10);
+      if (isNaN(count) || count < 1) {
+        setError('Number of questions must be at least 1.');
+        return;
+      }
+      body.questions_per_day = count;
     }
     try {
       // Send today so growing today's deck (on a raised count) targets the
@@ -57,7 +65,7 @@ function Settings({ onLoggedOut }) {
       const response = await apiFetch(`/settings/?today=${localDay()}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language, questions_per_day: count }),
+        body: JSON.stringify(body),
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const result = await response.json();
@@ -123,16 +131,18 @@ function Settings({ onLoggedOut }) {
         </select>
       </label>
 
-      <label className="settings-field">
-        <span className="settings-label">Questions per practice</span>
-        <input
-          className="settings-input"
-          type="number"
-          min="1"
-          value={questionsPerDay}
-          onChange={(e) => setQuestionsPerDay(e.target.value)}
-        />
-      </label>
+      {!isTeacher && (
+        <label className="settings-field">
+          <span className="settings-label">Questions per practice</span>
+          <input
+            className="settings-input"
+            type="number"
+            min="1"
+            value={questionsPerDay}
+            onChange={(e) => setQuestionsPerDay(e.target.value)}
+          />
+        </label>
+      )}
 
       <button className="settings-save" onClick={saveSettings}>Save</button>
 

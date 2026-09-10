@@ -5,6 +5,12 @@ math problems to a React single-page frontend. Users sign in with Google, pick
 course topics, and work through a daily deck of problems. A Bruno collection
 documents the API for manual QA.
 
+Every user chooses a **role** once at sign-up — *student* or *teacher* — which
+decides which half of the app they see. Students practice, take a diagnostic to
+onboard, and complete teacher assignments; teachers create classes, author
+assignments, and track student progress. See [Roles, classes, and
+assignments](#roles-classes-and-assignments).
+
 ## Repo layout
 
 ```
@@ -38,6 +44,14 @@ cookies locally, the Vercel origin with `SameSite=None; Secure` cookies in
 production (see [Deployment](#deployment)). `settings.py` uses a small
 dependency-free `_load_dotenv()` to read `backend/.env`.
 
+**Roles.** Each user's role (`student` / `teacher`) lives on their `Settings`
+row and is chosen once at first sign-in via `POST /settings/role/`. The endpoint
+refuses to change a role already marked `role_chosen`, so a student can't later
+promote themselves to teacher to read other students' data — the frontend's
+role picker is a convenience, this check is the real guard. Teacher-only
+endpoints call `_require_teacher` (401 if anonymous, else 403 for a non-teacher)
+the same way every view calls `_require_auth`.
+
 ### Data model (`backend/myapp/models.py`)
 
 - **Course** — `course_name`, `grade_level`.
@@ -56,13 +70,34 @@ dependency-free `_load_dotenv()` to read `backend/.env`.
   grading rule (see below). Stores a snapshot of the topic's SM-2 state *before*
   the day's first grade plus the worst quality seen so far today, so repeated
   answers recompute from a fixed base instead of compounding.
-- **Settings** — one-to-one per user; `language`, `questions_per_day`.
+- **DailyPractice** — one row per (user, date), tracking `answered`/`total` for a
+  day's deck. `DailyDeck` rows are pruned when a new day starts and
+  `DailyTopicGrade` counts topics rather than problems, so neither can say after
+  the fact whether a past day was finished; this durable record gives the
+  dashboard calendar a stable "completed / partial / none" signal.
+- **Settings** — one-to-one per user; `language`, `questions_per_day`, and the
+  user's `role` (`student`/`teacher`) plus `role_chosen`. Role rides along with
+  the per-user config that `Settings.load(user)` provisions on demand rather than
+  living on a separate profile.
 - **DailyDeck** — per user + date; `problems` (JSON list of `{problem, solution,
   topic_id}`), `current_index`, and `needs_regen`. `topic_id` attributes each
   stored problem back to its source topic so an answer can be graded against that
   topic. `needs_regen` is a dirty flag: a topic/course selection change sets it
   (a tiny write) instead of rebuilding the deck inline, and the unanswered tail
   is regenerated lazily on the next `GET /deck` (see "Filling the deck" below).
+
+The teacher/student class-and-assignment feature adds a further cluster of
+models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignments)):
+
+- **Classroom** / **ClassEnrollment** — a teacher-owned class with a unique
+  `join_code`, and one enrollment row per (class, student).
+- **Assignment** / **AssignmentTopic** / **AssignmentClass** — a teacher-authored
+  task (its `mode` encodes both *topics vs deck* and *whether SM-2 is applied*),
+  its optional explicit topic list with per-topic question counts, and the links
+  handing it to classes with per-class `available_at`/`due_at`.
+- **StudentAssignment** / **AssignmentAttempt** — one student's instance of an
+  assignment (their generated `problems` + progress, same JSON shape as
+  `DailyDeck`), and one normalized row per answered problem for analytics.
 
 ### Endpoints (`backend/myapp/urls.py`)
 
@@ -76,11 +111,34 @@ dependency-free `_load_dotenv()` to read `backend/.env`.
 | GET | `problem/` | `generate_problem` |
 | GET | `deck/` | `get_deck` |
 | POST | `deck/advance/` | `advance_deck` |
+| GET | `dashboard/` | `view_dashboard` |
+| GET | `practice-calendar/` | `view_practice_calendar` |
 | GET/PATCH | `settings/` | `settings_view` |
+| POST | `settings/role/` | `set_role` (one-time role choice) |
 | GET | `courses/` | `view_courses` |
+| GET | `topics/` | `view_topics` |
 | GET | `courses/<id>/topics` | `view_course_topics` |
 | PATCH | `courses/<id>/select` | `set_course_topics_selected` |
 | PATCH | `topics/<id>/select` | `toggle_topic` |
+| GET | `diagnostic/config/` | `diagnostic_config` |
+| POST | `diagnostic/start/` | `diagnostic_start` |
+| POST | `diagnostic/submit/` | `diagnostic_submit` |
+| GET/POST | `classes/` | `classes` (teacher: list/create) |
+| GET/PATCH/DELETE | `classes/<id>/` | `class_detail` (teacher) |
+| GET | `classes/<id>/students/` | `class_students` (teacher) |
+| DELETE | `classes/<id>/students/<sid>/` | `remove_student` (teacher) |
+| POST | `classes/join/` | `join_class` (student) |
+| GET | `classes/mine/` | `my_classes` (student) |
+| GET/POST | `assignments/` | `assignments` (teacher: list/create) |
+| GET/PATCH/DELETE | `assignments/<id>/` | `assignment_detail` (teacher) |
+| POST | `assignments/<id>/assign/` | `assign_to_classes` (teacher) |
+| GET | `assignments/<id>/preview/` | `assignment_preview` (teacher) |
+| GET | `assignments/<id>/results/` | `assignment_results` (teacher analytics) |
+| GET | `assignments/mine/` | `my_assignments` (student) |
+| GET | `assignments/<id>/play/` | `play_assignment` (student) |
+| POST | `assignments/<id>/advance/` | `advance_assignment` (student) |
+| GET | `teacher/overview/` | `teacher_overview` (teacher analytics) |
+| GET | `teacher/students/<sid>/` | `student_detail` (teacher analytics) |
 
 Selection is exposed as strings, not booleans. Each topic in `view_topics` /
 `view_course_topics` carries a `selection_status` of `"selected"` |
@@ -192,15 +250,119 @@ SM-2 update from a single base", never a chain of them.
 `tests/test_srs_integration.py` covers the deck-layer wiring (due ordering,
 grading, the once-per-day rule) end to end.
 
+## The onboarding diagnostic
+
+A new user faces 300-plus topics with no idea which to pick — a cold-start problem.
+The diagnostic (`backend/myapp/diagnostic_config.py` + `views/diagnostic.py`)
+solves it: a couple of profile questions (current course, unit reached) plus a
+handful of freshly generated calibration problems infer the user's level **per
+math category** (elementary, middle, algebra, geometry, statistics, precalculus,
+calculus), and that inference drives (a) which courses of each category to select
+and (b) how to seed each selected topic's SM-2 schedule so already-mastered
+material starts further out.
+
+The split mirrors `srs.py`: `diagnostic_config.py` holds the category taxonomy
+and the pure level-inference/seeding rules (no Django, no HTTP), so they can be
+unit-tested in isolation; `views/diagnostic.py` resolves category course names to
+`Topic` rows, generates the calibration problems, and writes the resulting
+`UserTopicSelection` / `TopicReview`. The categories list course names verbatim
+from `seed_courses.CURRICULUM`, so the feature needs no schema change.
+
+## Roles, classes, and assignments
+
+The teacher side of the app is built on top of the same problem-generation and
+SM-2 machinery students use, so a teacher's assignment is graded and (optionally)
+scheduled exactly the way normal practice is.
+
+### Roles
+
+Every user has a role on their `Settings` row, chosen once at first sign-in
+(`POST /settings/role/`). The endpoint is the authority — it refuses to change a
+role already marked `role_chosen`, so the choice can't be escalated later; the
+frontend's role picker just makes the choice. `_require_teacher` gates every
+teacher-only endpoint (401 anonymous → 403 non-teacher), and the SPA restricts
+navigation to the pages of the current role. Students supply a first/last name at
+sign-up (the name teachers see); it's stored on the Django user.
+
+### Classes
+
+A **Classroom** is teacher-owned and carries a short, unique `join_code` drawn
+from an unambiguous alphabet (no `O/0/I/1`) so it's safe to read off a board. A
+student joins by posting the code (`POST /classes/join/`), creating a
+**ClassEnrollment**. Every teacher class endpoint runs an ownership guard
+(`_get_owned_class`, 404/403) so a teacher can only act on classes they created;
+a student can only see the classes they're enrolled in. Classes can be archived
+(hidden from the default lists but retained so past analytics still resolve
+them).
+
+### Assignments: one authoring, many classes
+
+An **Assignment** is authored once and handed to any number of classes through
+**AssignmentClass** links (each carrying that class's `available_at`/`due_at`),
+so editing or deleting the assignment affects every class it reached. It has two
+orthogonal dimensions, packed into a single `mode` field (read via the
+`is_topics`/`is_deck`/`sm2_enabled` properties, composed via `make_mode`):
+
+- **Delivery kind.** *Topics* — the teacher picks specific topics and a question
+  count each (`AssignmentTopic` rows). *Deck* — the student gets a
+  spaced-repetition deck of `deck_size` problems, either across all their
+  selected topics (`deck_scope='all'`) or limited to a teacher-picked topic set
+  (`deck_scope='topics'`, which is also added to the student's own selections so
+  it carries into their daily practice). Legacy `course`/`unit` scopes remain for
+  older assignments.
+- **SM-2 or not.** A `*_sm2` mode feeds the result back into the student's
+  `TopicReview` schedule on completion; otherwise assignment answers never touch
+  their schedule.
+
+### Taking an assignment
+
+Problems are generated **per student on first open** (`play_assignment`) and
+stored inline on a **StudentAssignment** in the same JSON shape as `DailyDeck`
+(`{problem, solution, topic_id}`), so each student gets fresh numbers. A deck-kind
+assignment reuses the deck layer's due-weighting (`_effective_due_dates` /
+`_weighted_slot_counts`) so overdue topics get more of the questions — exactly
+like normal practice. The student answers card-by-card with the same two-attempt
+UI; `advance_assignment` records one **AssignmentAttempt** per problem (outcome +
+correctness, mirroring the deck's outcome strings) and, on the final card, marks
+the instance completed.
+
+If SM-2 is enabled, completion applies **one grade per topic derived from
+accuracy** (`_apply_sm2_from_accuracy` → `_accuracy_to_quality`), routed through
+the deck's shared `_apply_quality` so it obeys the same once-per-day rule as
+normal practice. A student who opens a deck assignment with no topics in scope
+yet isn't persisted as an instantly-"completed" zero-problem instance; the view
+returns an `empty` marker so the client can explain rather than congratulate.
+
+### Teacher analytics
+
+`AssignmentAttempt` is normalized (one row per answered problem) so analytics are
+ORM aggregations rather than JSON scans. `assignment_results` reports average
+accuracy, per-topic accuracy sorted worst-first ("most struggled with"), and each
+student's accuracy and time taken. `teacher_overview` rolls those up across all
+of a teacher's classes; `student_detail` combines a student's SM-2 topic stats —
+the *same* view their own dashboard shows — with their assignment history, and is
+gated so a teacher can only open a student enrolled in one of their classes.
+
 ## Frontend (React 19 + Vite 8)
 
 Located at `frontend/` (top-level, a sibling of `backend/`). Uses KaTeX for
-math rendering and oxlint for
-linting. `App.jsx` is a top-level router-by-state (`math`, `courses`,
-`settings` pages; `LoginPage` when unauthenticated). Practice UI lives in
-`MathProblem.jsx` / `MathProblemDisplay.jsx` / `MathProblemResponse.jsx`
-(problem rendering, answer box, two-attempt flow); course selection in
-`CourseList.jsx` / `CourseBar.jsx`; auth helpers in `auth.js`.
+math rendering and oxlint for linting. `App.jsx` is a top-level hash router
+(`#/page` or `#/page/42` for the detail pages, parsed without a router library).
+`LoginPage` shows when unauthenticated; a brand-new user then hits `RolePicker`
+before entering the app. The set of reachable pages is **keyed by role**
+(`STUDENT_PAGES` / `TEACHER_PAGES`), so a student can't navigate to a teacher
+page by editing the URL — and the backend enforces the same on every endpoint.
+
+- **Student pages.** Practice UI in `MathProblem.jsx` /
+  `MathProblemDisplay.jsx` / `MathProblemResponse.jsx` (problem rendering, answer
+  box, two-attempt flow); course selection in `CourseList.jsx` / `CourseBar.jsx`;
+  `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` /
+  `AssignmentPlayer.jsx`; `StudentClasses.jsx`.
+- **Teacher pages.** `TeacherOverview.jsx`, `ClassList.jsx` / `ClassDetail.jsx`,
+  `StudentDetail.jsx`, `TeacherAssignments.jsx` / `AssignmentBuilder.jsx` /
+  `AssignmentDetail.jsx`, and a `TeacherGuide.jsx` new teachers land on first.
+
+Auth helpers (including the `apiFetch` credentialed wrapper) live in `auth.js`.
 
 ## Testing
 

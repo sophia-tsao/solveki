@@ -12,6 +12,7 @@ urlpatterns = [
     path('dashboard/', views.view_dashboard, name="view_dashboard"),
     path('practice-calendar/', views.view_practice_calendar, name="view_practice_calendar"),
     path('settings/', views.settings_view, name="settings_view"),
+    path('settings/role/', views.set_role, name="set_role"),
     path('courses/', views.view_courses, name="view_courses"),
     path('topics/', views.view_topics, name="view_topics"),
     path('courses/<int:courseID>/topics', views.view_course_topics, name="view_course_topics"),
@@ -20,4 +21,27 @@ urlpatterns = [
     path('diagnostic/config/', views.diagnostic_config, name="diagnostic_config"),
     path('diagnostic/start/', views.diagnostic_start, name="diagnostic_start"),
     path('diagnostic/submit/', views.diagnostic_submit, name="diagnostic_submit"),
+
+    # Classes (teacher-owned) and student membership.
+    path('classes/', views.classes, name="classes"),
+    path('classes/join/', views.join_class, name="join_class"),
+    path('classes/mine/', views.my_classes, name="my_classes"),
+    path('classes/<int:class_id>/', views.class_detail, name="class_detail"),
+    path('classes/<int:class_id>/students/', views.class_students, name="class_students"),
+    path('classes/<int:class_id>/students/<int:student_id>/', views.remove_student, name="remove_student"),
+
+    # Assignments: teacher authoring + analytics.
+    path('assignments/', views.assignments, name="assignments"),
+    path('assignments/mine/', views.my_assignments, name="my_assignments"),
+    path('assignments/<int:assignment_id>/', views.assignment_detail, name="assignment_detail"),
+    path('assignments/<int:assignment_id>/assign/', views.assign_to_classes, name="assign_to_classes"),
+    path('assignments/<int:assignment_id>/preview/', views.assignment_preview, name="assignment_preview"),
+    path('assignments/<int:assignment_id>/results/', views.assignment_results, name="assignment_results"),
+    # Student taking an assignment.
+    path('assignments/<int:assignment_id>/play/', views.play_assignment, name="play_assignment"),
+    path('assignments/<int:assignment_id>/advance/', views.advance_assignment, name="advance_assignment"),
+
+    # Teacher analytics.
+    path('teacher/overview/', views.teacher_overview, name="teacher_overview"),
+    path('teacher/students/<int:student_id>/', views.student_detail, name="student_detail"),
 ]

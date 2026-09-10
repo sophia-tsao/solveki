@@ -56,6 +56,24 @@ export async function loginWithGoogle(credential) {
   return data;
 }
 
+export async function setRole(role, { firstName, lastName } = {}) {
+  const body = { role };
+  if (firstName != null) body.first_name = firstName;
+  if (lastName != null) body.last_name = lastName;
+  const res = await apiFetch('/settings/role/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    log.error('Set role failed:', data.error || res.status);
+    throw new Error(data.error || `HTTP error! Status: ${res.status}`);
+  }
+  log.info('Role set to', role);
+  return data;
+}
+
 export async function logout() {
   const res = await apiFetch('/auth/logout/', { method: 'POST' });
   if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
