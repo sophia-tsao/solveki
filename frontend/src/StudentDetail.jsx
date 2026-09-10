@@ -19,11 +19,11 @@ function StudentDetail({ studentId }) {
     enabled: studentId != null,
   });
 
-  if (isPending) return <div className="teacher-page"><p>Loading…</p></div>;
-  if (error) return <div className="teacher-page"><p className="teacher-error">Failed to load student.</p></div>;
+  if (isPending) return <div className="teacher-page teacher-page-wide"><p>Loading…</p></div>;
+  if (error) return <div className="teacher-page teacher-page-wide"><p className="teacher-error">Failed to load student.</p></div>;
 
   return (
-    <div className="teacher-page">
+    <div className="teacher-page teacher-page-wide">
       <h1>{data.student.name}</h1>
       <p className="teacher-card-stat">{data.student.email}</p>
 

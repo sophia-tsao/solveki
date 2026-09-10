@@ -17,7 +17,7 @@ const BANDS = [
 
 const VIEW_W = 640;
 const VIEW_H = 300;
-const MARGIN = { top: 16, right: 96, bottom: 36, left: 40 };
+const MARGIN = { top: 16, right: 16, bottom: 36, left: 40 };
 const PLOT_W = VIEW_W - MARGIN.left - MARGIN.right;
 const PLOT_H = VIEW_H - MARGIN.top - MARGIN.bottom;
 
@@ -117,26 +117,14 @@ function ProficiencyTrend({ title, description, scope = 'all', classId, studentI
               </text>
             ))}
 
-            {/* One line per band, with a direct label at its right end. */}
+            {/* One line per band; the legend above carries each band's identity. */}
             {BANDS.map((b) => {
               const pts = series.map((d, i) => `${xScale(i, n).toFixed(1)},${yScale(d[b.key]).toFixed(1)}`).join(' ');
               const last = series[n - 1];
-              return (
-                <g key={b.key}>
-                  {n === 1 ? (
-                    <circle cx={xScale(0, n)} cy={yScale(last[b.key])} r="4" fill={b.color} />
-                  ) : (
-                    <polyline points={pts} fill="none" stroke={b.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-                  )}
-                  <text
-                    x={VIEW_W - MARGIN.right + 6}
-                    y={yScale(last[b.key]) + 4}
-                    className="ptrend-line-label"
-                    style={{ fill: b.color }}
-                  >
-                    {b.label}
-                  </text>
-                </g>
+              return n === 1 ? (
+                <circle key={b.key} cx={xScale(0, n)} cy={yScale(last[b.key])} r="4" fill={b.color} />
+              ) : (
+                <polyline key={b.key} points={pts} fill="none" stroke={b.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
               );
             })}
 
