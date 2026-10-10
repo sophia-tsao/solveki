@@ -9,7 +9,9 @@ Practice is scheduled with spaced repetition: each answer grades the underlying
 topic on the SM-2 algorithm, and the daily deck surfaces topics in due order and
 gives more of the deck to the topics that are due, so struggled-with topics come
 back soon and take up more of your session while mastered ones resurface less
-often.
+often. Each card has a **Learn more** link to a video that teaches its topic (a
+Khan Academy video wherever one exists), shown on the question and again after
+a wrong answer. Admins can change any topic's video from the Django admin.
 
 A progress dashboard shows each selected topic's SM-2 state (ease, interval,
 repetitions, due date), what's coming up in the next deck, and a per-day
@@ -42,6 +44,7 @@ solveki/
 │   └── myapp/           App: models, views, generators, migrations, seed commands
 ├── frontend/    React + Vite single-page app (unit tests + Playwright e2e)
 ├── bruno/       Bruno API collection for exercising the backend
+├── docs/        Reference docs: Khan Academy video catalog, coverage gaps, crawl scripts
 └── .github/     CI workflows
 ```
 
@@ -63,10 +66,23 @@ python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e .                   # installs deps from pyproject.toml
 python manage.py migrate
-python manage.py seed_topics       # load topics
+python manage.py seed_topics       # load topics and their default "Learn more" videos
 python manage.py seed_courses      # create courses and link the topics to them
 python manage.py runserver
 ```
+
+### Editing topic videos
+
+Each topic's "Learn more" link is stored in the database and edited in the
+Django admin. Create an admin account with `python manage.py createsuperuser`,
+open `http://localhost:8000/admin/`, go to **Topics**, and change the link in
+the list or on the topic's page. Any URL works. Leave it blank to hide the
+link.
+
+Rerunning `seed_topics` never overwrites a link you've set: it only fills
+links that are blank. The defaults live in
+[backend/myapp/learn_more.py](backend/myapp/learn_more.py), so changing one
+there only affects new topics, or topics whose link you've cleared.
 
 Configuration is read from environment variables or a `backend/.env` file
 (git-ignored). At minimum set the Google OAuth client ID:
@@ -100,8 +116,9 @@ The backend exposes a small JSON API under the app's URLs, including:
 - `GET /auth/me/`, `POST /auth/google/`, `POST /auth/logout/`,
   `DELETE /auth/delete/` — authentication and account deletion
 - `GET /problem/` — generate a problem
-- `GET /deck/`, `POST /deck/advance/` — the daily practice deck (advancing may
-  report an answer outcome that updates the topic's spaced-repetition schedule)
+- `GET /deck/`, `POST /deck/advance/` — the daily practice deck; each card
+  includes its topic name and "Learn more" link. Advancing may report an
+  answer outcome that updates the topic's spaced-repetition schedule.
 - `GET /dashboard/` — selected/upcoming topics with their SM-2 state
 - `GET /practice-calendar/` — per-day practice status for a calendar month
 - `GET /courses/`, `GET /courses/<id>/topics`, `PATCH /courses/<id>/select`,

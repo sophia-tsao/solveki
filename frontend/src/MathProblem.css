@@ -74,8 +74,12 @@
     align-self: stretch;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    /* Group the labels to the left so the top-right corner is free for the
+       "Learn more" link; leave room on the right so a long progress/attempt
+       pair never slides under the link. */
+    justify-content: flex-start;
+    gap: 14px;
+    padding-right: 92px;
 }
 
 .math-problem-progress {
@@ -108,6 +112,26 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     text-align: center;
+}
+
+/* A quiet corner link to a video that teaches the current topic. Sits in
+   the top-right corner of the card (above the left-grouped meta labels on the
+   front face, and over the empty top-right of the incorrect back face). */
+.math-problem-learn-more {
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    z-index: 4;
+    font-size: 12px;
+    font-weight: 600;
+    color: #2563eb;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.math-problem-learn-more:hover {
+    text-decoration: underline;
 }
 
 .math-problem-display {

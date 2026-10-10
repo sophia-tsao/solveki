@@ -14,6 +14,10 @@ class Topic(models.Model):
     topic_name = models.CharField()
     course = models.ForeignKey('Course', blank=True, null=True, on_delete=models.SET_NULL, related_name="topics")
     generator_name = models.CharField(blank=True, null=True)
+    # The practice card's "Learn more" link: a video or resource that teaches the
+    # topic. Admin-editable; seed_topics only fills it while blank (defaults in
+    # learn_more.py), so an admin's choice survives reseeding. Blank = no link.
+    learn_more_url = models.URLField(max_length=500, blank=True, default="")
 
     def __str__(self):
         return self.topic_name

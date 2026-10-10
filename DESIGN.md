@@ -20,6 +20,7 @@ solveki/
 │   └── myapp/        the single app (models, views, generators, tests, commands)
 ├── frontend/         React 19 SPA built with Vite (unit tests + Playwright e2e)
 ├── bruno/            Bruno API client collection (one request per endpoint)
+├── docs/             reference docs, incl. the Khan Academy catalog + crawl scripts
 ├── README.md
 └── .github/          CI
 ```
@@ -57,7 +58,9 @@ the same way every view calls `_require_auth`.
 - **Course** — `course_name`, `grade_level`.
 - **Topic** — `topic_name`, FK `course`, and `generator_name` (the string that
   maps a topic to a generator callable). This field is the linchpin of the
-  generator system.
+  generator system. Also `learn_more_url`, the practice card's "Learn more"
+  link (blank = no link), which is edited in the Django admin; see
+  [Learn more links](#learn-more-links-learn_morepy).
 - **UserTopicSelection** — per-user selection row (user, topic), unique
   together; row existence means "selected".
 - **TopicReview** — per (user, topic) SM-2 scheduling state: `ease`, `interval`,
@@ -173,6 +176,13 @@ When the student advances past a card, the client reports how it was answered
 deck layer maps that outcome to an SM-2 quality grade and updates the card's
 topic schedule (`_grade_topic`). The outcome is optional, so a stray advance
 with no answer (the midnight-rollover case) simply doesn't grade.
+
+Each card in the payload carries its topic's `topic_name` and `learn_more_url`.
+Stored deck problems keep only a `topic_id`, so `_deck_payload` looks both up
+on the `Topic` row when the card is shown. A rename or an admin's link change
+therefore shows up at once, even on a deck already built that day. A blank link,
+or an old deck entry with no `topic_id`, is sent as `null`, and the card shows
+no link.
 
 "The day" is the *user's* local day, not the server's. The server clock is UTC
 (`TIME_ZONE`), so every deck-touching request carries the client's local date
@@ -365,7 +375,9 @@ page by editing the URL — and the backend enforces the same on every endpoint.
 
 - **Student pages.** Practice UI in `MathProblem.jsx` /
   `MathProblemDisplay.jsx` / `MathProblemResponse.jsx` (problem rendering, answer
-  box, two-attempt flow); course selection in `CourseList.jsx` / `CourseBar.jsx`;
+  box, two-attempt flow). The card's top-right "Learn more ↗" link opens the
+  backend-sent `learn_more_url` in a new tab, on both the question face and
+  the wrong-answer face. Course selection is in `CourseList.jsx` / `CourseBar.jsx`;
   `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` (opening an
   assignment just routes to the practice page); `StudentClasses.jsx`.
 - **Teacher pages.** `TeacherOverview.jsx`, `ClassList.jsx` / `ClassDetail.jsx`,
@@ -666,6 +678,46 @@ to a generator name — the three custom locals plus ~60 stock library names:
 ("Area of Triangle", "area_of_triangle"),
 ```
 
+### Learn more links (`learn_more.py`)
+
+Every topic has a "Learn more" link to a video that teaches it, stored in
+`Topic.learn_more_url`. Seeded data has one owner per field, either the code or
+the admin, and the seed command respects that:
+
+- **`generator_name` is owned by code.** `seed_topics` overwrites it on every
+  run to match `TOPICS`, since a generator only exists in code.
+- **`learn_more_url` is owned by the admin.** `seed_topics` writes the default
+  from `LEARN_MORE_VIDEOS` (generator name → YouTube ID) only while the link is
+  blank. Once set, reseeding never changes it, so an admin's choice survives.
+
+So changing a default in `learn_more.py` affects only new topics and topics
+whose link is blank. To change an existing topic's video, edit it in the admin
+(**Topics** list, editable inline), or clear the link and reseed. The admin
+field is a URL field, so any resource works, not only YouTube.
+
+Databases that existed before the field was added get their links from data
+migration `0019_fill_topic_learn_more_url`. It fills only blank links, from its
+own frozen copy of the video IDs, so later edits to `learn_more.py` can't change
+what the migration does.
+
+The defaults are Khan Academy videos wherever one exists. They were matched
+against a crawl of Khan Academy's math courses:
+- [docs/khan_academy_math_catalog.md](docs/khan_academy_math_catalog.md) is the
+  full catalog of each video's title, summary, Khan Academy URL and YouTube URL.
+- [docs/khan_academy_coverage_gaps.md](docs/khan_academy_coverage_gaps.md) lists
+  the lessons Khan Academy teaches that Solveki has no topic for, and the
+  Solveki topics with no Khan Academy video, which fall back to another
+  educational YouTube channel.
+- [docs/ka-crawl/](docs/ka-crawl/) holds the scripts that produced them. They
+  use headless Playwright, because Khan Academy blocks plain HTTP clients, and
+  Khan Academy's internal GraphQL queries, whose hashes can change when the
+  site is redeployed.
+
+Tests: `test_learn_more` fails if a seeded generator has no default or a
+default is keyed by an unknown generator. `test_seed_topics` covers the
+fill-only-when-blank rule and the data migration, and `test_admin` covers
+editing the link.
+
 ### Contract tests (`myapp/tests/test_generators.py`)
 
 - **`SeedGeneratorContractTests`**
@@ -698,6 +750,9 @@ which randomly chooses among the selected topics' generators and returns
 2. If it's a new module, import it in `generators/__init__.py` so its
    `@register` runs.
 3. Add a `("Some Topic", "foo")` entry to `TOPICS` in `seed_topics.py`.
+4. Add a default "Learn more" video for `foo` to `LEARN_MORE_VIDEOS` in
+   `learn_more.py` (`test_learn_more` fails until you do). See
+   [Learn more links](#learn-more-links-learn_morepy) for how the seed applies it.
 
 The contract tests then automatically verify it resolves and produces output.
 ```

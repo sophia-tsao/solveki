@@ -134,6 +134,47 @@ class DeckTests(TestCase):
         self.assertTrue(all(p["topic_id"] == self.topic.id for p in deck.problems))
 
     @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_card_carries_its_topics_learn_more_url(self, mock_gen):
+        # The card shows whatever link is stored on the topic (admin-editable),
+        # not a value computed from the generator.
+        self.topic.learn_more_url = "https://www.khanacademy.org/math/some-lesson"
+        self.topic.save()
+        select(self.user, self.topic)
+        data = self.client.get("/deck/").json()
+        self.assertEqual(data["topic_name"], self.topic.topic_name)
+        self.assertEqual(data["learn_more_url"], "https://www.khanacademy.org/math/some-lesson")
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_admin_link_change_shows_on_the_existing_deck(self, mock_gen):
+        # The link is looked up at display time, so editing it in the admin
+        # updates a deck that was already built today.
+        select(self.user, self.topic)
+        self.client.get("/deck/")
+        self.topic.learn_more_url = "https://www.youtube.com/watch?v=_LDR1_Prveo"
+        self.topic.save()
+        data = self.client.get("/deck/").json()
+        self.assertEqual(data["learn_more_url"], "https://www.youtube.com/watch?v=_LDR1_Prveo")
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_card_for_topic_with_blank_link_has_no_learn_more_url(self, mock_gen):
+        # No search fallback: a topic whose link is blank sends no link.
+        select(self.user, self.topic)
+        data = self.client.get("/deck/").json()
+        self.assertIsNone(data["learn_more_url"])
+
+    def test_legacy_card_without_topic_id_has_no_learn_more_url(self):
+        # A deck entry stored before topic attribution has no topic to look up.
+        DailyDeck.objects.create(
+            user=self.user,
+            date=datetime.date(2026, 7, 21),
+            problems=[{"problem": "old", "solution": "1"}],  # no topic_id
+            current_index=0,
+        )
+        data = self.client.get("/deck/?today=2026-07-21").json()
+        self.assertIsNone(data["topic_name"])
+        self.assertIsNone(data["learn_more_url"])
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
     def test_legacy_deck_without_topic_id_tops_up_without_error(self, mock_gen):
         # A deck persisted before topic attribution existed has entries with no
         # topic_id. Topping it up must not crash reading the in-deck topic ids.

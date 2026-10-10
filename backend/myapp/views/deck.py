@@ -567,27 +567,30 @@ def _deck_payload(user, deck):
     if deck.current_index >= total:
         return {"completed": True, "total": total}
     current = deck.problems[deck.current_index]
+    topic = _topic_meta(current.get("topic_id"))
     return {
         "problem": current["problem"],
         "solution": current["solution"],
-        "topic_name": _topic_name(current.get("topic_id")),
+        "topic_name": topic["topic_name"] if topic else None,
+        "learn_more_url": (topic["learn_more_url"] or None) if topic else None,
         "current_number": deck.current_index + 1,
         "total": total,
     }
 
 
-def _topic_name(topic_id):
-    """Resolve a stored problem's topic id to its display name, or None.
+def _topic_meta(topic_id):
+    """Resolve a stored problem's topic id to its display name and "Learn more" link, or None.
 
-    Problems store only `topic_id` (not the name), so the card's topic label is
-    looked up here at display time — which also keeps it current if a topic is
-    renamed. Returns None when the id is missing (problems stored before topic
-    attribution) or the topic no longer exists, so the client simply omits the
-    label rather than showing a stale or broken one.
+    Problems store only `topic_id`, so the card's topic label and its "Learn
+    more" video link are looked up here at display time — which also keeps both
+    current if a topic is renamed or an admin changes its link. Returns None when the
+    id is missing (problems stored before topic attribution) or the topic no
+    longer exists, so the client simply omits the label and link rather than
+    showing stale or broken ones.
     """
     if topic_id is None:
         return None
-    return Topic.objects.filter(id=topic_id).values_list("topic_name", flat=True).first()
+    return Topic.objects.filter(id=topic_id).values("topic_name", "learn_more_url").first()
 
 
 @csrf_exempt

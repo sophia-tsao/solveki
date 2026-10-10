@@ -15,10 +15,14 @@ class CourseAdmin(admin.ModelAdmin):
     inlines = [TopicInline]
 
 
+# The "Learn more" link is edited here (seed_topics only fills blank links), so
+# it's editable straight from the topic list.
 @admin.register(Topic)
 class TopicAdmin(admin.ModelAdmin):
-    list_display = ("topic_name", "course")
+    list_display = ("topic_name", "course", "generator_name", "learn_more_url")
+    list_editable = ("learn_more_url",)
     list_filter = ("course",)
+    search_fields = ("topic_name", "generator_name")
 
 
 # Roles are changed from the admin (the /settings/role/ endpoint only lets a

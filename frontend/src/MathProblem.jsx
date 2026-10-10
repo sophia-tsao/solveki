@@ -24,6 +24,27 @@ function renderMixedLatex(str) {
   );
 }
 
+// A corner link to a video that teaches the current topic. The backend picks the
+// video per topic (see learn_more.py) and sends it as `learn_more_url`; renders
+// nothing when it's absent (problems stored before topic attribution, or a topic
+// with no curated video), so the card simply omits the link.
+function LearnMoreLink({ url }) {
+  if (!url) return null;
+  return (
+    <a
+      className="math-problem-learn-more"
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      // The card is clickable (it submits/advances); keep a link click from
+      // bubbling into any card-level handler.
+      onClick={(e) => e.stopPropagation()}
+    >
+      Learn more ↗
+    </a>
+  );
+}
+
 const CONFETTI_COLORS = ['#2563eb', '#16a34a', '#f59e0b', '#ec4899', '#8b5cf6'];
 
 function Confetti() {
@@ -64,6 +85,7 @@ function Confetti() {
 function MathProblem() {
   const [problem, setProblem] = useState(null);
   const [topicName, setTopicName] = useState(null);
+  const [learnMoreUrl, setLearnMoreUrl] = useState(null);
   const [solution, setSolution] = useState(null);
   const [currentNumber, setCurrentNumber] = useState(null);
   const [total, setTotal] = useState(null);
@@ -108,6 +130,7 @@ function MathProblem() {
     log.debug(`Showing question ${result.current_number} of ${result.total}`);
     setProblem(result.problem);
     setTopicName(result.topic_name ?? null);
+    setLearnMoreUrl(result.learn_more_url ?? null);
     setSolution(result.solution?.replace(/\$/g, ''));
     setCurrentNumber(result.current_number);
     setTotal(result.total);
@@ -300,6 +323,7 @@ function MathProblem() {
           `flip` is set. Front holds the problem; back holds the outcome. */}
       <div className={`math-problem-flipper${flipped ? ' flipped' : ''}`}>
         <div className="math-problem-card math-problem-face math-problem-face-front">
+          <LearnMoreLink url={learnMoreUrl} />
           <div className="math-problem-meta">
             <span className="math-problem-progress">{currentNumber} of {total} questions</span>
             <span className="math-problem-attempt">Attempt {attempt} of {MAX_ATTEMPTS}</span>
@@ -315,6 +339,7 @@ function MathProblem() {
         >
           {result === 'incorrect' ? (
             <>
+              <LearnMoreLink url={learnMoreUrl} />
               <svg className="math-problem-result-icon" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="11" stroke="#dc2626" strokeWidth="1.5" />
                 <path d="M8 8l8 8M16 8l-8 8" stroke="#dc2626" strokeWidth="1.75" strokeLinecap="round" />

@@ -1,4 +1,5 @@
 from django.core.management.base import BaseCommand
+from myapp.learn_more import default_learn_more_url
 from myapp.models import Topic
 
 # (topic_name, mathgenerator generator name)
@@ -356,13 +357,29 @@ class Command(BaseCommand):
         updated = 0
         for name, generator_name in TOPICS:
             topic, was_created = Topic.objects.get_or_create(
-                topic_name=name, defaults={"generator_name": generator_name}
+                topic_name=name,
+                defaults={
+                    "generator_name": generator_name,
+                    "learn_more_url": default_learn_more_url(generator_name),
+                },
             )
             if was_created:
                 created += 1
-            elif topic.generator_name != generator_name:
+                continue
+            # The generator is owned by this file, so it's kept in sync. The
+            # "Learn more" link is owned by the admin: only fill it while blank,
+            # never overwrite a link someone chose.
+            changed = []
+            if topic.generator_name != generator_name:
                 topic.generator_name = generator_name
-                topic.save(update_fields=["generator_name"])
+                changed.append("generator_name")
+            if not topic.learn_more_url:
+                default = default_learn_more_url(generator_name)
+                if default:
+                    topic.learn_more_url = default
+                    changed.append("learn_more_url")
+            if changed:
+                topic.save(update_fields=changed)
                 updated += 1
         self.stdout.write(
             self.style.SUCCESS(

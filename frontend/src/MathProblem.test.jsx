@@ -319,6 +319,86 @@ async function finishSingleCardDeck(user) {
   await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
 }
 
+describe('MathProblem — learn more link', () => {
+  const VIDEO_URL = 'https://www.youtube.com/watch?v=bAerID24QJ0';
+  const DECK_WITH_VIDEO = {
+    ...ACTIVE_DECK,
+    topic_name: 'Linear Equations',
+    learn_more_url: VIDEO_URL,
+  };
+
+  it('links the question card to the video the backend sends', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO));
+    renderWithClient(<MathProblem />);
+    await screen.findByText('1 of 3 questions');
+
+    const link = screen.getByRole('link', { name: /Learn more/ });
+    expect(link).toHaveAttribute('href', VIDEO_URL);
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('omits the link when the backend sends no video, even with a topic name', async () => {
+    // The card no longer builds its own search URL from the topic name: without
+    // a backend-chosen video there is no link at all.
+    apiFetch.mockResolvedValueOnce(
+      deckResponse({ ...ACTIVE_DECK, topic_name: 'Linear Equations', learn_more_url: null }),
+    );
+    renderWithClient(<MathProblem />);
+    await screen.findByText('1 of 3 questions');
+
+    expect(screen.queryByRole('link', { name: /Learn more/ })).not.toBeInTheDocument();
+  });
+
+  it('omits the link for a payload without the field (older deck entries)', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
+    renderWithClient(<MathProblem />);
+    await screen.findByText('1 of 3 questions');
+
+    expect(screen.queryByRole('link', { name: /Learn more/ })).not.toBeInTheDocument();
+  });
+
+  it('keeps the "Learn more" link on the card when the student gets it wrong', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO));
+    const user = userEvent.setup();
+    renderWithClient(<MathProblem />);
+    await screen.findByText('1 of 3 questions');
+
+    const input = screen.getByRole('textbox');
+    const button = screen.getByRole('button', { name: 'Submit' });
+    await user.type(input, '99');
+    await user.click(button); // attempt 1 -> 2
+    await screen.findByText('Attempt 2 of 2');
+    await user.type(input, '98');
+    await user.click(button); // exhausted -> flip to the incorrect face
+
+    expect(screen.getByText('Incorrect...')).toBeInTheDocument();
+    // Two links now exist (the front face is still mounted behind the flip); the
+    // incorrect back face carries its own, both pointing at the topic's video.
+    const links = screen.getAllByRole('link', { name: /Learn more/ });
+    expect(links).toHaveLength(2);
+    links.forEach((link) => expect(link).toHaveAttribute('href', VIDEO_URL));
+  });
+
+  it("switches to the next card's video after advancing", async () => {
+    const NEXT_URL = 'https://www.youtube.com/watch?v=_LDR1_Prveo';
+    const user = userEvent.setup();
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO))
+      .mockResolvedValueOnce(
+        deckResponse({ ...DECK_WITH_VIDEO, current_number: 2, learn_more_url: NEXT_URL }),
+      );
+    renderWithClient(<MathProblem />);
+    await screen.findByText('1 of 3 questions');
+
+    await user.type(screen.getByRole('textbox'), '4');
+    await user.click(screen.getByRole('button'));
+    await screen.findByText('2 of 3 questions', {}, { timeout: 2000 });
+
+    expect(screen.getByRole('link', { name: /Learn more/ })).toHaveAttribute('href', NEXT_URL);
+  });
+});
+
 describe('MathProblem — completion confetti', () => {
   it('fires confetti when the student answers the last card', async () => {
     const user = userEvent.setup();
