@@ -164,6 +164,12 @@ class DeckTests(TestCase):
 
     def test_legacy_card_without_topic_id_has_no_learn_more_url(self):
         # A deck entry stored before topic attribution has no topic to look up.
+        # A one-card deck at questions_per_day=1 isn't topped up, so the legacy
+        # entry is the card shown.
+        select(self.user, self.topic)
+        Settings.objects.update_or_create(
+            user=self.user, defaults={"questions_per_day": 1}
+        )
         DailyDeck.objects.create(
             user=self.user,
             date=datetime.date(2026, 7, 21),

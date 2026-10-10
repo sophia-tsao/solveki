@@ -1,11 +1,19 @@
 """Tests that topic "Learn more" links can be changed from the Django admin."""
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from myapp.models import Topic
 from .factories import make_course, make_topic
 
 
+# Admin pages reference static files; the production manifest storage needs
+# `collectstatic` to have run (the Dockerfile does it, CI doesn't), so serve
+# them unhashed here.
+@override_settings(STORAGES={
+    **settings.STORAGES,
+    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+})
 class TopicAdminLearnMoreTests(TestCase):
     def setUp(self):
         admin_user = get_user_model().objects.create_superuser(
