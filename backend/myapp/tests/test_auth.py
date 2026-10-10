@@ -153,16 +153,23 @@ class TestLoginTests(TestCase):
         Settings.objects.update_or_create(user=user, defaults={"questions_per_day": 3})
         DailyDeck.objects.create(user=user, date=timezone.localdate(), problems=[], current_index=0)
 
-        # A fresh login wipes selections, decks, and resets settings to defaults.
-        # (Serializing the user lazily re-creates a default Settings row, so the
-        # row exists again but carries default values, not the seeded ones.)
+        # A fresh login wipes selections, decks, and resets settings to defaults,
+        # except that the user is a student who has already chosen that role.
         self.client.post("/auth/test-login/")
         self.assertFalse(UserTopicSelection.objects.filter(user=user).exists())
         self.assertFalse(DailyDeck.objects.filter(user=user).exists())
         reset = Settings.objects.get(user=user)
         self.assertEqual(reset.questions_per_day, 10)
         self.assertEqual(reset.role, Settings.STUDENT)
-        self.assertFalse(reset.role_chosen)
+        self.assertTrue(reset.role_chosen)
+
+    @override_settings(ENABLE_TEST_LOGIN=True)
+    def test_test_user_skips_the_role_picker(self):
+        # The app shows only the role picker until role_chosen is true, which
+        # would block every E2E test; the test user must enter the student app.
+        user = self.client.post("/auth/test-login/").json()["user"]
+        self.assertEqual(user["role"], "student")
+        self.assertTrue(user["role_chosen"])
 
 
 class LogoutAndDeleteTests(TestCase):

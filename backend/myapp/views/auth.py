@@ -154,6 +154,11 @@ def test_login(request):
     user.topic_selections.all().delete()
     user.decks.all().delete()
     Settings.objects.filter(user=user).delete()
+    # The role lives on Settings, so the reset would leave the user as a
+    # brand-new one who hasn't chosen a role, and the app would show only the
+    # role picker. The suite tests the student app, so recreate the settings as
+    # an already-chosen student (everything else at its default).
+    Settings.objects.create(user=user, role=Settings.STUDENT, role_chosen=True)
     login(request, user)
     logger.info("Test login for user %s (ENABLE_TEST_LOGIN is on)", user.id)
     return JsonResponse({"authenticated": True, "user": _serialize_user(user)})
