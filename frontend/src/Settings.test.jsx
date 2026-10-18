@@ -26,13 +26,13 @@ beforeEach(() => {
 describe('Settings — loading', () => {
   it('populates fields from the fetched settings', async () => {
     apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'fr', questions_per_day: 15 }),
+      jsonResponse({ language: 'en', questions_per_day: 15 }),
     );
     renderWithClient(<Settings onLoggedOut={() => {}} />);
     await waitFor(() =>
-      expect(screen.getByRole('combobox')).toHaveValue('fr'),
+      expect(screen.getByRole('spinbutton')).toHaveValue(15),
     );
-    expect(screen.getByRole('spinbutton')).toHaveValue(15);
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('shows an error when the fetch fails', async () => {
@@ -46,28 +46,11 @@ describe('Settings — loading', () => {
       jsonResponse({ language: 'en', questions_per_day: 10, role: 'teacher' }),
     );
     renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('en'));
+    await screen.findByRole('button', { name: 'Log out' });
     expect(screen.queryByText('Questions per practice')).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
-  });
-
-  it('omits questions_per_day from a teacher save', async () => {
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'en', questions_per_day: 10, role: 'teacher' }),
-    );
-    const user = userEvent.setup();
-    renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('en'));
-
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'es', questions_per_day: 10, role: 'teacher' }),
-    );
-    await user.selectOptions(screen.getByRole('combobox'), 'es');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-
-    await screen.findByText('Settings saved.');
-    const patchCall = apiFetch.mock.calls.find((c) => c[1]?.method === 'PATCH');
-    expect(JSON.parse(patchCall[1].body)).toEqual({ language: 'es' });
+    // Nothing editable is left for teachers, so there's no Save either.
+    expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });
 
@@ -84,9 +67,8 @@ describe('Settings — saving', () => {
     await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'es', questions_per_day: 20 }),
+      jsonResponse({ language: 'en', questions_per_day: 20 }),
     );
-    await user.selectOptions(screen.getByRole('combobox'), 'es');
     const input = screen.getByRole('spinbutton');
     await user.clear(input);
     await user.type(input, '20');
@@ -94,10 +76,7 @@ describe('Settings — saving', () => {
 
     await screen.findByText('Settings saved.');
     const patchCall = apiFetch.mock.calls.find((c) => c[1]?.method === 'PATCH');
-    expect(JSON.parse(patchCall[1].body)).toEqual({
-      language: 'es',
-      questions_per_day: 20,
-    });
+    expect(JSON.parse(patchCall[1].body)).toEqual({ questions_per_day: 20 });
   });
 
   it('rejects a questions-per-day below 1 without calling the API', async () => {

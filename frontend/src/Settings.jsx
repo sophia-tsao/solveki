@@ -12,16 +12,7 @@ async function fetchSettings() {
   return response.json();
 }
 
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'zh', label: 'Chinese' },
-];
-
 function Settings({ onLoggedOut }) {
-  const [language, setLanguage] = useState('en');
   const [questionsPerDay, setQuestionsPerDay] = useState(10);
   const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
@@ -38,26 +29,21 @@ function Settings({ onLoggedOut }) {
   // because `loaded` doesn't change again unless we refetch.
   useEffect(() => {
     if (loaded) {
-      setLanguage(loaded.language);
       setQuestionsPerDay(loaded.questions_per_day);
     }
   }, [loaded]);
 
   // Teachers don't practice, so the per-practice question count is irrelevant to
-  // them — hide it and leave it out of what we save.
+  // them — hide it (and the Save button, since there's nothing left to save).
   const isTeacher = loaded?.role === 'teacher';
 
   const saveSettings = async () => {
     setStatus(null);
     setError(null);
-    const body = { language };
-    if (!isTeacher) {
-      const count = parseInt(questionsPerDay, 10);
-      if (isNaN(count) || count < 1) {
-        setError('Number of questions must be at least 1.');
-        return;
-      }
-      body.questions_per_day = count;
+    const count = parseInt(questionsPerDay, 10);
+    if (isNaN(count) || count < 1) {
+      setError('Number of questions must be at least 1.');
+      return;
     }
     try {
       // Send today so growing today's deck (on a raised count) targets the
@@ -65,12 +51,11 @@ function Settings({ onLoggedOut }) {
       const response = await apiFetch(`/settings/?today=${localDay()}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ questions_per_day: count }),
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const result = await response.json();
-      log.info(`Settings saved (language=${result.language}, questions_per_day=${result.questions_per_day})`);
-      setLanguage(result.language);
+      log.info(`Settings saved (questions_per_day=${result.questions_per_day})`);
       setQuestionsPerDay(result.questions_per_day);
       setStatus('Settings saved.');
     } catch (err) {
@@ -118,33 +103,22 @@ function Settings({ onLoggedOut }) {
     <div className="settings-card">
       <h2 className="settings-title">Settings</h2>
 
-      <label className="settings-field">
-        <span className="settings-label">Language</span>
-        <select
-          className="settings-select"
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-        >
-          {LANGUAGES.map((lang) => (
-            <option key={lang.code} value={lang.code}>{lang.label}</option>
-          ))}
-        </select>
-      </label>
-
       {!isTeacher && (
-        <label className="settings-field">
-          <span className="settings-label">Questions per practice</span>
-          <input
-            className="settings-input"
-            type="number"
-            min="1"
-            value={questionsPerDay}
-            onChange={(e) => setQuestionsPerDay(e.target.value)}
-          />
-        </label>
-      )}
+        <>
+          <label className="settings-field">
+            <span className="settings-label">Questions per practice</span>
+            <input
+              className="settings-input"
+              type="number"
+              min="1"
+              value={questionsPerDay}
+              onChange={(e) => setQuestionsPerDay(e.target.value)}
+            />
+          </label>
 
-      <button className="settings-save" onClick={saveSettings}>Save</button>
+          <button className="settings-save" onClick={saveSettings}>Save</button>
+        </>
+      )}
 
       {status && <p className="settings-status">{status}</p>}
       {error && <p className="settings-error">Error: {error}</p>}

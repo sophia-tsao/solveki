@@ -1,8 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+// Browsers without FedCM fall back to Google's sign-in popup, which has to
+// talk back to this page. The default COOP severs that link; allow-popups keeps
+// it. Mirrored for production in vercel.json.
+const COOP_HEADERS = { 'Cross-Origin-Opener-Policy': 'same-origin-allow-popups' }
+
 export default defineConfig({
   plugins: [react()],
+  server: { headers: COOP_HEADERS },
+  preview: { headers: COOP_HEADERS },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

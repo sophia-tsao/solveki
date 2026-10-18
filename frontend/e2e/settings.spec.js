@@ -4,7 +4,7 @@ import { resetUser } from './fixtures.js';
 test.describe('settings page', () => {
   test.beforeEach(async ({ page }) => {
     await resetUser(page);
-    // Settings starts with default state (useState(10)/'en') that happens to
+    // Settings starts with default state (useState(10)) that happens to
     // equal the freshly-reset server values, then overwrites the inputs when
     // GET /settings/ resolves. Waiting for a *value* would pass instantly from
     // the defaults and prove nothing, letting the late response clobber what a
@@ -17,18 +17,15 @@ test.describe('settings page', () => {
 
   test('loads with defaults', async ({ page }) => {
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    await expect(page.locator('.settings-select')).toHaveValue('en');
     await expect(page.locator('.settings-input')).toHaveValue('10');
   });
 
   test('saving changes persists across reload', async ({ page }) => {
-    await page.locator('.settings-select').selectOption('es');
     await page.locator('.settings-input').fill('5');
     await page.getByRole('button', { name: 'Save' }).click();
     await expect(page.getByText('Settings saved.')).toBeVisible();
 
     await page.reload();
-    await expect(page.locator('.settings-select')).toHaveValue('es');
     await expect(page.locator('.settings-input')).toHaveValue('5');
   });
 

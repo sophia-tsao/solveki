@@ -268,6 +268,11 @@ function LoginPage({ onLoggedIn }) {
         }
         window.google.accounts.id.initialize({
           client_id: CLIENT_ID,
+          // Sign in through the browser's FedCM dialog instead of a popup
+          // window. The popup flow postMessages across a COOP boundary, which
+          // Chrome flags with "Cross-Origin-Opener-Policy policy would block
+          // the window.postMessage call"; FedCM has no popup to message.
+          use_fedcm_for_button: true,
           callback: async (response) => {
             try {
               const data = await loginWithGoogle(response.credential);
