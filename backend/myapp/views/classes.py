@@ -10,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from ..models import AssignmentClass, Classroom, ClassEnrollment, Course
 from .common import _require_auth, _require_teacher
 from .assignments import _start_assignment_for
+from .insights import band_counts_by_student
 
 logger = logging.getLogger(__name__)
 
@@ -126,21 +127,28 @@ def class_detail(request, class_id):
 @csrf_exempt
 @require_http_methods(["GET"])
 def class_students(request, class_id):
-    """Roster for one class the teacher owns."""
+    """Roster for one class the teacher owns, with each student's band mix.
+
+    `proficiency` counts the student's selected topics per proficiency band, the
+    same mix their own dashboard donut shows.
+    """
     guard = _require_teacher(request)
     if guard:
         return guard
     classroom, err = _get_owned_class(request, class_id)
     if err:
         return err
+    enrollments = list(classroom.enrollments.select_related("student").order_by("joined_at"))
+    bands = band_counts_by_student([e.student_id for e in enrollments])
     students = []
-    for e in classroom.enrollments.select_related("student").order_by("joined_at"):
+    for e in enrollments:
         u = e.student
         students.append({
             "id": u.id,
             "name": (u.get_full_name() or u.username or u.email),
             "email": u.email,
             "joined_at": e.joined_at.isoformat(),
+            "proficiency": bands[u.id],
         })
     return JsonResponse({"students": students})
 

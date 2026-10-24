@@ -1,35 +1,12 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
-import { LEVEL_COLOR } from './TopicProgress.jsx';
+import { BandBar, BandLegend } from './BandBar.jsx';
+import StruggledTopics from './StruggledTopics.jsx';
 import './Teacher.css';
-
-// The four proficiency bands, in progression order, sharing the dashboard's
-// color system (`young`/`mature` are its internal keys for Familiar/Proficient).
-const BANDS = [
-  { key: 'new', label: 'New', color: LEVEL_COLOR.new },
-  { key: 'learning', label: 'Learning', color: LEVEL_COLOR.learning },
-  { key: 'familiar', label: 'Familiar', color: LEVEL_COLOR.young },
-  { key: 'proficient', label: 'Proficient', color: LEVEL_COLOR.mature },
-];
 
 function fmtDue(iso) {
   return iso ? new Date(iso).toLocaleString() : 'No due date';
-}
-
-// A thin stacked bar of a band-count map, e.g. {new, learning, familiar, proficient}.
-function BandBar({ counts }) {
-  const total = BANDS.reduce((sum, b) => sum + (counts[b.key] || 0), 0);
-  if (total === 0) return <span className="teacher-card-stat">—</span>;
-  return (
-    <span className="ad-bandbar" role="img" aria-label={BANDS.map((b) => `${b.label}: ${counts[b.key] || 0}`).join(', ')}>
-      {BANDS.map((b) => {
-        const n = counts[b.key] || 0;
-        if (n === 0) return null;
-        return <span key={b.key} className="ad-bandbar-seg" style={{ flexGrow: n, background: b.color }} />;
-      })}
-    </span>
-  );
 }
 
 function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
@@ -55,7 +32,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
   if (isPending) return <div className="teacher-page">{backButton}<p>Loading…</p></div>;
   if (error) return <div className="teacher-page">{backButton}<p className="teacher-error">Failed to load results.</p></div>;
 
-  const { assignment, topics, num_students, num_completed, band_totals, students } = data;
+  const { assignment, topics, struggled, num_students, num_completed, band_totals, students } = data;
   const classes = assignment.classes || [];
 
   return (
@@ -80,25 +57,40 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
       </div>
 
       <div className="teacher-cards" style={{ marginTop: '1rem' }}>
-        <div className="teacher-card">
+        <div className="teacher-card static">
           <div className="teacher-card-title">Finished</div>
           <div className="teacher-card-stat" style={{ fontSize: '1.5rem' }}>
             {num_completed} / {num_students}
           </div>
         </div>
-        <div className="teacher-card" style={{ flex: 2 }}>
+        <div className="teacher-card static" style={{ flex: 2 }}>
           <div className="teacher-card-title">Familiarity on assigned topics</div>
           <BandBar counts={band_totals} />
-          <ul className="ad-legend">
-            {BANDS.map((b) => (
-              <li key={b.key}>
-                <span className="ad-swatch" style={{ background: b.color }} />
-                {b.label} <strong>{band_totals[b.key] || 0}</strong>
-              </li>
-            ))}
-          </ul>
+          <BandLegend counts={band_totals} />
         </div>
       </div>
+
+      <StruggledTopics
+        topics={struggled}
+        showStudents
+        emptyText="No misses on these topics yet."
+      />
+
+      <h2>Familiarity by topic</h2>
+      <p className="teacher-help">How many assigned students sit in each band for each topic.</p>
+      <table className="teacher-table">
+        <thead>
+          <tr><th>Topic</th><th>Familiarity</th></tr>
+        </thead>
+        <tbody>
+          {topics.map((t) => (
+            <tr key={t.topic_id}>
+              <td>{t.topic_name}</td>
+              <td style={{ minWidth: '200px' }}><BandBar counts={t.proficiency} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
       <h2>Per-student progress</h2>
       {students.length === 0 ? (

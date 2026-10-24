@@ -131,6 +131,33 @@ class DailyPractice(models.Model):
     def __str__(self):
         return f"Practice({self.user} on {self.date}: {self.answered}/{self.total})"
 
+class AnswerRecord(models.Model):
+    """One answered practice card: its topic, how it went, and how long it took.
+
+    `DailyTopicGrade` keeps only the worst grade per topic per day (for the SM-2
+    once-per-day rule) and `DailyPractice` only counts cards, so neither can say
+    how often a student got cards right or how long they spent. This
+    append-only log, written on each graded deck advance, backs the teacher
+    views' accuracy, time-spent and "struggled with most" figures.
+
+    `outcome` is the advance's reported outcome (see `_OUTCOME_QUALITY`).
+    `seconds` is the client-measured time from the card appearing to the
+    student answering it, capped server-side so a tab left open doesn't count
+    as hours of review; 0 when the client didn't report it.
+    """
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="answer_records")
+    topic = models.ForeignKey('Topic', on_delete=models.CASCADE, related_name="answer_records")
+    date = models.DateField()
+    outcome = models.CharField(max_length=20)
+    seconds = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "date"])]
+
+    def __str__(self):
+        return f"Answer({self.user} -> {self.topic} on {self.date}: {self.outcome})"
+
 class ProficiencySnapshot(models.Model):
     """A daily count of how many of a user's selected topics sit in each proficiency band.
 

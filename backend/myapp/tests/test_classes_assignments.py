@@ -21,7 +21,7 @@ from django.utils import timezone
 from myapp.models import (
     Settings, Classroom, ClassEnrollment, Assignment, AssignmentTopic,
     AssignmentClass, StudentAssignment, TopicReview, DailyTopicGrade,
-    UserTopicSelection, DailyDeck,
+    UserTopicSelection, DailyDeck, AnswerRecord, DailyPractice,
 )
 from .factories import make_user, make_course, make_topic, select
 
@@ -33,6 +33,15 @@ def make_teacher(**kwargs):
     settings.role_chosen = True
     settings.save()
     return user
+
+
+def log_answers(user, topic, *outcomes, seconds=30, date=None):
+    """Record answered cards for `user` on `topic`, one per outcome."""
+    for outcome in outcomes:
+        AnswerRecord.objects.create(
+            user=user, topic=topic, date=date or timezone.localdate(),
+            outcome=outcome, seconds=seconds,
+        )
 
 
 def mark_practiced(user, topic, interval=10, quality=5):
@@ -615,6 +624,126 @@ class AssignmentResultsTests(TestCase):
         row = res["students"][0]
         self.assertEqual(row["status"], "in_progress")
         self.assertTrue(row["overdue"])
+
+    def test_report_breaks_bands_down_per_topic(self):
+        first, second = make_user(), make_user()
+        a = self._assign_to_student(first)
+        self._join_existing(second, a)
+        mark_practiced(first, self.easy, interval=30)  # proficient
+        mark_practiced(second, self.easy, interval=3)  # learning
+
+        self.client.force_login(self.teacher)
+        res = self.client.get(f"/assignments/{a['id']}/results/").json()
+        by_name = {t["topic_name"]: t["proficiency"] for t in res["topics"]}
+        self.assertEqual(by_name["Easy"], {"new": 0, "learning": 1, "familiar": 0, "proficient": 1})
+        self.assertEqual(by_name["Hard"], {"new": 2, "learning": 0, "familiar": 0, "proficient": 0})
+
+    def test_struggled_ranks_assigned_topics_by_misses(self):
+        student = make_user()
+        a = self._assign_to_student(student)
+        log_answers(student, self.easy, "correct_first", "correct_first", "incorrect")
+        log_answers(student, self.hard, "incorrect", "correct_second", "correct_first")
+        # Unassigned topics never show, however badly they went.
+        other = make_topic(self.course, topic_name="Other")
+        log_answers(student, other, "incorrect", "incorrect")
+
+        self.client.force_login(self.teacher)
+        res = self.client.get(f"/assignments/{a['id']}/results/").json()
+        self.assertEqual(
+            [(t["topic_name"], t["accuracy"], t["students"]) for t in res["struggled"]],
+            [("Hard", 33, 1), ("Easy", 67, 1)],
+        )
+
+    def test_struggled_omits_topics_never_missed(self):
+        student = make_user()
+        a = self._assign_to_student(student)
+        log_answers(student, self.easy, "correct_first")
+
+        self.client.force_login(self.teacher)
+        res = self.client.get(f"/assignments/{a['id']}/results/").json()
+        self.assertEqual(res["struggled"], [])
+
+    def _join_existing(self, student, assignment):
+        """Enroll another student in the class `assignment` was assigned to."""
+        link = AssignmentClass.objects.get(assignment_id=assignment["id"])
+        self.client.force_login(student)
+        self.client.post(
+            "/classes/join/", data=json.dumps({"code": link.classroom.join_code}),
+            content_type="application/json",
+        )
+
+
+class TeacherInsightTests(TestCase):
+    """Roster familiarity bars and the student detail's practice activity."""
+
+    def setUp(self):
+        self.client = Client()
+        self.teacher = make_teacher()
+        self.student = make_user()
+        self.course = make_course()
+        self.topic = make_topic(self.course, topic_name="Fractions")
+        self.other = make_topic(self.course, topic_name="Decimals")
+        select(self.student, self.topic)
+        select(self.student, self.other)
+        self.classroom = Classroom.objects.create(
+            teacher=self.teacher, name="P1", join_code="ABC234",
+        )
+        ClassEnrollment.objects.create(classroom=self.classroom, student=self.student)
+        self.client.force_login(self.teacher)
+
+    def test_roster_has_band_counts_over_selected_topics(self):
+        mark_practiced(self.student, self.topic, interval=10)
+        roster = self.client.get(f"/classes/{self.classroom.id}/students/").json()
+        self.assertEqual(
+            roster["students"][0]["proficiency"],
+            {"new": 1, "learning": 0, "familiar": 1, "proficient": 0},
+        )
+
+    def test_activity_week_and_consistency(self):
+        today = timezone.localdate()
+        day = timezone.timedelta(days=1)
+        # Practiced today (partial), yesterday (finished), then a gap, and once
+        # 10 days ago: outside the week but inside the consistency window.
+        DailyPractice.objects.create(user=self.student, date=today, answered=3, total=10)
+        DailyPractice.objects.create(user=self.student, date=today - day, answered=10, total=10)
+        DailyPractice.objects.create(user=self.student, date=today - 10 * day, answered=5, total=5)
+        log_answers(self.student, self.topic, "correct_first", "correct_first", "incorrect", seconds=40)
+        log_answers(self.student, self.other, "correct_second", seconds=20, date=today - day)
+        log_answers(self.student, self.other, "incorrect", date=today - 10 * day)
+
+        detail = self.client.get(
+            f"/teacher/students/{self.student.id}/?today={today.isoformat()}"
+        ).json()
+        activity = detail["activity"]
+        self.assertEqual(len(activity["days"]), 28)
+        self.assertEqual(activity["days"][-1], {"date": today.isoformat(), "status": "partial"})
+        self.assertEqual(activity["days"][-2]["status"], "completed")
+        self.assertEqual(activity["days_practiced"], 3)
+        self.assertEqual(activity["streak"], 2)
+        self.assertEqual(activity["week"], {"cards_answered": 13, "seconds": 140, "accuracy": 50})
+        # Decimals: 0/2 first-try; Fractions: 2/3.
+        self.assertEqual(
+            [(t["topic_name"], t["accuracy"]) for t in detail["struggled"]],
+            [("Decimals", 0), ("Fractions", 67)],
+        )
+
+    def test_streak_holds_until_today_is_practiced(self):
+        today = timezone.localdate()
+        day = timezone.timedelta(days=1)
+        for n in (1, 2):
+            DailyPractice.objects.create(user=self.student, date=today - n * day, answered=1, total=10)
+        detail = self.client.get(
+            f"/teacher/students/{self.student.id}/?today={today.isoformat()}"
+        ).json()
+        self.assertEqual(detail["activity"]["streak"], 2)
+
+    def test_activity_empty_for_new_student(self):
+        detail = self.client.get(f"/teacher/students/{self.student.id}/").json()
+        self.assertEqual(detail["activity"]["streak"], 0)
+        self.assertEqual(
+            detail["activity"]["week"], {"cards_answered": 0, "seconds": 0, "accuracy": None}
+        )
+        self.assertEqual(detail["struggled"], [])
 
 
 @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))

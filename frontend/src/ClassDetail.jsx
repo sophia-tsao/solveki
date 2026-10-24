@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
+import { BandBar, BandLegend } from './BandBar.jsx';
 import './Teacher.css';
 
 function ClassDetail({ classId, onBack, onOpenStudent }) {
@@ -56,23 +57,27 @@ function ClassDetail({ classId, onBack, onOpenStudent }) {
       {students.length === 0 ? (
         <p className="teacher-empty">No students have joined yet. Share the join code above.</p>
       ) : (
-        <table className="teacher-table">
-          <thead>
-            <tr><th>Name</th><th>Email</th><th>Joined</th><th></th></tr>
-          </thead>
-          <tbody>
-            {students.map((s) => (
-              <tr key={s.id}>
-                <td className="clickable" onClick={() => onOpenStudent(s.id)}>{s.name}</td>
-                <td>{s.email}</td>
-                <td>{new Date(s.joined_at).toLocaleDateString()}</td>
-                <td>
-                  <button className="teacher-button danger" onClick={() => remove.mutate(s.id)}>Remove</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <BandLegend />
+          <table className="teacher-table">
+            <thead>
+              <tr><th>Name</th><th>Email</th><th>Familiarity</th><th>Joined</th><th></th></tr>
+            </thead>
+            <tbody>
+              {students.map((s) => (
+                <tr key={s.id}>
+                  <td className="clickable" onClick={() => onOpenStudent(s.id)}>{s.name}</td>
+                  <td>{s.email}</td>
+                  <td style={{ minWidth: '160px' }}><BandBar counts={s.proficiency || {}} /></td>
+                  <td>{new Date(s.joined_at).toLocaleDateString()}</td>
+                  <td>
+                    <button className="teacher-button danger" onClick={() => remove.mutate(s.id)}>Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );

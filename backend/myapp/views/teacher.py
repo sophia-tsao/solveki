@@ -16,6 +16,7 @@ from .common import _require_teacher
 from .deck import _client_today, _effective_due_dates, _ordered_topics
 from .dashboard import _topic_stats
 from .assignments import _progress_by_assignment
+from .insights import STRUGGLE_DAYS, practice_activity, struggled_topics
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +171,10 @@ def student_detail(request, student_id):
 
     Combines the same SM-2 topic stats the student's own dashboard shows with
     their assignment history: for each assignment reaching the student, how many
-    of its cards they've answered and whether they're overdue.
+    of its cards they've answered and whether they're overdue. `activity` is
+    their recent practice (consistency, this week's cards, time and accuracy;
+    see `practice_activity`) and `struggled` the topics they've missed most
+    over the last `STRUGGLE_DAYS` days.
     """
     guard = _require_teacher(request)
     if guard:
@@ -249,4 +253,8 @@ def student_detail(request, student_id):
         "topics": topics,
         "upcoming": upcoming,
         "assignments": assignments_out,
+        "activity": practice_activity(student, today),
+        "struggled": struggled_topics(
+            [student.id], since=today - datetime.timedelta(days=STRUGGLE_DAYS - 1),
+        ),
     })

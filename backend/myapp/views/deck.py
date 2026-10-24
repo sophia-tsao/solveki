@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from ..models import (
     Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade, DailyPractice,
-    ProficiencySnapshot, StudentAssignment,
+    ProficiencySnapshot, StudentAssignment, AnswerRecord,
 )
 from .common import _require_auth
 from .problems import _make_problem_for_topic
@@ -28,6 +28,11 @@ _OUTCOME_QUALITY = {
     "correct_second": 3,
     "incorrect": 1,
 }
+
+# Longest time one card can count toward a student's review time. The client
+# times each card from when it appears, so a tab left open on a card would
+# otherwise log hours of "review"; a generous cap keeps genuine slow work.
+_MAX_CARD_SECONDS = 10 * 60
 
 
 def _client_today(request):
@@ -676,8 +681,10 @@ def advance_deck(request):
 
     The optional JSON body `{"outcome": "correct_first"|"correct_second"|
     "incorrect"}` reports how the card being left was answered; it updates that
-    card's topic's SM-2 schedule (see `_grade_topic`). It's optional so a stray
-    advance with no answer (the midnight-rollover case) simply doesn't grade.
+    card's topic's SM-2 schedule (see `_grade_topic`) and is logged as an
+    `AnswerRecord`, along with the optional `seconds` the student spent on the
+    card. It's optional so a stray advance with no answer (the
+    midnight-rollover case) simply doesn't grade.
     """
     auth = _require_auth(request)
     if auth:
@@ -706,8 +713,12 @@ def advance_deck(request):
         outcome = _advance_outcome(request)
         card = deck.problems[deck.current_index]
         topic_id = card.get("topic_id")
-        if outcome and topic_id is not None:
+        if outcome in _OUTCOME_QUALITY and topic_id is not None:
             _grade_topic(request.user, topic_id, outcome, today)
+            AnswerRecord.objects.create(
+                user=request.user, topic_id=topic_id, date=today, outcome=outcome,
+                seconds=_advance_seconds(request),
+            )
         deck.current_index += 1
         deck.save(update_fields=["current_index"])
         _count_assignment_card(request.user)
@@ -761,3 +772,15 @@ def _advance_from_number(request):
     """
     value = _advance_body(request).get("from_number")
     return value if isinstance(value, int) else None
+
+
+def _advance_seconds(request):
+    """Seconds the client says the student spent on the card, clamped to a sane range.
+
+    Missing or non-numeric values count as 0; anything longer than
+    `_MAX_CARD_SECONDS` is capped (see there).
+    """
+    value = _advance_body(request).get("seconds")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return 0
+    return int(max(0, min(_MAX_CARD_SECONDS, value)))

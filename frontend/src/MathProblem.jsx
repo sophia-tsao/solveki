@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import katex from 'katex';
 import 'katex/dist/katex.min.css';
@@ -97,6 +97,11 @@ function MathProblem() {
   const [attempt, setAttempt] = useState(1);
   const [overriding, setOverriding] = useState(false); // true while the incorrect face eases into "Correct!"
   const [showConfetti, setShowConfetti] = useState(false);
+  // When the current card appeared, and how long the student took to answer it
+  // (frozen at the final answer, so the dwell on the back face doesn't count).
+  // Reported with the advance so teachers can see time spent reviewing.
+  const shownAtRef = useRef(Date.now());
+  const answerSecondsRef = useRef(0);
   const MAX_ATTEMPTS = 2;
 
   // Fire confetti. Celebration is gated entirely by the `celebrate` flag below
@@ -138,7 +143,14 @@ function MathProblem() {
     setOverriding(false);
     setFlipped(false);
     setStatus('active');
+    shownAtRef.current = Date.now();
   }, [celebrate]);
+
+  // Freeze the time spent on the current card at the moment it's answered.
+  const stopCardTimer = () => {
+    answerSecondsRef.current = Math.round((Date.now() - shownAtRef.current) / 1000);
+    return answerSecondsRef.current;
+  };
 
   // The deck belongs to a specific local day. `day` is that day; the deck query
   // is keyed by it, so bumping `day` (a midnight rollover, below) refetches the
@@ -179,11 +191,13 @@ function MathProblem() {
   // card it's showing, so a stray leftover timer — e.g. the correct-answer
   // timer from finishing yesterday's last card, firing after the deck has
   // rolled over to today's card 1 — can't step the fresh deck past card 1.
+  // `seconds` is how long the student spent answering the card being left.
   const advanceDeck = useMutation({
-    mutationFn: async ({ outcome, fromNumber }) => {
+    mutationFn: async ({ outcome, fromNumber, seconds }) => {
       const body = {};
       if (typeof outcome === 'string') body.outcome = outcome;
       if (typeof fromNumber === 'number') body.from_number = fromNumber;
+      if (typeof seconds === 'number') body.seconds = seconds;
       const response = await apiFetch(`/deck/advance/?today=${localDay()}`, {
         method: 'POST',
         ...(Object.keys(body).length ? { body: JSON.stringify(body) } : {}),
@@ -242,9 +256,10 @@ function MathProblem() {
     // after a day-rollover reload, its stale from_number won't match the fresh
     // deck and the backend will ignore it (leaving the student on card 1).
     const from = currentNumber;
+    const seconds = stopCardTimer();
     setResult('correct');
     setFlipped(true);
-    setTimeout(() => advanceDeck.mutate({ outcome, fromNumber: from }), 1400);
+    setTimeout(() => advanceDeck.mutate({ outcome, fromNumber: from, seconds }), 1400);
   };
 
   const handleIncorrect = () => {
@@ -258,6 +273,7 @@ function MathProblem() {
       // A timed auto-advance would give no time to read the answer or override.
       // Freeze the answer on the back face so it isn't replaced by the next
       // problem's solution while the card rotates back to the front.
+      stopCardTimer();
       setResult('incorrect');
       setResultAnswer(solution);
       setFlipped(true);
@@ -266,7 +282,7 @@ function MathProblem() {
 
   // From the incorrect back face: accept the miss and move on.
   const handleAcceptIncorrect = () =>
-    advanceDeck.mutate({ outcome: 'incorrect', fromNumber: currentNumber });
+    advanceDeck.mutate({ outcome: 'incorrect', fromNumber: currentNumber, seconds: answerSecondsRef.current });
 
   // From the incorrect back face: the student says the answer box wrongly
   // marked them wrong. Override to a clean correct grade (full credit). The
@@ -281,7 +297,8 @@ function MathProblem() {
     const from = currentNumber;
     setResult('correct');
     setOverriding(true);
-    setTimeout(() => advanceDeck.mutate({ outcome: 'correct_first', fromNumber: from }), 1400);
+    const seconds = answerSecondsRef.current;
+    setTimeout(() => advanceDeck.mutate({ outcome: 'correct_first', fromNumber: from, seconds }), 1400);
   };
 
   if (error) return <div>Error: {error}</div>;

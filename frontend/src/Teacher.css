@@ -74,6 +74,22 @@
   border-color: #4f46e5;
 }
 
+/* A card that only displays figures: no click affordance. */
+.teacher-card.static {
+  cursor: default;
+}
+
+.teacher-card.static:hover {
+  border-color: #e2e2e2;
+}
+
+/* A headline figure inside a stat card. */
+.teacher-card-big {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-top: 0.4rem;
+}
+
 .teacher-card-title {
   font-weight: 600;
   font-size: 1.05rem;
@@ -452,4 +468,56 @@
 .guide-cta p {
   margin: 0 0 0.75rem;
   color: #3730a3;
+}
+
+/* "Struggled with most" topic list. */
+.struggled-card {
+  margin-top: 1rem;
+}
+
+.struggled-list {
+  margin: 0.5rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.struggled-list li {
+  margin-top: 0.4rem;
+}
+
+.struggled-list li .teacher-card-stat {
+  display: block;
+  margin-top: 0.1rem;
+}
+
+.struggled-name {
+  font-weight: 600;
+}
+
+/* Practice-consistency strip: one square per day, oldest first, colored like
+   the dashboard calendar (green = finished the deck, amber = partial). */
+.activity-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 0.6rem;
+}
+
+.activity-day {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #eef2f7;
+}
+
+.activity-day.partial {
+  background: #fcd34d;
+}
+
+.activity-day.completed {
+  background: #22c55e;
+}
+
+.activity-day.today {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
 }

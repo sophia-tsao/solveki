@@ -15,6 +15,7 @@ from ..models import (
 )
 from .common import _require_auth, _require_teacher
 from .deck import _client_today, _get_or_create_today_deck, _interval_band
+from .insights import struggled_topics
 
 logger = logging.getLogger(__name__)
 
@@ -369,6 +370,10 @@ def assignment_results(request, assignment_id):
     (past due date without finishing). Assignments are practiced through the
     student's normal deck, so familiarity is measured by the SM-2 schedule the
     practice builds — not a one-off quiz score.
+
+    Also reports the band mix per assigned topic (across the students) and the
+    topics they've struggled with most since the assignment was created, from
+    their answered cards.
     """
     guard = _require_teacher(request)
     if guard:
@@ -413,12 +418,15 @@ def assignment_results(request, assignment_id):
     now = timezone.now()
     students_out = []
     totals = _empty_bands()
+    by_topic = {tid: _empty_bands() for tid in topic_ids}
     num_completed = 0
     for sid in student_ids:
         class_id, due_at = due_map[sid]
         bands = _empty_bands()
         for tid in topic_ids:
-            bands[_interval_band(intervals.get((sid, tid), 0))] += 1
+            band = _interval_band(intervals.get((sid, tid), 0))
+            bands[band] += 1
+            by_topic[tid][band] += 1
         status, answered = progress.get(sid, ("not_started", 0))
         done = status == "done"
         if done:
@@ -439,7 +447,14 @@ def assignment_results(request, assignment_id):
 
     return JsonResponse({
         "assignment": _serialize_assignment(assignment),
-        "topics": [{"topic_id": t.id, "topic_name": t.topic_name} for t in topics],
+        "topics": [
+            {"topic_id": t.id, "topic_name": t.topic_name, "proficiency": by_topic[t.id]}
+            for t in topics
+        ],
+        "struggled": struggled_topics(
+            student_ids, topic_ids=topic_ids,
+            since=timezone.localdate(assignment.created_at),
+        ),
         "num_students": len(student_ids),
         "num_completed": num_completed,
         "band_totals": totals,

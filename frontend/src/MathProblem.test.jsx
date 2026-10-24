@@ -21,6 +21,12 @@ function deckResponse(payload, { ok = true, status = 200 } = {}) {
   return { ok, status, json: async () => payload };
 }
 
+// The parsed JSON body of the (latest) deck-advance call, or undefined if none.
+function advanceBody() {
+  const call = apiFetch.mock.calls.filter(([url]) => url.startsWith('/deck/advance/')).at(-1);
+  return call && JSON.parse(call[1].body);
+}
+
 const ACTIVE_DECK = {
   problem: 'What is $2+2$?',
   solution: '4',
@@ -158,10 +164,7 @@ describe('MathProblem — answering', () => {
     // A first-attempt correct answer is reported as 'correct_first' so the
     // backend can update the topic's spaced-repetition schedule. `from_number`
     // is the card being left (card 1) so a stale/stray advance can be rejected.
-    expect(apiFetch).toHaveBeenCalledWith('/deck/advance/?today=2026-07-20', {
-      method: 'POST',
-      body: JSON.stringify({ outcome: 'correct_first', from_number: 1 }),
-    });
+    expect(advanceBody()).toMatchObject({ outcome: 'correct_first', from_number: 1 });
   });
 
   it('bumps the attempt counter on the first wrong answer', async () => {
@@ -203,10 +206,7 @@ describe('MathProblem — answering', () => {
     // Clicking Continue accepts the miss and advances, reporting 'incorrect'.
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     await waitFor(() =>
-      expect(apiFetch).toHaveBeenCalledWith('/deck/advance/?today=2026-07-20', {
-        method: 'POST',
-        body: JSON.stringify({ outcome: 'incorrect', from_number: 1 }),
-      }),
+      expect(advanceBody()).toMatchObject({ outcome: 'incorrect', from_number: 1 }),
     );
   });
 
@@ -238,10 +238,7 @@ describe('MathProblem — answering', () => {
     expect(screen.getByText('Correct!')).toBeInTheDocument();
     await waitFor(
       () =>
-        expect(apiFetch).toHaveBeenCalledWith('/deck/advance/?today=2026-07-20', {
-          method: 'POST',
-          body: JSON.stringify({ outcome: 'correct_first', from_number: 1 }),
-        }),
+        expect(advanceBody()).toMatchObject({ outcome: 'correct_first', from_number: 1 }),
       { timeout: 2500 },
     );
   });
@@ -318,6 +315,33 @@ async function finishSingleCardDeck(user) {
   await user.click(screen.getByRole('button'));
   await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
 }
+
+describe('MathProblem — time on card', () => {
+  it('reports the seconds from the card appearing to the answer', async () => {
+    let now = 1_000_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      apiFetch
+        .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+        .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
+      const user = userEvent.setup();
+      renderWithClient(<MathProblem />);
+      await screen.findByText('1 of 3 questions');
+
+      now += 12_000; // the student works on the card for 12 seconds
+      await user.type(screen.getByRole('textbox'), '4');
+      await user.click(screen.getByRole('button'));
+      now += 5_000; // the "Correct!" dwell before the advance doesn't count
+
+      await waitFor(
+        () => expect(advanceBody()).toEqual({ outcome: 'correct_first', from_number: 1, seconds: 12 }),
+        { timeout: 2500 },
+      );
+    } finally {
+      clock.mockRestore();
+    }
+  });
+});
 
 describe('MathProblem — learn more link', () => {
   const VIDEO_URL = 'https://www.youtube.com/watch?v=bAerID24QJ0';

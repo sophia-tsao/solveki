@@ -13,6 +13,7 @@ from django.test import TestCase, Client
 
 from myapp.models import (
     DailyDeck, Settings, Topic, TopicReview, DailyTopicGrade, UserTopicSelection,
+    AnswerRecord,
 )
 from myapp import views
 from myapp.views.deck import _select_deck_topics, _generate_problems, _grade_topic
@@ -655,6 +656,33 @@ class AdvanceGradingTests(TestCase):
         )
         review = TopicReview.objects.get(user=self.user, topic=self.topic)
         self.assertEqual(review.due_date, datetime.date(2026, 7, 22))
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_advance_logs_answer_with_capped_seconds(self, mock_gen):
+        self.client.get("/deck/?today=2026-07-21")
+        for outcome, seconds in (("incorrect", 42), ("correct_second", 99999)):
+            self.client.post(
+                "/deck/advance/?today=2026-07-21",
+                data=json.dumps({"outcome": outcome, "seconds": seconds}),
+                content_type="application/json",
+            )
+        rows = list(
+            AnswerRecord.objects.filter(user=self.user)
+            .order_by("id").values_list("topic_id", "date", "outcome", "seconds")
+        )
+        self.assertEqual(rows, [
+            (self.topic.id, datetime.date(2026, 7, 21), "incorrect", 42),
+            (self.topic.id, datetime.date(2026, 7, 21), "correct_second", 600),
+        ])
+
+    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    def test_advance_without_outcome_logs_no_answer(self, mock_gen):
+        self.client.get("/deck/?today=2026-07-21")
+        self.client.post(
+            "/deck/advance/?today=2026-07-21",
+            data=json.dumps({"seconds": 5}), content_type="application/json",
+        )
+        self.assertFalse(AnswerRecord.objects.filter(user=self.user).exists())
 
     @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
     def test_advance_without_body_does_not_grade(self, mock_gen):
