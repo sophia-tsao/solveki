@@ -2,6 +2,7 @@ import datetime
 import json
 import logging
 
+from django.db.models import F
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -9,7 +10,7 @@ from django.utils import timezone
 
 from ..models import (
     Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade, DailyPractice,
-    ProficiencySnapshot,
+    ProficiencySnapshot, StudentAssignment,
 )
 from .common import _require_auth
 from .problems import _make_problem_for_topic
@@ -58,6 +59,55 @@ def _has_topics(user):
     return Topic.objects.filter(
         selections__user=user, generator_name__isnull=False
     ).exists()
+
+
+def _assignment_cards_owed(user):
+    """The most cards any of the user's in-progress assignments still needs.
+
+    Assignment cards are answered concurrently (every card counts toward every
+    open assignment), so the deck only needs to cover the largest remainder.
+    """
+    rows = StudentAssignment.objects.filter(
+        student=user, status=StudentAssignment.IN_PROGRESS
+    ).values_list("assignment__deck_size", "cards_answered")
+    return max((max(0, size - answered) for size, answered in rows), default=0)
+
+
+def _deck_target(user, answered):
+    """How many cards today's deck should hold, given `answered` so far today.
+
+    At least the user's `questions_per_day`, stretched so an open assignment's
+    remaining cards fit after the ones already answered. Answering a card
+    bumps both `answered` and every open assignment's count, so the target
+    holds steady through the day, and an assignment finished today keeps the
+    deck at the size it was stretched to. With no assignment in play it's just
+    `questions_per_day`, so lowering the setting below what's already answered
+    reads as finished at the new size rather than holding at `answered`.
+    """
+    per_day = Settings.load(user).questions_per_day
+    owed = _assignment_cards_owed(user)
+    if owed == 0 and not StudentAssignment.objects.filter(
+        student=user,
+        status=StudentAssignment.COMPLETED,
+        completed_at__date=timezone.localdate(),
+    ).exists():
+        return per_day
+    return max(per_day, answered + owed)
+
+
+def _count_assignment_card(user):
+    """Count one answered card toward each of the user's in-progress assignments.
+
+    Any card counts, whatever its topic. An assignment whose count reaches its
+    `deck_size` is marked completed.
+    """
+    open_rows = StudentAssignment.objects.filter(
+        student=user, status=StudentAssignment.IN_PROGRESS
+    )
+    open_rows.update(cards_answered=F("cards_answered") + 1)
+    open_rows.filter(cards_answered__gte=F("assignment__deck_size")).update(
+        status=StudentAssignment.COMPLETED, completed_at=timezone.now()
+    )
 
 
 # Proficiency bands, keyed off a topic's SM-2 `interval` (days until next review).
@@ -317,7 +367,7 @@ def _record_practice(user, deck, today):
     after the `DailyDeck` itself is pruned. A row is created on the first advance
     of the day, so a day with no row means the student never practiced.
     """
-    total = min(len(deck.problems), Settings.load(user).questions_per_day)
+    total = min(len(deck.problems), _deck_target(user, deck.current_index))
     answered = min(deck.current_index, total)
     DailyPractice.objects.update_or_create(
         user=user, date=today,
@@ -398,21 +448,22 @@ def _get_or_create_today_deck(user, today):
 
     Any deck from a previous day (for this user) is discarded so a new day
     yields new problems. An existing deck that is shorter than the target
-    `questions_per_day` is topped up (appending only, so progress is
+    (`_deck_target`: `questions_per_day`, or more for an open assignment) is
+    topped up (appending only, so progress is
     preserved). This heals a deck that was built before any topics were
     selected (empty) as well as one left short by a topic change earlier in
     the day — the latter is why the deck must never be reported as "finished"
     at a smaller size than the user's setting.
     """
     deck = DailyDeck.objects.filter(user=user, date=today).first()
-    settings = Settings.load(user)
     if deck is None:
         # A new day: clear out this user's stale decks and build a fresh one.
         DailyDeck.objects.filter(user=user).exclude(date=today).delete()
-        problems = _generate_problems(user, settings.questions_per_day, today)
+        target = _deck_target(user, 0)
+        problems = _generate_problems(user, target, today)
         logger.info(
             "Built new deck for user %s with %d/%d problems",
-            user.id, len(problems), settings.questions_per_day,
+            user.id, len(problems), target,
         )
         return DailyDeck.objects.create(
             user=user, date=today, problems=problems, current_index=0
@@ -424,7 +475,7 @@ def _get_or_create_today_deck(user, today):
     if deck.needs_regen:
         _regenerate_deck_tail(user, today)
         deck.refresh_from_db()
-    missing = settings.questions_per_day - len(deck.problems)
+    missing = _deck_target(user, deck.current_index) - len(deck.problems)
     if missing > 0:
         existing = _deck_topic_ids(deck)
         extra = _generate_problems(user, missing, today, existing=existing)
@@ -495,14 +546,14 @@ def _regenerate_deck_tail(user, today):
     Problems the student has already worked through (everything before
     `current_index`) are kept; the remaining cards are regenerated from the
     topics currently selected, refilling the deck back up to the target count
-    (`questions_per_day`) and preserving the student's position. Stored problems
+    (`_deck_target`) and preserving the student's position. Stored problems
     only carry their text/solution, not the topic they came from, so an
     individual topic's cards can't be surgically removed; we regenerate the tail
     instead. Clears the `needs_regen` flag once the deck has been reconciled to
     the current selection (this is the lazy handler for `_mark_deck_stale`).
 
     The tail size is derived from the target count rather than the current
-    deck length, so refilling always aims for `questions_per_day`.
+    deck length, so refilling always aims for the day's target.
 
     Does nothing if there's no deck for today yet (it'll be built from the
     current topics on first access), if the student has already answered at
@@ -518,7 +569,7 @@ def _regenerate_deck_tail(user, today):
     if deck is None:
         return
     answered = deck.current_index
-    target = Settings.load(user).questions_per_day
+    target = _deck_target(user, answered)
     remaining = target - answered
     if remaining <= 0:
         # Nothing left to regenerate (the student already finished today's
@@ -553,14 +604,15 @@ def _deck_payload(user, deck):
     # if the deck still holds problems from before the change.
     if not _has_topics(user):
         return {"no_topics": True}
-    # Present the deck capped to the current setting. Growing the count is
-    # handled when the deck is loaded (extra cards are appended); shrinking it
-    # is applied here at display time, so a smaller `questions_per_day` takes
-    # effect immediately rather than next day. We only cap the view — the extra
-    # cards stay stored, so raising the count back up restores them. Without
-    # this cap, reducing the count after answering more than the new total
-    # would keep showing the old (larger) deck instead of "finished".
-    target = Settings.load(user).questions_per_day
+    # Present the deck capped to the day's target (the setting, stretched for
+    # an open assignment). Growing the count is handled when the deck is loaded
+    # (extra cards are appended); shrinking it is applied here at display time,
+    # so a smaller `questions_per_day` takes effect immediately rather than next
+    # day. We only cap the view — the extra cards stay stored, so raising the
+    # count back up restores them. Without this cap, reducing the count after
+    # answering more than the new total would keep showing the old (larger)
+    # deck instead of "finished".
+    target = _deck_target(user, deck.current_index)
     total = min(len(deck.problems), target)
     if total == 0:
         return {"no_topics": True}
@@ -658,6 +710,7 @@ def advance_deck(request):
             _grade_topic(request.user, topic_id, outcome, today)
         deck.current_index += 1
         deck.save(update_fields=["current_index"])
+        _count_assignment_card(request.user)
         _record_practice(request.user, deck, today)
         # Grading may have moved a topic between bands; recapture today's mix.
         _snapshot_proficiency(request.user, today)

@@ -7,8 +7,9 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
-from ..models import Classroom, ClassEnrollment, Course
+from ..models import AssignmentClass, Classroom, ClassEnrollment, Course
 from .common import _require_auth, _require_teacher
+from .assignments import _start_assignment_for
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,9 @@ def join_class(request):
     if classroom is None:
         return JsonResponse({"error": "No class found for that code"}, status=404)
     ClassEnrollment.objects.get_or_create(classroom=classroom, student=request.user)
+    # Assignments already given to this class reach the new student right away.
+    for link in AssignmentClass.objects.filter(classroom=classroom).select_related("assignment"):
+        _start_assignment_for(link.assignment, classroom.id, [request.user.id])
     logger.info("Student %s joined class %s", request.user.id, classroom.id)
     return JsonResponse({
         "id": classroom.id,

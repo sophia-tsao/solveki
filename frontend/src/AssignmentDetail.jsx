@@ -55,7 +55,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
   if (isPending) return <div className="teacher-page">{backButton}<p>Loading…</p></div>;
   if (error) return <div className="teacher-page">{backButton}<p className="teacher-error">Failed to load results.</p></div>;
 
-  const { assignment, topics, num_students, num_practiced, band_totals, students } = data;
+  const { assignment, topics, num_students, num_completed, band_totals, students } = data;
   const classes = assignment.classes || [];
 
   return (
@@ -64,7 +64,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
       <h1>{assignment.title}</h1>
       {assignment.description && <p className="teacher-card-stat">{assignment.description}</p>}
       <p className="teacher-card-stat">
-        {topics.length} topic{topics.length === 1 ? '' : 's'} · deck of {assignment.deck_size} cards
+        {topics.length} topic{topics.length === 1 ? '' : 's'} · {assignment.deck_size} cards to finish
       </p>
 
       <div className="teacher-header" style={{ marginTop: '0.5rem' }}>
@@ -81,9 +81,9 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
 
       <div className="teacher-cards" style={{ marginTop: '1rem' }}>
         <div className="teacher-card">
-          <div className="teacher-card-title">Practiced</div>
+          <div className="teacher-card-title">Finished</div>
           <div className="teacher-card-stat" style={{ fontSize: '1.5rem' }}>
-            {num_practiced} / {num_students}
+            {num_completed} / {num_students}
           </div>
         </div>
         <div className="teacher-card" style={{ flex: 2 }}>
@@ -107,7 +107,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
         <table className="teacher-table">
           <thead>
             <tr>
-              <th>Student</th><th>Practiced</th><th>Familiarity</th><th>Due</th>
+              <th>Student</th><th>Cards</th><th>Familiarity</th><th>Due</th>
             </tr>
           </thead>
           <tbody>
@@ -115,7 +115,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
               <tr key={s.student_id}>
                 <td className="clickable" onClick={() => onOpenStudent(s.student_id)}>{s.name}</td>
                 <td>
-                  {s.practiced ? 'Yes' : 'Not yet'}
+                  {s.status === 'done' ? 'Done' : `${s.cards_answered} / ${assignment.deck_size}`}
                   {s.overdue && <span className="teacher-overdue"> · overdue</span>}
                 </td>
                 <td style={{ minWidth: '160px' }}><BandBar counts={s.proficiency} /></td>

@@ -11,10 +11,10 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
     Assignment, AssignmentTopic, AssignmentClass, Classroom, ClassEnrollment,
-    StudentAssignment, Topic, UserTopicSelection, TopicReview, DailyTopicGrade,
+    DailyDeck, StudentAssignment, Topic, UserTopicSelection, TopicReview,
 )
 from .common import _require_auth, _require_teacher
-from .deck import _client_today, _get_or_create_today_deck, _grow_today_deck, _interval_band
+from .deck import _client_today, _get_or_create_today_deck, _interval_band
 
 logger = logging.getLogger(__name__)
 
@@ -24,32 +24,111 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 #
 # An assignment is a single idea: the teacher picks topics to add to students'
-# spaced-repetition decks, and how many cards the deck should hold. The
+# spaced-repetition decks, and how many cards the student must answer. The
 # teacher-picked topics (stored as `AssignmentTopic` rows) are added to each
-# assigned student's own selections when they open the assignment — so the work
-# flows through the student's normal daily practice, with SM-2 always scheduling
-# it — and those same topics drive the progress report.
+# assigned student's own selections as soon as the assignment reaches them —
+# when the teacher assigns it to their class, or when they join a class that
+# already has it — so the work flows through the student's normal daily
+# practice, with SM-2 always scheduling it, and those same topics drive the
+# familiarity report. Completion is a card count: every card answered after the
+# assignment reached the student (any topic) counts toward it.
 
 
-def _ensure_selected(student, topics):
-    """Add `topics` to `student`'s own selections (idempotent).
+def _ensure_selected(student_ids, topics):
+    """Add `topics` to each student's own selections (idempotent).
 
-    Opening an assignment adds its teacher-picked topics to the student's
-    selections, so they show up in the student's normal daily practice deck.
+    Returns the ids of students who gained at least one new selection.
     """
-    if not topics:
-        return
+    if not topics or not student_ids:
+        return set()
     existing = set(
         UserTopicSelection.objects.filter(
-            user=student, topic__in=topics
-        ).values_list("topic_id", flat=True)
+            user_id__in=student_ids, topic__in=topics
+        ).values_list("user_id", "topic_id")
     )
     to_create = [
-        UserTopicSelection(user=student, topic=t)
-        for t in topics if t.id not in existing
+        UserTopicSelection(user_id=sid, topic=t)
+        for sid in student_ids for t in topics if (sid, t.id) not in existing
     ]
     if to_create:
         UserTopicSelection.objects.bulk_create(to_create, ignore_conflicts=True)
+    return {row.user_id for row in to_create}
+
+
+def _start_assignment_for(assignment, classroom_id, student_ids):
+    """Put `assignment` into each student's practice (idempotent).
+
+    Adds its topics to the students' selections and marks it in progress, so
+    every card they answer from now on counts toward it and their deck stretches
+    to fit its cards (`_deck_target`). Progress on an already-started or
+    completed assignment is left alone. A student who gained new topics has
+    today's deck flagged stale so its unanswered tail is rebuilt with them on
+    the next practice-page load.
+    """
+    student_ids = list(set(student_ids))
+    if not student_ids:
+        return
+    gained = _ensure_selected(student_ids, _assignment_topics(assignment))
+
+    rows = StudentAssignment.objects.filter(assignment=assignment, student_id__in=student_ids)
+    have = set(rows.values_list("student_id", flat=True))
+    now = timezone.now()
+    rows.filter(status=StudentAssignment.NOT_STARTED, started_at__isnull=True).update(started_at=now)
+    rows.filter(status=StudentAssignment.NOT_STARTED).update(status=StudentAssignment.IN_PROGRESS)
+    StudentAssignment.objects.bulk_create(
+        [
+            StudentAssignment(
+                assignment=assignment, classroom_id=classroom_id, student_id=sid,
+                status=StudentAssignment.IN_PROGRESS, started_at=now,
+            )
+            for sid in student_ids if sid not in have
+        ],
+        ignore_conflicts=True,
+    )
+    if gained:
+        DailyDeck.objects.filter(user_id__in=gained).update(needs_regen=True)
+
+
+def _start_assignment_for_class_students(assignment):
+    """Start `assignment` for every student enrolled in a class it's assigned to.
+
+    A student in several of those classes is tied to the earliest-due one,
+    matching `_assignment_link_for_student`.
+    """
+    seen = set()
+    for link in assignment.class_links.order_by("due_at", "id"):
+        ids = [
+            sid for sid in ClassEnrollment.objects.filter(
+                classroom_id=link.classroom_id
+            ).values_list("student_id", flat=True)
+            if sid not in seen
+        ]
+        seen.update(ids)
+        _start_assignment_for(assignment, link.classroom_id, ids)
+
+
+_STATUS_LABEL = {
+    StudentAssignment.NOT_STARTED: "not_started",
+    StudentAssignment.IN_PROGRESS: "in_progress",
+    StudentAssignment.COMPLETED: "done",
+}
+
+
+def _progress_by_assignment(student, assignment_ids=None):
+    """Map assignment id -> (status, cards_answered) for `student`.
+
+    Status is "not_started" / "in_progress" / "done"; assignments that
+    haven't reached the student are simply absent (callers default them to not started).
+    """
+    rows = StudentAssignment.objects.filter(student=student)
+    if assignment_ids is not None:
+        rows = rows.filter(assignment_id__in=assignment_ids)
+    return {
+        assignment_id: (_STATUS_LABEL.get(status, "not_started"), answered)
+        for assignment_id, status, answered in rows.values_list(
+            "assignment_id", "status", "cards_answered"
+        )
+    }
 
 
 def _assignment_topics(assignment):
@@ -199,6 +278,8 @@ def assignment_detail(request, assignment_id):
             assignment.save()
             if "topics" in body:
                 _set_assignment_topics(assignment, body.get("topics"))
+                # Topics the teacher just added reach already-assigned students.
+                _start_assignment_for_class_students(assignment)
     return JsonResponse(_serialize_assignment(assignment))
 
 
@@ -239,6 +320,7 @@ def assign_to_classes(request, assignment_id):
                 available_at=parse_datetime(spec["available_at"]) if spec.get("available_at") else None,
             ))
         AssignmentClass.objects.bulk_create(links)
+        _start_assignment_for_class_students(assignment)
     logger.info("Teacher %s assigned assignment %s to %d classes", request.user.id, assignment_id, len(links))
     return JsonResponse(_serialize_assignment(assignment))
 
@@ -281,11 +363,12 @@ def _student_due_map(assignment):
 def assignment_results(request, assignment_id):
     """Familiarity report for one assignment, optionally filtered to a class.
 
-    Reports, over the assignment's topics: each student's proficiency-band mix on
-    those topics (from their SM-2 state), whether they've practiced the topics,
-    and whether they're overdue (past due date without practicing). Assignments
-    are now practiced through the student's normal deck, so progress is measured
-    by the SM-2 schedule the practice builds — not a one-off quiz score.
+    Reports, per student: how many of the assignment's cards they've answered
+    and whether it's done (the completion rule), their proficiency-band mix on
+    the assignment's topics (from their SM-2 state), and whether they're overdue
+    (past due date without finishing). Assignments are practiced through the
+    student's normal deck, so familiarity is measured by the SM-2 schedule the
+    practice builds — not a one-off quiz score.
     """
     guard = _require_teacher(request)
     if guard:
@@ -307,17 +390,19 @@ def assignment_results(request, assignment_id):
             pass
     student_ids = list(due_map.keys())
 
-    # Bulk-fetch the SM-2 state and practice signal for every (student, topic).
+    # Bulk-fetch the SM-2 state for every (student, topic), and each student's
+    # card-count progress on this assignment.
     intervals = {}  # (student_id, topic_id) -> interval
     for uid, tid, interval in TopicReview.objects.filter(
         user_id__in=student_ids, topic_id__in=topic_ids
     ).values_list("user_id", "topic_id", "interval"):
         intervals[(uid, tid)] = interval
-    graded = set(  # (student_id, topic_id) that has been practiced at least once
-        DailyTopicGrade.objects.filter(
-            user_id__in=student_ids, topic_id__in=topic_ids
-        ).values_list("user_id", "topic_id")
-    )
+    progress = {  # student_id -> (status, cards_answered)
+        sid: (_STATUS_LABEL.get(status, "not_started"), answered)
+        for sid, status, answered in StudentAssignment.objects.filter(
+            assignment=assignment, student_id__in=student_ids
+        ).values_list("student_id", "status", "cards_answered")
+    }
 
     User = get_user_model()
     names = {
@@ -328,15 +413,16 @@ def assignment_results(request, assignment_id):
     now = timezone.now()
     students_out = []
     totals = _empty_bands()
-    num_practiced = 0
+    num_completed = 0
     for sid in student_ids:
         class_id, due_at = due_map[sid]
         bands = _empty_bands()
         for tid in topic_ids:
             bands[_interval_band(intervals.get((sid, tid), 0))] += 1
-        practiced_any = any((sid, tid) in graded for tid in topic_ids)
-        if practiced_any:
-            num_practiced += 1
+        status, answered = progress.get(sid, ("not_started", 0))
+        done = status == "done"
+        if done:
+            num_completed += 1
         for b in _BANDS:
             totals[b] += bands[b]
         students_out.append({
@@ -344,8 +430,9 @@ def assignment_results(request, assignment_id):
             "name": names.get(sid, "(unknown)"),
             "class_id": class_id,
             "due_at": due_at.isoformat() if due_at else None,
-            "practiced": practiced_any,
-            "overdue": bool(due_at and due_at < now and not practiced_any),
+            "status": status,
+            "cards_answered": answered,
+            "overdue": bool(due_at and due_at < now and not done),
             "proficiency": bands,
         })
     students_out.sort(key=lambda s: s["name"].lower())
@@ -354,7 +441,7 @@ def assignment_results(request, assignment_id):
         "assignment": _serialize_assignment(assignment),
         "topics": [{"topic_id": t.id, "topic_name": t.topic_name} for t in topics],
         "num_students": len(student_ids),
-        "num_practiced": num_practiced,
+        "num_completed": num_completed,
         "band_totals": totals,
         "students": students_out,
     })
@@ -384,8 +471,8 @@ def _assignment_link_for_student(assignment, student):
 def my_assignments(request):
     """The current student's assignments: to-do and done.
 
-    An assignment is "done" once the student has practiced all of its topics at
-    least once; otherwise it's outstanding. Progress is tracked through the
+    An assignment is "done" once the student has answered its `deck_size` cards
+    since it reached them; otherwise it's outstanding. Progress is tracked through the
     student's normal deck, so there's no separate assignment quiz to complete.
     """
     auth = _require_auth(request)
@@ -399,6 +486,7 @@ def my_assignments(request):
         .select_related("assignment", "classroom")
         .order_by("due_at", "id")
     )
+    progress = _progress_by_assignment(request.user)
     now = timezone.now()
     seen = set()
     upcoming, completed = [], []
@@ -407,22 +495,16 @@ def my_assignments(request):
         if a.id in seen:
             continue
         seen.add(a.id)
-        topic_ids = set(a.assignment_topics.values_list("topic_id", flat=True))
-        practiced = set(
-            DailyTopicGrade.objects.filter(
-                user=request.user, topic_id__in=topic_ids
-            ).values_list("topic_id", flat=True)
-        ) if topic_ids else set()
-        done = bool(topic_ids) and topic_ids.issubset(practiced)
-        started = bool(practiced)
+        status, answered = progress.get(a.id, ("not_started", 0))
+        done = status == "done"
         row = {
             "assignment_id": a.id,
             "title": a.title,
             "class_name": link.classroom.name,
             "due_at": link.due_at.isoformat() if link.due_at else None,
-            "num_topics": len(topic_ids),
-            "num_practiced": len(topic_ids & practiced),
-            "status": "done" if done else ("in_progress" if started else "not_started"),
+            "cards_answered": answered,
+            "deck_size": a.deck_size,
+            "status": status,
             "overdue": bool(link.due_at and link.due_at < now and not done),
         }
         (completed if done else upcoming).append(row)
@@ -432,13 +514,14 @@ def my_assignments(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def play_assignment(request, assignment_id):
-    """Start an assignment for the current student, then send them to practice.
+    """Send the current student to practice for an assignment.
 
-    Adds the assignment's topics to the student's own selections and grows
-    today's practice deck to the teacher's chosen card count, so opening an
-    assignment simply routes the student to their normal practice page with the
-    assigned topics in scope. Returns {"goto": "practice"} for the client to
-    navigate; the actual practice happens through the deck endpoints.
+    The assignment's topics are already in the student's deck (added when it
+    was assigned, or when they joined the class), so opening it just routes them
+    to their normal practice page. Starting it again here is a no-op except for
+    students assigned before topics were added on assign. Returns
+    {"goto": "practice"} for the client to navigate; the actual practice
+    happens through the deck endpoints.
     """
     auth = _require_auth(request)
     if auth:
@@ -450,27 +533,12 @@ def play_assignment(request, assignment_id):
     if link is None:
         return JsonResponse({"error": "This assignment is not assigned to you"}, status=403)
 
-    today = _client_today(request)
-    topics = _assignment_topics(assignment)
-    _ensure_selected(request.user, topics)
-    # Ensure today's deck exists (built from the now-selected topics), then grow
-    # it — never shrink — to the teacher's card count so the student's practice
-    # session covers the assigned work. Creating first matters when the student
-    # opens the assignment before practicing today: `_grow_today_deck` alone is a
-    # no-op with no deck yet.
-    _get_or_create_today_deck(request.user, today)
-    _grow_today_deck(request.user, assignment.deck_size, today)
+    _start_assignment_for(assignment, link.classroom_id, [request.user.id])
 
-    sa = StudentAssignment.objects.filter(assignment=assignment, student=request.user).first()
-    if sa is None:
-        StudentAssignment.objects.create(
-            assignment=assignment, classroom=link.classroom, student=request.user,
-            status=StudentAssignment.IN_PROGRESS, started_at=timezone.now(),
-        )
-    elif sa.status == StudentAssignment.NOT_STARTED:
-        sa.status = StudentAssignment.IN_PROGRESS
-        sa.started_at = sa.started_at or timezone.now()
-        sa.save(update_fields=["status", "started_at"])
+    # Build or top up today's deck. Its target (`_deck_target`) includes this
+    # assignment's remaining cards, so the deck stretches past the student's
+    # daily setting if needed and they can finish the assignment.
+    _get_or_create_today_deck(request.user, _client_today(request))
 
     logger.info("Student %s started assignment %s", request.user.id, assignment_id)
     return JsonResponse({"goto": "practice", "title": assignment.title, "deck_size": assignment.deck_size})

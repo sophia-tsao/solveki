@@ -108,8 +108,8 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
         <h2>3. Build an assignment</h2>
         <p>
           An assignment is a short set of topics you want a class to work on. You pick the
-          topics and how many cards a day the deck should hold; Solveki adds those topics to
-          each student's practice and grows their daily deck to that size.
+          topics and how many cards students answer to finish it; Solveki adds those topics
+          to each student's practice and stretches their deck so the cards fit.
         </p>
 
         <ol className="guide-steps">
@@ -131,20 +131,20 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
             <span className="guide-step-num">3</span>
             <div className="guide-step-body">
               <strong>Set the number of cards</strong>
-              <p>Choose how many cards a day the practice deck should hold while the assignment is active. SM-2 (section 2) picks which cards, so what's due surfaces first.</p>
+              <p>Choose how many cards a student answers to finish. Every card in their practice deck counts from the moment it's assigned, whatever its topic. SM-2 (section 2) picks which cards, so what's due surfaces first.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">4</span>
             <div className="guide-step-body">
               <strong>Assign to classes &amp; set due dates</strong>
-              <p>Check the classes that should get it and (optionally) a due date per class. Everyone enrolled receives it; the topics are added the first time each student opens it.</p>
+              <p>Check the classes that should get it and (optionally) a due date per class. Everyone enrolled receives it, and its topics are added to their decks right away. Students who join the class later get them when they join.</p>
             </div>
           </li>
         </ol>
 
-        <div className="tg-flow" aria-label="What happens when a student opens an assignment">
-          <span className="tg-pill">Student opens it</span>
+        <div className="tg-flow" aria-label="What happens when you assign an assignment">
+          <span className="tg-pill">You assign it</span>
           <span className="tg-arrow">→</span>
           <span className="tg-pill">Topics added to their deck</span>
           <span className="tg-arrow">→</span>
@@ -156,8 +156,9 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
         <div className="tg-note info">
           <span className="tg-note-icon">ℹ</span>
           <span>
-            Your report shows how familiar they've grown with the assigned
-            topics by the due date.
+            Your report shows where each student stands on the assigned topics
+            right now, and flags anyone past the due date who hasn't finished
+            their cards.
           </span>
         </div>
       </section>
@@ -169,7 +170,7 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
         <div className="tg-flow" aria-label="How to drill into progress">
           <span className="tg-pill">Overview: all classes</span>
           <span className="tg-arrow">→</span>
-          <span className="tg-pill">An assignment: familiarity by topic</span>
+          <span className="tg-pill">An assignment: who's finished</span>
           <span className="tg-arrow">→</span>
           <span className="tg-pill">A student: topics &amp; history</span>
         </div>
@@ -178,21 +179,21 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
             <span className="guide-step-num">1</span>
             <div className="guide-step-body">
               <strong>Overview</strong>
-              <p>Your total student count plus a familiarity-over-time graph for all your students and one per class, so you can watch topics climb from New toward Proficient.</p>
+              <p>Your total student count plus a familiarity-over-time graph for all your students (switch it to a single class), so you can watch topics climb from New toward Proficient.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">2</span>
             <div className="guide-step-body">
               <strong>Assignment results</strong>
-              <p>Open any assignment to see how familiar the class has grown with its topics, and, per student, whether they've practiced by the due date and where each of the assigned topics sits.</p>
+              <p>Open any assignment to see how many students have finished and the class's current familiarity mix on its topics. Per student, you'll see cards answered toward the total, their familiarity on the assigned topics, their due date, and whether they're overdue. Filter by class if it went to more than one.</p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">3</span>
             <div className="guide-step-body">
               <strong>Student detail</strong>
-              <p>Click a student to see their familiarity trend, per-topic mastery, and assignment history — the same view they see on their own dashboard.</p>
+              <p>Click a student to see their familiarity trend, their assignments with cards answered, and per-topic progress (the same topic view they see on their own dashboard).</p>
             </div>
           </li>
         </ol>

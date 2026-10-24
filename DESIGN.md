@@ -98,10 +98,10 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
   task (a `title`/`description` and a `deck_size`, the number of cards a day the
   student's deck should hold while it's active), its picked topic set, and the
   links handing it to classes with per-class `available_at`/`due_at`.
-- **StudentAssignment** — a lightweight record that a student has opened an
-  assignment (`status`, `started_at`), used for the "who has practiced" report.
-  There's no per-assignment problem set: opening one just feeds the student's
-  normal practice (see below).
+- **StudentAssignment** — one student's progress on one assignment (`status`,
+  `started_at`, `cards_answered`, `completed_at`), created in progress as soon as
+  the assignment reaches the student. There's no per-assignment problem set: the
+  assignment just feeds the student's normal practice (see below).
 - **ProficiencySnapshot** — one row per (user, date) with a count of the user's
   selected topics in each proficiency band (`new`/`learning`/`familiar`/
   `proficient`), captured daily so the teacher's familiarity-over-time charts have
@@ -322,17 +322,32 @@ normal practice, which SM-2 always schedules.
 
 ### Taking an assignment
 
-There is no per-assignment problem set and no separate player. When a student
-opens an assignment (`play_assignment`) the view:
+There is no per-assignment problem set and no separate player. An assignment
+reaches a student, through `_start_assignment_for`, at whichever comes first:
+the teacher assigns it to a class they're in (`assign_to_classes`), or they join
+a class that already has it (`join_class`). Editing an assignment's topics
+re-runs this for everyone already assigned, so added topics reach them too. For
+each student it:
 
-1. verifies the student is assigned it (`_assignment_link_for_student`);
-2. adds the assignment's topics to the student's own selections (`_ensure_selected`);
-3. ensures today's deck exists and grows it to `assignment.deck_size`
-   (`_get_or_create_today_deck` then `_grow_today_deck` — growth only, never
-   shrinking the student's personal setting);
-4. upserts a lightweight **StudentAssignment** marker (`IN_PROGRESS`, `started_at`);
-5. returns `{ "goto": "practice" }`, so the client just routes to the normal
-   practice page.
+1. adds the assignment's topics to their own selections (`_ensure_selected`);
+2. creates their **StudentAssignment** row as `IN_PROGRESS` (an existing row,
+   and its progress, is left alone, so re-assigning doesn't reset anyone);
+3. flags today's deck stale (`needs_regen`) if they gained topics, so the
+   unanswered tail is rebuilt with them on the next practice-page load.
+
+From then on every card the student answers, whatever its topic, bumps
+`cards_answered` on each of their in-progress assignments
+(`_count_assignment_card`). An assignment is completed when that count reaches
+its `deck_size`. While one is open, today's deck stretches past
+`questions_per_day` so the remaining cards fit (`_deck_target`). The deck covers
+the largest remainder, not the sum, since every card counts toward every open
+assignment.
+
+Opening an assignment (`POST /assignments/<id>/play/`, `play_assignment`) checks
+the student is assigned it, re-runs the start (a no-op unless they were assigned
+before topics were added on assign), builds or tops up today's deck, and
+returns `{ "goto": "practice" }` so the client routes to the normal practice
+page.
 
 From there the assigned topics are indistinguishable from the rest of the
 student's practice: the same daily deck, the same two-attempt UI, the same
@@ -379,7 +394,7 @@ page by editing the URL — and the backend enforces the same on every endpoint.
   backend-sent `learn_more_url` in a new tab, on both the question face and
   the wrong-answer face. Course selection is in `CourseList.jsx` / `CourseBar.jsx`;
   `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` (opening an
-  assignment just routes to the practice page); `StudentClasses.jsx`.
+  assignment just routes to the practice page; its topics are already in the deck); `StudentClasses.jsx`.
 - **Teacher pages.** `TeacherOverview.jsx`, `ClassList.jsx` / `ClassDetail.jsx`,
   `StudentDetail.jsx`, `TeacherAssignments.jsx` / `AssignmentBuilder.jsx` /
   `AssignmentDetail.jsx`, the `ProficiencyTrend.jsx` familiarity-over-time chart,

@@ -9,12 +9,13 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
-    Classroom, ClassEnrollment, Topic, TopicReview, StudentAssignment, Settings,
-    ProficiencySnapshot, AssignmentClass, DailyTopicGrade,
+    Classroom, ClassEnrollment, Topic, TopicReview, Settings,
+    ProficiencySnapshot, AssignmentClass,
 )
 from .common import _require_teacher
 from .deck import _client_today, _effective_due_dates, _ordered_topics
 from .dashboard import _topic_stats
+from .assignments import _progress_by_assignment
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +170,7 @@ def student_detail(request, student_id):
 
     Combines the same SM-2 topic stats the student's own dashboard shows with
     their assignment history: for each assignment reaching the student, how many
-    of its topics they've practiced and whether they're overdue.
+    of its cards they've answered and whether they're overdue.
     """
     guard = _require_teacher(request)
     if guard:
@@ -205,8 +206,8 @@ def student_detail(request, student_id):
     upcoming = [_topic_stats(t, up_reviews.get(t.id), up_due[t.id]) for t in ordered]
 
     # Assignments reaching this student through the teacher's classes, with how
-    # much of each they've practiced (progress lives in the SM-2 schedule, not a
-    # per-assignment quiz). Earliest-due link per assignment wins the due date.
+    # many of each one's cards they've answered. Earliest-due link per
+    # assignment wins the due date.
     now = timezone.now()
     student_class_ids = list(
         ClassEnrollment.objects.filter(student=student).values_list("classroom_id", flat=True)
@@ -218,9 +219,7 @@ def student_detail(request, student_id):
         .select_related("assignment", "classroom")
         .order_by("due_at", "id")
     )
-    started = set(
-        StudentAssignment.objects.filter(student=student).values_list("assignment_id", flat=True)
-    )
+    progress = _progress_by_assignment(student)
     assignments_out = []
     seen = set()
     for link in links:
@@ -228,21 +227,15 @@ def student_detail(request, student_id):
         if a.id in seen:
             continue
         seen.add(a.id)
-        topic_ids = set(a.assignment_topics.values_list("topic_id", flat=True))
-        practiced = set(
-            DailyTopicGrade.objects.filter(
-                user=student, topic_id__in=topic_ids
-            ).values_list("topic_id", flat=True)
-        ) if topic_ids else set()
-        num_practiced = len(topic_ids & practiced)
-        done = bool(topic_ids) and topic_ids.issubset(practiced)
+        status, answered = progress.get(a.id, ("not_started", 0))
+        done = status == "done"
         assignments_out.append({
             "assignment_id": a.id,
             "title": a.title,
             "class_name": link.classroom.name,
-            "status": "done" if done else ("in_progress" if a.id in started or num_practiced else "not_started"),
-            "num_topics": len(topic_ids),
-            "num_practiced": num_practiced,
+            "status": status,
+            "cards_answered": answered,
+            "deck_size": a.deck_size,
             "due_at": link.due_at.isoformat() if link.due_at else None,
             "overdue": bool(link.due_at and link.due_at < now and not done),
         })

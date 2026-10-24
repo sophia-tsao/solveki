@@ -23,9 +23,10 @@ category and pick starting topics with a pre-seeded review schedule.
 Teachers get a separate side of the app: create **classes** that students join
 with a code, author **assignments** (a set of topics plus how many cards a day
 the practice deck should hold), and assign them to classes with due dates.
-Opening an assignment adds its topics to the student's own practice and grows
-their daily deck to the chosen size, so assignment work is graded and scheduled
-by the same SM-2 engine as normal practice. Teachers track progress through a
+Assigning it adds its topics to each enrolled student's own practice (and to
+anyone who joins the class later), and their deck grows to fit the assignment's
+cards, so assignment work is graded and scheduled by the same SM-2 engine as
+normal practice. Teachers track progress through a
 familiarity-over-time view (the share of topics in each proficiency band, for
 all students or a single class), a per-assignment report of proficiency on the
 assigned topics and who has practiced by the due date, and a per-student view of
@@ -135,8 +136,8 @@ The backend exposes a small JSON API under the app's URLs, including:
 - **Teacher — analytics:** `GET /teacher/overview/`,
   `GET /teacher/proficiency-history/`, `GET /teacher/students/<sid>/`
 - **Student — classes & assignments:** `POST /classes/join/`, `GET /classes/mine/`,
-  `GET /assignments/mine/`, `GET /assignments/<id>/play/` (adds the assignment's
-  topics to the student's practice and routes them to their deck)
+  `GET /assignments/mine/`, `POST /assignments/<id>/play/` (routes the student to
+  their deck, which already has the assignment's topics)
 
 See [backend/myapp/urls.py](backend/myapp/urls.py) for the full list. The
 [bruno/](bruno/) collection contains ready-to-run requests against these

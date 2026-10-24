@@ -40,7 +40,7 @@ function StudentDetail({ studentId }) {
       ) : (
         <table className="teacher-table">
           <thead>
-            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Topics practiced</th></tr>
+            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Cards answered</th></tr>
           </thead>
           <tbody>
             {data.assignments.map((a) => (
@@ -51,7 +51,7 @@ function StudentDetail({ studentId }) {
                   {fmtStatus(a.status)}
                   {a.overdue && <span className="teacher-overdue"> · overdue</span>}
                 </td>
-                <td>{a.num_practiced}/{a.num_topics}</td>
+                <td>{a.cards_answered}/{a.deck_size}</td>
               </tr>
             ))}
           </tbody>

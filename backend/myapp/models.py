@@ -113,8 +113,8 @@ class DailyPractice(models.Model):
     stable "completed / partial / none" signal per day.
 
     `answered` is the number of problems stepped past that day; `total` is the
-    deck size at that moment (`min(len(problems), questions_per_day)`, matching
-    what the deck view reports). The day counts as completed when
+    deck size at that moment (`min(len(problems), questions_per_day)`, or more
+    while an assignment is open — matching what the deck view reports). The day counts as completed when
     ``answered >= total`` (with ``total > 0``); a row only exists once at least
     one problem has been answered, so a day with no row means "did not practice".
     """
@@ -231,11 +231,14 @@ class Assignment(models.Model):
 
     An assignment is a single idea: the teacher picks a set of topics to add to
     students' spaced-repetition decks (stored as `AssignmentTopic` rows) and how
-    many cards the daily practice deck should hold (`deck_size`). Opening an
-    assignment adds its topics to the student's own selections and grows today's
-    practice deck to `deck_size`; the student then practices through their normal
-    deck, so SM-2 always schedules the work. The assignment's topics also drive
-    its progress report (proficiency on those topics by the due date).
+    many cards the student must answer (`deck_size`). Assigning it to a class
+    (or a student joining a class that has it) adds its topics to the student's
+    own selections and stretches their practice deck to fit the remaining cards;
+    the student then practices through their normal deck, so SM-2 always
+    schedules the work. The assignment is complete once the student has answered
+    `deck_size` cards (any topic) since it reached them — see
+    `StudentAssignment.cards_answered`. The assignment's topics also drive its
+    familiarity report.
 
     An assignment is authored once and handed to classes through
     `AssignmentClass`, so editing/deleting it affects every class it reached.
@@ -287,14 +290,18 @@ class AssignmentClass(models.Model):
 
 
 class StudentAssignment(models.Model):
-    """A lightweight record that a student has opened an assignment.
+    """A student's progress on one assignment, created when it reaches them.
 
-    Opening an assignment routes the student to their normal practice page (its
-    topics are added to their selections and today's deck is grown to the
-    assignment's `deck_size`), so there's no separate assignment quiz to store.
-    This row just marks that the student started, and through which class, for
-    the teacher's report. Progress itself is read from the student's SM-2 state
-    on the assignment's topics (`TopicReview` / `DailyTopicGrade`).
+    The row is created, in progress, when the assignment is assigned to the
+    student's class or they join a class that has it (its topics are added to
+    their selections and their deck grows to cover the assignment's remaining
+    cards). Opening it just routes the student to their normal practice page, so
+    there's no separate assignment quiz to store. Every card the student answers
+    in their deck while the assignment is in progress — whatever its topic —
+    bumps `cards_answered`; once that reaches
+    the assignment's `deck_size` the row is marked completed. Familiarity on the
+    assignment's topics is still read from the SM-2 state for the teacher's
+    report.
     """
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
@@ -306,6 +313,8 @@ class StudentAssignment(models.Model):
     student = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="student_assignments")
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=NOT_STARTED)
     started_at = models.DateTimeField(blank=True, null=True)
+    cards_answered = models.IntegerField(default=0)
+    completed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
         constraints = [

@@ -1,11 +1,13 @@
 """Tests for the teacher/student roles, classes, and assignments feature.
 
 Covers role gating, class create/join/roster, assignment authoring and
-assign-to-multiple-classes, and the simplified student flow: opening an
-assignment adds its topics to the student's selections, grows today's practice
-deck to the teacher's card count, and sends the student to normal practice.
-Progress is read from the student's SM-2 state, so the teacher report and the
-student's to-do/done split are proficiency/practiced based, not quiz scores.
+assign-to-multiple-classes, and the simplified student flow: assigning an
+assignment to a class (or joining a class that has one) adds its topics to the
+student's selections and stretches today's practice deck to fit the teacher's
+card count; opening it just sends the student to normal practice. An assignment
+is done once the student has answered its card count (any topic) since it
+reached them; the teacher report adds familiarity on the assignment's topics
+from the student's SM-2 state.
 
 The `addition` generator the test topics use is mocked so deck generation is
 deterministic, mirroring test_deck.py.
@@ -320,7 +322,7 @@ class AssignmentAuthoringTests(TestCase):
 
 @mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
 class StartAssignmentTests(TestCase):
-    """Opening an assignment adds its topics, grows the deck, and routes to practice."""
+    """Assigning adds topics and starts the count; opening grows the deck and routes."""
 
     def setUp(self):
         self.client = Client()
@@ -374,9 +376,166 @@ class StartAssignmentTests(TestCase):
         # Today's deck grew to the teacher's card count.
         deck = DailyDeck.objects.get(user=self.student)
         self.assertEqual(len(deck.problems), 8)
-        # A lightweight opened marker is recorded.
+        # The deck view shows all 8, not just the student's daily 5.
+        self.assertEqual(self.client.get("/deck/").json()["total"], 8)
+        # The opened assignment is in progress with no cards counted yet.
         sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
         self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
+        self.assertEqual(sa.cards_answered, 0)
+
+    def test_answering_card_count_completes_assignment(self, _gen):
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 2
+        settings.save(update_fields=["questions_per_day"])
+
+        a, _ = self._setup_assignment(deck_size=3)
+        self.client.post(f"/assignments/{a['id']}/play/")
+        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+        for n in range(1, 3):
+            data = self.client.post("/deck/advance/").json()
+            self.assertEqual(data["total"], 3)
+            sa.refresh_from_db()
+            self.assertEqual(sa.cards_answered, n)
+            self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
+
+        data = self.client.post("/deck/advance/").json()
+        self.assertEqual(data, {"completed": True, "total": 3})
+        sa.refresh_from_db()
+        self.assertEqual(sa.cards_answered, 3)
+        self.assertEqual(sa.status, StudentAssignment.COMPLETED)
+        self.assertIsNotNone(sa.completed_at)
+        mine = self.client.get("/assignments/mine/").json()
+        self.assertEqual([r["status"] for r in mine["completed"]], ["done"])
+
+    def _class_with_student(self):
+        """A teacher's class the student has joined, with nothing assigned yet."""
+        self.client.force_login(self.teacher)
+        cls = self.client.post(
+            "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
+        ).json()
+        self.client.force_login(self.student)
+        self.client.post(
+            "/classes/join/", data=json.dumps({"code": cls["join_code"]}),
+            content_type="application/json",
+        )
+        return cls
+
+    def _assign(self, assignment, cls):
+        self.client.force_login(self.teacher)
+        self.client.post(
+            f"/assignments/{assignment['id']}/assign/",
+            data=json.dumps({"classes": [{"class_id": cls["id"]}]}),
+            content_type="application/json",
+        )
+        self.client.force_login(self.student)
+
+    def _create_and_assign(self, cls, deck_size=3):
+        self.client.force_login(self.teacher)
+        a = self.client.post(
+            "/assignments/",
+            data=json.dumps({
+                "title": "HW", "deck_size": deck_size,
+                "topics": [{"topic_id": self.picked.id}],
+            }),
+            content_type="application/json",
+        ).json()
+        self._assign(a, cls)
+        return a
+
+    def test_assigning_adds_topics_to_enrolled_students(self, _gen):
+        cls = self._class_with_student()
+        a = self._create_and_assign(cls)
+        # Without the student opening anything, the topic is selected and the
+        # assignment is already counting.
+        self.assertTrue(
+            UserTopicSelection.objects.filter(user=self.student, topic=self.picked).exists()
+        )
+        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+        self.assertEqual((sa.status, sa.cards_answered), (StudentAssignment.IN_PROGRESS, 0))
+        self.assertIsNotNone(sa.started_at)
+
+    def test_joining_later_adds_topics(self, _gen):
+        # _setup_assignment assigns first, then the student joins.
+        a, _ = self._setup_assignment()
+        self.assertTrue(
+            UserTopicSelection.objects.filter(user=self.student, topic=self.picked).exists()
+        )
+        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+        self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
+
+    def test_assigning_flags_existing_deck_for_rebuild(self, _gen):
+        cls = self._class_with_student()
+        own = make_topic(self.course, topic_name="Own", generator_name="addition")
+        select(self.student, own)
+        self.client.get("/deck/")
+        self._create_and_assign(cls)
+        # Today's deck is rebuilt with the new topic on the next practice load.
+        self.assertTrue(DailyDeck.objects.get(user=self.student).needs_regen)
+        self.client.get("/deck/")
+        self.assertFalse(DailyDeck.objects.get(user=self.student).needs_regen)
+
+    def test_editing_topics_reaches_assigned_students(self, _gen):
+        cls = self._class_with_student()
+        a = self._create_and_assign(cls)
+        extra = make_topic(self.course, topic_name="Extra", generator_name="addition")
+        self.client.force_login(self.teacher)
+        self.client.patch(
+            f"/assignments/{a['id']}/",
+            data=json.dumps({"topics": [{"topic_id": self.picked.id}, {"topic_id": extra.id}]}),
+            content_type="application/json",
+        )
+        self.assertTrue(
+            UserTopicSelection.objects.filter(user=self.student, topic=extra).exists()
+        )
+
+    def test_reassigning_keeps_progress(self, _gen):
+        cls = self._class_with_student()
+        a = self._create_and_assign(cls)
+        self.client.get("/deck/")
+        self.client.post("/deck/advance/")
+        self._assign(a, cls)
+        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+        self.assertEqual((sa.status, sa.cards_answered), (StudentAssignment.IN_PROGRESS, 1))
+
+    def test_cards_answered_before_assigning_do_not_count(self, _gen):
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 3
+        settings.save(update_fields=["questions_per_day"])
+
+        cls = self._class_with_student()
+        # The student practices two cards before the teacher assigns anything.
+        select(self.student, self.picked)
+        self.client.get("/deck/")
+        self.client.post("/deck/advance/")
+        self.client.post("/deck/advance/")
+
+        a = self._create_and_assign(cls, deck_size=3)
+        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+        self.assertEqual(sa.cards_answered, 0)
+        # The deck stretches past the daily 3 so all 3 assignment cards fit.
+        data = self.client.get("/deck/").json()
+        self.assertEqual((data["current_number"], data["total"]), (3, 5))
+
+    def test_open_assignments_count_the_same_cards(self, _gen):
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 1
+        settings.save(update_fields=["questions_per_day"])
+
+        small, _ = self._setup_assignment(deck_size=2)
+        big, _ = self._setup_assignment(deck_size=4)
+        self.client.post(f"/assignments/{small['id']}/play/")
+        self.client.post(f"/assignments/{big['id']}/play/")
+        # One deck covers both: the largest remainder, not the sum.
+        self.assertEqual(self.client.get("/deck/").json()["total"], 4)
+        for _ in range(2):
+            self.client.post("/deck/advance/")
+        statuses = dict(
+            StudentAssignment.objects.filter(student=self.student)
+            .values_list("assignment_id", "status")
+        )
+        self.assertEqual(statuses[small["id"]], StudentAssignment.COMPLETED)
+        self.assertEqual(statuses[big["id"]], StudentAssignment.IN_PROGRESS)
+        self.assertEqual(self.client.get("/deck/").json()["total"], 4)
 
     def test_unassigned_student_cannot_start(self, _gen):
         a, _ = self._setup_assignment()
@@ -388,7 +547,7 @@ class StartAssignmentTests(TestCase):
 
 
 class AssignmentResultsTests(TestCase):
-    """The proficiency report: who practiced, band mix on the assigned topics."""
+    """The report: who finished their cards, band mix on the assigned topics."""
 
     def setUp(self):
         self.client = Client()
@@ -422,37 +581,45 @@ class AssignmentResultsTests(TestCase):
         )
         return a
 
-    def test_report_counts_bands_and_practice(self):
+    def test_report_counts_bands_and_completion(self):
         student = make_user()
         a = self._assign_to_student(student)
         # Practiced Easy (interval 10 -> familiar); never practiced Hard (-> new).
         mark_practiced(student, self.easy, interval=10)
+        # Joining created the in-progress row; finish it.
+        StudentAssignment.objects.filter(assignment_id=a["id"], student=student).update(
+            status=StudentAssignment.COMPLETED, cards_answered=10,
+        )
 
         self.client.force_login(self.teacher)
         res = self.client.get(f"/assignments/{a['id']}/results/").json()
         self.assertEqual(res["num_students"], 1)
-        self.assertEqual(res["num_practiced"], 1)
+        self.assertEqual(res["num_completed"], 1)
         self.assertEqual(res["band_totals"]["familiar"], 1)
         self.assertEqual(res["band_totals"]["new"], 1)
         row = res["students"][0]
-        self.assertTrue(row["practiced"])
+        self.assertEqual((row["status"], row["cards_answered"]), ("done", 10))
         self.assertEqual(row["proficiency"]["familiar"], 1)
         self.assertEqual(row["proficiency"]["new"], 1)
 
-    def test_overdue_when_unpracticed_past_due(self):
+    def test_overdue_when_unfinished_past_due(self):
         student = make_user()
         past = (timezone.now() - timezone.timedelta(days=1)).isoformat()
         a = self._assign_to_student(student, due_at=past)
+        # Practicing the topics isn't enough; the card count decides.
+        mark_practiced(student, self.easy)
+        mark_practiced(student, self.hard)
 
         self.client.force_login(self.teacher)
         res = self.client.get(f"/assignments/{a['id']}/results/").json()
         row = res["students"][0]
-        self.assertFalse(row["practiced"])
+        self.assertEqual(row["status"], "in_progress")
         self.assertTrue(row["overdue"])
 
 
+@mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
 class MyAssignmentsTests(TestCase):
-    """A student's to-do / done split, driven by whether topics were practiced."""
+    """A student's to-do / done split, driven by cards answered since assigning."""
 
     def setUp(self):
         self.client = Client()
@@ -468,7 +635,9 @@ class MyAssignmentsTests(TestCase):
         ).json()
         a = self.client.post(
             "/assignments/",
-            data=json.dumps({"title": "HW", "topics": [{"topic_id": self.topic.id}]}),
+            data=json.dumps({
+                "title": "HW", "deck_size": 2, "topics": [{"topic_id": self.topic.id}],
+            }),
             content_type="application/json",
         ).json()
         self.client.post(
@@ -483,15 +652,22 @@ class MyAssignmentsTests(TestCase):
         )
         return a
 
-    def test_unpracticed_is_upcoming_then_moves_to_done(self):
+    def test_upcoming_until_card_count_answered(self, _gen):
         a = self._assign()
         data = self.client.get("/assignments/mine/").json()
         self.assertEqual(len(data["upcoming"]), 1)
         self.assertEqual(len(data["completed"]), 0)
-        self.assertEqual(data["upcoming"][0]["num_topics"], 1)
+        row = data["upcoming"][0]
+        # Joining a class that already has the assignment starts it.
+        self.assertEqual((row["status"], row["cards_answered"], row["deck_size"]), ("in_progress", 0, 2))
 
-        # Practicing the only topic moves it to done.
-        mark_practiced(self.student, self.topic)
+        self.client.post(f"/assignments/{a['id']}/play/")
+        self.client.post("/deck/advance/")
+        row = self.client.get("/assignments/mine/").json()["upcoming"][0]
+        self.assertEqual((row["status"], row["cards_answered"]), ("in_progress", 1))
+
+        # The second card reaches the count and moves it to done.
+        self.client.post("/deck/advance/")
         data = self.client.get("/assignments/mine/").json()
         self.assertEqual(len(data["upcoming"]), 0)
         self.assertEqual(len(data["completed"]), 1)

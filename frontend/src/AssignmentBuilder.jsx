@@ -130,10 +130,11 @@ function AssignmentBuilder({ assignmentId, onDone }) {
         <span className="tg-note-icon">ℹ</span>
         <span>
           Choose the topics to add to your students&rsquo; practice and how many cards
-          their deck should hold. Opening the assignment adds those topics to each
-          student&rsquo;s deck and sends them to their normal practice page; spaced
-          repetition (SM-2) then schedules the reviews automatically. The report tracks
-          how their familiarity with these topics grows by the due date.
+          their deck should hold. Assigning it adds those topics to each enrolled
+          student&rsquo;s deck (and to anyone who joins the class later); they practice
+          on their normal practice page, and spaced repetition (SM-2) schedules the
+          reviews automatically. The report shows
+          where they stand on these topics and who has finished by the due date.
         </span>
       </div>
 
@@ -159,8 +160,8 @@ function AssignmentBuilder({ assignmentId, onDone }) {
       <div className="teacher-field">
         <label>Number of cards</label>
         <p className="teacher-help">
-          How many cards each student&rsquo;s practice deck holds while working on this
-          assignment.
+          How many cards each student answers to finish this assignment. Every card in
+          their practice deck counts from the moment it&rsquo;s assigned, whatever its topic.
         </p>
         <input
           type="number"

@@ -170,7 +170,7 @@ function WhySolveki() {
           <h2>See who needs help</h2>
           <p>
             Watch familiarity climb across each class over time, see who's
-            practiced by the due date, and open any student to view their
+            finished by the due date, and open any student to view their
             progress and assignment history.
           </p>
         </div>
@@ -219,7 +219,7 @@ function Faq() {
     },
     {
       q: 'What can teachers see?',
-      a: 'Familiarity across each class over time, who has practiced the assigned topics by the due date, and a per-student view of their progress and assignment history — the same spaced-repetition progress the student sees on their own dashboard.',
+      a: 'Familiarity across each class over time, who has finished their assignments by the due date, and a per-student view of their progress and assignment history — the same spaced-repetition progress the student sees on their own dashboard.',
     },
   ];
   return (
