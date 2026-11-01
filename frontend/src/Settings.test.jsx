@@ -93,6 +93,20 @@ describe('Settings — saving', () => {
     // Only the initial load call — no PATCH attempted.
     expect(apiFetch).toHaveBeenCalledTimes(1);
   });
+
+  it('rejects a questions-per-day above 100 without calling the API', async () => {
+    const user = userEvent.setup();
+    renderWithClient(<Settings onLoggedOut={() => {}} />);
+    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
+
+    const input = screen.getByRole('spinbutton');
+    await user.clear(input);
+    await user.type(input, '101');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    await screen.findByText(/Number of questions can be at most 100/);
+    expect(apiFetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('Settings — account actions', () => {

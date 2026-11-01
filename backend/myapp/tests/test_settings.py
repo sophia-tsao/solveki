@@ -44,6 +44,12 @@ class SettingsTests(TestCase):
         response = self._patch({"questions_per_day": 0})
         self.assertEqual(response.status_code, 400)
 
+    def test_questions_per_day_is_capped(self):
+        self.assertEqual(self._patch({"questions_per_day": 100}).status_code, 200)
+        response = self._patch({"questions_per_day": 101})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Settings.load(self.user).questions_per_day, 100)
+
     def test_partial_update_leaves_other_fields(self):
         self._patch({"language": "fr", "questions_per_day": 7})
         self._patch({"language": "de"})

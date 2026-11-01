@@ -6,6 +6,9 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('settings');
 
+// Mirrors MAX_QUESTIONS_PER_DAY in backend/myapp/views/settings.py.
+const MAX_QUESTIONS_PER_DAY = 100;
+
 async function fetchSettings() {
   const response = await apiFetch(`/settings/`);
   if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
@@ -43,6 +46,10 @@ function Settings({ onLoggedOut }) {
     const count = parseInt(questionsPerDay, 10);
     if (isNaN(count) || count < 1) {
       setError('Number of questions must be at least 1.');
+      return;
+    }
+    if (count > MAX_QUESTIONS_PER_DAY) {
+      setError(`Number of questions can be at most ${MAX_QUESTIONS_PER_DAY}.`);
       return;
     }
     try {
@@ -111,6 +118,7 @@ function Settings({ onLoggedOut }) {
               className="settings-input"
               type="number"
               min="1"
+              max={MAX_QUESTIONS_PER_DAY}
               value={questionsPerDay}
               onChange={(e) => setQuestionsPerDay(e.target.value)}
             />

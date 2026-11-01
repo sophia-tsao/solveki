@@ -13,6 +13,8 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Verify TLS against the operating system's trust store instead of the CA
 # bundle vendored by certifi/requests. This matters when something on the host
 # intercepts HTTPS (corporate proxies, or antivirus "web shields" like Avast)
@@ -56,17 +58,20 @@ _load_dotenv(BASE_DIR / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
+# SECURITY WARNING: don't run with debug turned on in production!
+# Off unless DEBUG=1 is set explicitly, so a missing env var in production fails
+# safe. Local development sets DEBUG=1 in backend/.env.
+DEBUG = os.environ.get('DEBUG', '0') == '1'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 # In production, set SECRET_KEY in the environment (Cloud Run env var). The
-# insecure fallback is only for local development.
-SECRET_KEY = os.environ.get(
-    'SECRET_KEY',
-    'django-insecure-z=&t-t!s2zn3c3u-9y6)3pw5k1dd*4z!n)4*&=-#26drowfr!5',
-)
-
-# SECURITY WARNING: don't run with debug turned on in production!
-# Defaults to True locally; set DEBUG=0 (or leave unset) in production.
-DEBUG = os.environ.get('DEBUG', '1') == '1'
+# insecure fallback is only allowed with DEBUG on; without DEBUG a missing key
+# refuses to start rather than silently signing sessions with a public key.
+SECRET_KEY = os.environ.get('SECRET_KEY', '')
+if not SECRET_KEY:
+    if not DEBUG:
+        raise ImproperlyConfigured('SECRET_KEY must be set when DEBUG is off.')
+    SECRET_KEY = 'django-insecure-z=&t-t!s2zn3c3u-9y6)3pw5k1dd*4z!n)4*&=-#26drowfr!5'
 
 # Hosts allowed to serve this app. In production, set ALLOWED_HOSTS to a
 # comma-separated list including the Cloud Run host, e.g.
@@ -95,6 +100,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
+    # CSRF guard for the csrf_exempt API views; see OriginCheckMiddleware.
+    'myapp.middleware.OriginCheckMiddleware',
     'django.middleware.security.SecurityMiddleware',
     # WhiteNoise serves static files in production (Django doesn't on its own).
     # Must come right after SecurityMiddleware.

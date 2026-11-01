@@ -86,11 +86,15 @@ links that are blank. The defaults live in
 there only affects new topics, or topics whose link you've cleared.
 
 Configuration is read from environment variables or a `backend/.env` file
-(git-ignored). At minimum set the Google OAuth client ID:
+(git-ignored). At minimum turn on debug mode and set the Google OAuth client ID:
 
 ```
+DEBUG=1
 GOOGLE_OAUTH_CLIENT_ID=your-client-id.apps.googleusercontent.com
 ```
+
+`DEBUG` is off unless set, and with it off the server refuses to start without
+a `SECRET_KEY`, so production must set `SECRET_KEY` (and leave `DEBUG` unset).
 
 ### Frontend (React + Vite, port 5173)
 

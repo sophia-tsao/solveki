@@ -16,6 +16,9 @@ on:
 jobs:
   e2e:
     runs-on: ubuntu-latest
+    env:
+      # Settings default DEBUG off (and then require SECRET_KEY); CI runs as dev.
+      DEBUG: "1"
     steps:
       - uses: actions/checkout@v4
 

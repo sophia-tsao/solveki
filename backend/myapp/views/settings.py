@@ -11,6 +11,11 @@ from .deck import _grow_today_deck, _client_today
 
 logger = logging.getLogger(__name__)
 
+# Upper bound on the daily card count. Saving the setting generates that many
+# problems immediately (`_grow_today_deck`), so an unbounded value would let one
+# request tie up the server generating problems.
+MAX_QUESTIONS_PER_DAY = 100
+
 
 def _serialize_settings(settings):
     return {
@@ -39,6 +44,11 @@ def settings_view(request):
                 return JsonResponse({"error": "questions_per_day must be an integer"}, status=400)
             if count < 1:
                 return JsonResponse({"error": "questions_per_day must be at least 1"}, status=400)
+            if count > MAX_QUESTIONS_PER_DAY:
+                return JsonResponse(
+                    {"error": f"questions_per_day must be at most {MAX_QUESTIONS_PER_DAY}"},
+                    status=400,
+                )
             settings.questions_per_day = count
         settings.save()
         logger.info(
