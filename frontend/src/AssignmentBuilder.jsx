@@ -14,6 +14,7 @@ function AssignmentBuilder({ assignmentId, onDone }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [deckSize, setDeckSize] = useState(10);
+  const [allowLate, setAllowLate] = useState(true);
   const [selected, setSelected] = useState({}); // topic_id -> 1 (presence = selected)
   const [classDue, setClassDue] = useState({}); // class_id -> due_at (datetime-local string) | null
   const [saving, setSaving] = useState(false);
@@ -45,6 +46,7 @@ function AssignmentBuilder({ assignmentId, onDone }) {
     setTitle(a.title);
     setDescription(a.description || '');
     setDeckSize(a.deck_size || 10);
+    setAllowLate(a.allow_late ?? true);
     const sel = {};
     for (const t of a.topics || []) sel[t.topic_id] = 1;
     setSelected(sel);
@@ -84,6 +86,7 @@ function AssignmentBuilder({ assignmentId, onDone }) {
         title: title.trim(),
         description,
         deck_size: deckSize,
+        allow_late: allowLate,
         topics: Object.keys(selected).map((topic_id) => ({ topic_id: Number(topic_id) })),
       };
 
@@ -129,12 +132,13 @@ function AssignmentBuilder({ assignmentId, onDone }) {
       <div className="tg-note info">
         <span className="tg-note-icon">ℹ</span>
         <span>
-          Choose the topics to add to your students&rsquo; practice and how many cards
-          their deck should hold. Assigning it adds those topics to each enrolled
-          student&rsquo;s deck (and to anyone who joins the class later); they practice
-          on their normal practice page, and spaced repetition (SM-2) schedules the
-          reviews automatically. The report shows
-          where they stand on these topics and who has finished by the due date.
+          Choose the topics to add to your students&rsquo; practice and the fewest
+          cards they should answer on them. Assigning it adds those topics to each
+          enrolled student&rsquo;s deck (and to anyone who joins the class later) and
+          spreads the cards over their daily practice until the due date; spaced
+          repetition (SM-2) schedules the reviews automatically. Students who
+          struggle get extra cards. The report shows each student&rsquo;s completion
+          and where they stand on these topics.
         </span>
       </div>
 
@@ -158,17 +162,33 @@ function AssignmentBuilder({ assignmentId, onDone }) {
       </div>
 
       <div className="teacher-field">
-        <label>Number of cards</label>
+        <label htmlFor="assignment-deck-size">Minimum cards</label>
         <p className="teacher-help">
-          How many cards each student answers to finish this assignment. Every card in
-          their practice deck counts from the moment it&rsquo;s assigned, whatever its topic.
+          Students who get these topics right finish after this many cards on them.
+          Students who struggle get more practice, up to {Math.ceil(deckSize * 1.5)} cards.
         </p>
         <input
+          id="assignment-deck-size"
           type="number"
           min={1}
           value={deckSize}
           onChange={(e) => setDeckSize(Math.max(1, parseInt(e.target.value, 10) || 1))}
         />
+      </div>
+
+      <div className="teacher-field">
+        <label>
+          <input
+            type="checkbox"
+            checked={allowLate}
+            onChange={(e) => setAllowLate(e.target.checked)}
+          />
+          {' '}Allow late work
+        </label>
+        <p className="teacher-help">
+          When on, cards answered after the due date still count (and the finish is
+          marked late). When off, progress stops at the due date.
+        </p>
       </div>
 
       <h2>Assign to classes</h2>

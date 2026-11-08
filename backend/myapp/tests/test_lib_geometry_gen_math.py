@@ -10,6 +10,7 @@ import math
 import random
 import re
 from fractions import Fraction
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -56,7 +57,7 @@ class AreaOfCircleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["area_of_circle"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             r = int(m.group("r"))
@@ -74,7 +75,7 @@ class AreaGivenCenterPointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["area_of_circle_given_center_and_point"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             cx, cy = int(m.group("cx")), int(m.group("cy"))
@@ -92,7 +93,7 @@ class CircumferenceTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["circumference"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             r = int(m.group("r"))
@@ -109,7 +110,7 @@ class SectorAreaTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["sector_area"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             r = int(m.group("r"))
@@ -129,7 +130,7 @@ class DistanceTwoPointsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["distance_two_points"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x1, y1 = int(m.group("x1")), int(m.group("y1"))
@@ -152,7 +153,7 @@ class MidpointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["midpoint_of_two_points"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x1, y1 = int(m.group("x1")), int(m.group("y1"))
@@ -171,7 +172,7 @@ class EuclidianNormTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["euclidian_norm"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             components = [int(v) for v in m.group("vec").split(", ")]
@@ -206,7 +207,7 @@ class EquationOfLineTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["equation_of_line_from_two_points"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x1, y1 = int(m.group("x1")), int(m.group("y1"))
@@ -233,4 +234,66 @@ class EquationOfLineTests(TestCase):
             expected_b = Fraction(y1) - expected_m * x1
             self.assertEqual(got_m, expected_m, f"slope wrong: {problem!r} -> {solution!r}")
             self.assertEqual(got_b, expected_b, f"intercept wrong: {problem!r} -> {solution!r}")
+            _assert_typeable(self, solution)
+
+
+NEW_SAMPLES = 2000
+
+
+class PerimeterOfPolygonsTests(TestCase):
+    PROBLEM = re.compile(r"has \$(?P<n>\d+)\$ sides with lengths (?P<lengths>.+?)\. What")
+
+    def test_perimeter_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["perimeter_of_polygons"]
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            sides = [int(v) for v in re.findall(r"\$(\d+)\$ cm", m.group("lengths"))]
+            self.assertEqual(len(sides), int(m.group("n")), problem)
+            self.assertEqual(solution, str(sum(sides)), problem)
+
+
+class ValidTriangleTests(TestCase):
+    PROBLEM = re.compile(
+        r"side lengths \$(?P<a>\d+)\$, \$(?P<b>\d+)\$, and \$(?P<c>\d+)\$\? "
+        r"Type yes or no\."
+    )
+
+    def test_validity_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["valid_triangle"]
+        seen = set()
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            a, b, c = (int(m.group(k)) for k in "abc")
+            exists = a + b > c and b + c > a and a + c > b
+            self.assertEqual(solution, "yes" if exists else "no", problem)
+            seen.add(solution)
+        self.assertEqual(seen, {"yes", "no"})
+
+    def test_degenerate_triangle_is_no(self):
+        with patch("random.randint", side_effect=[3, 4, 7]):
+            self.assertEqual(LOCAL_GENERATORS["valid_triangle"]()[1], "no")
+
+
+class ArcLengthTests(TestCase):
+    PROBLEM = re.compile(
+        r"radius \$(?P<r>\d+)\$ and central angle \$(?P<theta>\d+)\^\\circ\$"
+    )
+
+    def test_arc_length_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["arc_length"]
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            m = self.PROBLEM.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            self.assertIn("nearest thousandth", problem)
+            r, theta = int(m.group("r")), int(m.group("theta"))
+            expected = theta / 360 * 2 * math.pi * r
+            self.assertEqual(solution, _num(expected), problem)
             _assert_typeable(self, solution)

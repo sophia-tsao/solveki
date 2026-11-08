@@ -3,7 +3,7 @@ import datetime
 
 from django.test import TestCase, Client
 
-from myapp.models import DailyPractice, Settings
+from myapp.models import DailyPractice, Settings, TopicReview
 from .factories import make_user, make_course, make_topic, select
 
 
@@ -84,6 +84,11 @@ class PracticeCalendarTests(TestCase):
         """Answering every card records answered == total and reads completed."""
         topic = make_topic(make_course(), topic_name="Linear")
         select(self.user, topic)
+        # Already learned, so the deck doesn't add learning cards to a new topic.
+        TopicReview.objects.create(
+            user=self.user, topic=topic, ease=2.5, interval=3, repetitions=2,
+            due_date=datetime.date(2026, 8, 16),
+        )
         self._set_questions_per_day(2)  # small deck so we can finish it
         self.client.get("/deck/?today=2026-08-16")
         for n in (1, 2):

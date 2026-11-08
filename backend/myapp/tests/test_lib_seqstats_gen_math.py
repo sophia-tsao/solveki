@@ -9,6 +9,7 @@ decimals, and none of the library's original "arithmatic"/"mdian" typos.
 import math
 import re
 from fractions import Fraction
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.test import TestCase
 
@@ -16,6 +17,13 @@ from django.test import TestCase
 from myapp.generators import lib_seqstats_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
 from myapp.generators._format import num, frac_from
+
+
+def _half_up(value, places):
+    """Round halves up, as served answers do (``round`` rounds them to even)."""
+    exact = Decimal(repr(float(value)))
+    return float(exact.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
 
 SAMPLES = 400
 
@@ -76,13 +84,13 @@ class MeanMedianTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["mean_median"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             m = self.DATA.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             data = [int(v) for v in m.group("data").split(", ")]
-            exp_mean = round(sum(data) / len(data), 3)
-            exp_median = round(_median(data), 3)
+            exp_mean = _half_up(sum(data) / len(data), 3)
+            exp_median = _half_up(_median(data), 3)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(s, f"could not parse solution: {solution!r}")
             self.assertAlmostEqual(float(s.group("mean")), exp_mean, places=3)
@@ -100,7 +108,7 @@ class DataSummaryTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["data_summary"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             m = self.DATA.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -112,13 +120,13 @@ class DataSummaryTests(TypeabilityMixin, TestCase):
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(s, f"could not parse solution: {solution!r}")
             self.assertAlmostEqual(
-                float(s.group("mean")), round(mean, 3), places=3
+                float(s.group("mean")), _half_up(mean, 3), places=3
             )
             self.assertAlmostEqual(
-                float(s.group("sd")), round(sd, 3), places=3
+                float(s.group("sd")), _half_up(sd, 3), places=3
             )
             self.assertAlmostEqual(
-                float(s.group("var")), round(variance, 3), places=3
+                float(s.group("var")), _half_up(variance, 3), places=3
             )
 
 
@@ -133,7 +141,7 @@ class ArithmeticProgressionSumTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arithmetic_progression_sum"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             self.assertNotIn(".", solution)  # always an integer, no .0
             m = self.PROBLEM.search(problem)
@@ -146,7 +154,7 @@ class ArithmeticProgressionSumTests(TypeabilityMixin, TestCase):
 class GeometricProgressionTests(TypeabilityMixin, TestCase):
     PROBLEM = re.compile(
         rf"first term a = (?P<a>{INT}) and common ratio r = (?P<r>{INT})\. "
-        rf"Find the (?P<n>\d+)th term"
+        rf"Find the (?P<n>\d+)(?:st|nd|rd|th) term"
     )
 
     def test_gp_term(self):
@@ -154,7 +162,7 @@ class GeometricProgressionTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geometric_progression"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             self.assertNotIn(".", solution)
             m = self.PROBLEM.search(problem)
@@ -174,7 +182,7 @@ class DefiniteIntegralTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["definite_integral"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -190,15 +198,15 @@ class DefiniteIntegralTests(TypeabilityMixin, TestCase):
 
 
 class PowerRuleIntegrationTests(TypeabilityMixin, TestCase):
-    # Match integrand terms like "9x^5" or "3x".
-    TERM = re.compile(r"(?P<coef>\d+)x(?:\^(?P<exp>\d+))?")
+    # Match integrand terms like "9x^5", "3x" or "x" (a coefficient of 1 is omitted).
+    TERM = re.compile(r"(?P<coef>\d*)x(?:\^(?P<exp>\d+))?")
 
     def test_power_rule(self):
         import random
         random.seed(0)
         gen = LOCAL_GENERATORS["power_rule_integration"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             self.assertTrue(solution.endswith(" + C"), solution)
 
@@ -207,16 +215,17 @@ class PowerRuleIntegrationTests(TypeabilityMixin, TestCase):
             integrand = {}
             for tm in self.TERM.finditer(integrand_str):
                 exp = int(tm.group("exp")) if tm.group("exp") else 1
-                integrand[exp] = int(tm.group("coef"))
+                integrand[exp] = int(tm.group("coef") or 1)
             self.assertTrue(integrand, f"no terms parsed: {problem!r}")
 
             # Expected antiderivative, canonical descending.
             antideriv = {e + 1: Fraction(c, e + 1) for e, c in integrand.items()}
             expected_terms = [
-                f"{frac_from(coef)}x^{ne}"
+                f"{'' if coef == 1 else frac_from(coef)}x^{ne}"
                 for ne, coef in sorted(antideriv.items(), reverse=True)
             ]
             expected = " + ".join(expected_terms) + " + C"
+            self.assertNotRegex(solution, r"(?<![\d/])1x", "unit coefficient should be omitted")
             self.assertEqual(solution, expected)
 
 
@@ -232,7 +241,7 @@ class ConfidenceIntervalTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["confidence_interval"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -245,8 +254,8 @@ class ConfidenceIntervalTests(TypeabilityMixin, TestCase):
             self.assertIsNotNone(sol, f"could not parse solution: {solution!r}")
             low, high = float(sol.group("low")), float(sol.group("high"))
             self.assertLess(low, high, f"endpoints out of order: {solution!r}")
-            self.assertAlmostEqual(low, round(mean - margin, 3), places=3)
-            self.assertAlmostEqual(high, round(mean + margin, 3), places=3)
+            self.assertAlmostEqual(low, _half_up(mean - margin, 3), places=3)
+            self.assertAlmostEqual(high, _half_up(mean + margin, 3), places=3)
 
 
 class QuadraticEquationTests(TypeabilityMixin, TestCase):
@@ -261,7 +270,7 @@ class QuadraticEquationTests(TypeabilityMixin, TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["quadratic_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")

@@ -28,7 +28,7 @@ def make_course(course_name="Algebra", grade_level=8):
     return Course.objects.create(course_name=course_name, grade_level=grade_level)
 
 
-def make_topic(course, topic_name="Linear Equations", generator_name="addition"):
+def make_topic(course, topic_name="Linear Equations", generator_name="gcd"):
     return Topic.objects.create(
         topic_name=topic_name, course=course, generator_name=generator_name
     )

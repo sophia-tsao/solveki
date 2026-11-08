@@ -12,8 +12,8 @@ unusable in an exact-match answer box for various reasons:
 * ``quotient_of_power_same_power`` emits long non-terminating decimals.
 * ``product_of_scientific_notations`` returns ``2.17 \times 10^{97}`` — untypeable.
 
-Each generator takes no required arguments, is ``@register``-ed, and returns a
-``(problem, solution)`` pair whose *solution* is strictly keyboard-typeable
+Each generator takes no required arguments, is ``@register``-ed, and returns
+``(problem, solution, steps)`` whose *solution* is strictly keyboard-typeable
 (integers, ``a/b`` fractions, ``a^b`` powers, ``m*10^e`` sci-notation).
 """
 import random
@@ -21,6 +21,8 @@ from fractions import Fraction
 
 from ._registry import register
 from ._format import num
+from ._steps import Steps, paren, tex_frac
+from .algebra1 import _elimination_steps, _typed_answer
 
 
 def _signed_term(coeff, var):
@@ -56,7 +58,11 @@ def system_of_equations(max_coeff=6, min_sol=-8, max_sol=8):
         f"Format your answer as x=.., y=.. (e.g. x=3, y=-2)."
     )
     solution = f"x={x}, y={y}"
-    return problem, solution
+
+    s = Steps()
+    _elimination_steps(s, a, b, c, d, e, f, x, y)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 def _combine_term(coeff, power):
@@ -100,7 +106,36 @@ def combine_like_terms(min_power=1, max_power=6):
     solution = " + ".join(
         _combine_term(combined[p], p) for p in sorted(combined, reverse=True)
     )
-    return problem, solution
+
+    order = sorted(combined, reverse=True)
+    groups = {p: [c for c, q in addends if q == p] for p in order}
+
+    def shown_sum(p):
+        return " + ".join(f"{c}x^{{{p}}}" for c in groups[p])
+
+    s = Steps()
+    s.step("Like terms have the same variable raised to the same power. "
+           "Group them, from the highest power to the lowest.",
+           " + ".join(f"({shown_sum(p)})" if len(groups[p]) > 1 else shown_sum(p)
+                      for p in order))
+    repeated = [p for p in order if len(groups[p]) > 1]
+    if repeated:
+        s.step("Add the coefficients in each group. The power stays the same.",
+               r"\begin{aligned} "
+               + r" \\ ".join(f"{shown_sum(p)} &= {combined[p]}x^{{{p}}}" for p in repeated)
+               + r" \end{aligned}")
+    else:
+        s.step("Each power appears only once, so there is nothing to add.")
+    notes = []
+    if 1 in combined:
+        notes.append("$x^1$ is just $x$")
+    if 1 in combined.values():
+        notes.append("a coefficient of $1$ isn't written")
+    s.step("Write the terms in descending order of power"
+           + (f" ({' and '.join(notes)})" if notes else "") + ".",
+           solution)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -120,7 +155,13 @@ def power_of_powers(min_base=2, max_base=20, min_exp=2, max_exp=9):
         f"Simplify $({a}^{{{m}}})^{{{n}}}$. Write your answer in the form a^b."
     )
     solution = f"{a}^{m * n}"
-    return problem, solution
+
+    s = Steps()
+    s.formula("The power of a power rule", r"(a^m)^n = a^{m \cdot n}")
+    s.step("Keep the base and multiply the exponents.",
+           rf"({a}^{{{m}}})^{{{n}}} = {a}^{{{m} \cdot {n}}} = {a}^{{{m * n}}}")
+    _typed_answer(s, f"{a}^{{{m * n}}}", solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -145,7 +186,13 @@ def quotient_of_power_same_base(min_base=2, max_base=20, min_exp=2, max_exp=9):
         "Write your answer in the form a^b."
     )
     solution = f"{a}^{m - n}"
-    return problem, solution
+
+    s = Steps()
+    s.formula("The quotient of powers rule", r"\frac{a^m}{a^n} = a^{m-n}")
+    s.step(f"The bases are both ${a}$, so keep the base and subtract the exponents.",
+           rf"\frac{{{a}^{{{m}}}}}{{{a}^{{{n}}}}} = {a}^{{{m}-{n}}} = {a}^{{{m - n}}}")
+    _typed_answer(s, f"{a}^{{{m - n}}}", solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -176,7 +223,26 @@ def quotient_of_power_same_power(min_base=2, max_base=12, min_exp=2, max_exp=6):
         "Write your answer as (a/b)^n with a/b reduced, "
         "or as k^n if the base is a whole number."
     )
-    return problem, answer
+
+    reduced = (str(base.numerator) if base.denominator == 1
+               else tex_frac(base.numerator, base.denominator))
+    s = Steps()
+    s.formula("The power of a quotient rule, read right to left,",
+              r"\frac{a^n}{b^n} = \left(\frac{a}{b}\right)^n")
+    s.step(f"Both powers have exponent ${n}$, so write one fraction raised to ${n}$.",
+           rf"\frac{{{a}^{{{n}}}}}{{{b}^{{{n}}}}} = \left(\frac{{{a}}}{{{b}}}\right)^{{{n}}}")
+    g = a // base.numerator
+    if g == 1:
+        s.step(f"${a}$ and ${b}$ share no common factor, so ${tex_frac(a, b)}$ "
+               "is already reduced.")
+    else:
+        s.step(f"Reduce the fraction by dividing the top and bottom by ${g}$.",
+               rf"\frac{{{a}}}{{{b}}} = {reduced}")
+    if base.denominator == 1:
+        _typed_answer(s, f"{reduced}^{{{n}}}", answer)
+    else:
+        _typed_answer(s, rf"\left({reduced}\right)^{{{n}}}", answer)
+    return problem, answer, s.done()
 
 
 @register
@@ -205,7 +271,28 @@ def product_of_scientific_notations(min_exp=-9, max_exp=9):
 
     problem = (
         f"Compute the product ({num(a)}*10^{p})({num(b)}*10^{q}). "
-        "Format your answer as m*10^e, e.g. 5.0*10^4 -> write 5*10^4."
+        "Format your answer as m*10^e, e.g. 5.0*10^4 -> write 5*10^4. "
+        "Round the decimal part to the nearest thousandth if necessary."
     )
     solution = f"{num(mantissa)}*10^{exponent}"
-    return problem, solution
+
+    # Show the product of the mantissas at the precision the answer keeps:
+    # derived from the rounded mantissa, so the steps agree with the answer.
+    final = Fraction(num(mantissa))
+    product = a * b
+    shown = final * 10 if product >= 10 else final
+    rel = "=" if shown == product else r"\approx"
+    s = Steps()
+    s.step("Multiply the decimal parts together and the powers of ten together.",
+           rf"({num(a)} \times 10^{{{p}}})({num(b)} \times 10^{{{q}}}) = "
+           rf"({num(a)} \times {num(b)}) \times 10^{{{p} + {paren(q)}}}")
+    s.step("Multiply the decimals, and add the exponents.",
+           rf"{num(a)} \times {num(b)} {rel} {num(shown)}, \qquad {p} + {paren(q)} = {p + q}")
+    if product >= 10:
+        s.step(f"${num(shown)}$ is not between $1$ and $10$, so move the decimal "
+               "point one place left and add $1$ to the exponent.",
+               rf"{num(shown)} \times 10^{{{p + q}}} = {num(final)} \times 10^{{{exponent}}}")
+    _typed_answer(s, rf"{num(final)} \times 10^{{{exponent}}}", solution,
+                  lead="Rounded to the nearest thousandth, the answer is"
+                  if rel != "=" else "The answer is")
+    return problem, solution, s.done()

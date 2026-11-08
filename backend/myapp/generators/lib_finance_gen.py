@@ -24,6 +24,25 @@ import random
 
 from ._registry import register
 from ._format import num
+from ._steps import Steps
+
+
+def _is_exact(value):
+    """Whether `value` needs no rounding to be shown to 3 decimal places."""
+    return abs(value - round(value, 3)) < 1e-12
+
+
+def _eq(value):
+    """`=` when `value` shows exactly to 3 decimals, else `\\approx`."""
+    return "=" if _is_exact(value) else r"\approx"
+
+
+def _lead(value):
+    """The `Steps.answer` lead: mention rounding only when it happened."""
+    if _is_exact(value):
+        return "The answer is"
+    return "Rounded to the nearest thousandth, the answer is"
+
 
 _ROUND_HINT = "Round your answer to the nearest thousandth."
 # For quantities that are conceptually a percentage: keep the % sign out of the
@@ -50,7 +69,15 @@ def percentage():
     n = random.randint(1, 99)
     value = p / 100 * n
     problem = f"What is ${p}\\%$ of ${n}$? {_ROUND_HINT}"
-    return problem, num(value)
+    solution = num(value)
+
+    rate = num(p / 100)
+    s = Steps()
+    s.step("Write the percent as a decimal by dividing by $100$.",
+           rf"{p}\% = \frac{{{p}}}{{100}} = {rate}")
+    s.step(f"Multiply the decimal by ${n}$.", rf"{rate} \times {n} = {solution}")
+    s.answer(solution, lead=_lead(value))
+    return problem, solution, s.done()
 
 
 @register
@@ -72,7 +99,20 @@ def percentage_difference():
         f"What is the percentage difference between ${a}$ and ${b}$? "
         f"{_PERCENT_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    diff = abs(a - b)
+    average = num((a + b) / 2)
+    s = Steps()
+    s.formula("Percentage difference compares the gap between two numbers to "
+              "their average. The formula",
+              r"\text{percentage difference} = \frac{|a - b|}{(a + b) / 2} \times 100")
+    s.step("Find the difference between the numbers and their average.",
+           rf"|{a} - {b}| = {diff}, \quad \frac{{{a} + {b}}}{{2}} = {average}")
+    s.step("Divide the difference by the average, then multiply by $100$.",
+           rf"\frac{{{diff}}}{{{average}}} \times 100 {_eq(value)} {solution}")
+    s.answer(solution, lead=_lead(value))
+    return problem, solution, s.done()
 
 
 @register
@@ -94,7 +134,20 @@ def percentage_error():
         f"Find the percentage error when the observed value is ${observed}$ "
         f"and the exact value is ${exact}$. {_PERCENT_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    error = abs(observed - exact)
+    s = Steps()
+    s.formula("Percentage error compares how far off a measurement is to the "
+              "exact value. The formula",
+              r"\text{percentage error} = \frac{|\text{observed} - \text{exact}|}"
+              r"{|\text{exact}|} \times 100")
+    s.step("Find how far the observed value is from the exact value.",
+           rf"|{observed} - {exact}| = {error}")
+    s.step(f"Divide by the exact value, ${exact}$, then multiply by $100$.",
+           rf"\frac{{{error}}}{{{exact}}} \times 100 {_eq(value)} {solution}")
+    s.answer(solution, lead=_lead(value))
+    return problem, solution, s.done()
 
 
 @register
@@ -116,7 +169,17 @@ def simple_interest():
         f"Find the simple interest on a principal of ${p}$ dollars at a rate "
         f"of ${r}\\%$ per year for ${t}$ years. {_ROUND_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    rate = num(r / 100)
+    s = Steps()
+    s.formula("Simple interest is principal times rate times time. The formula",
+              r"I = P \times r \times t")
+    s.step(f"Write the rate as a decimal: ${r}\\% = {rate}$.")
+    s.substitute(rf"I = {p} \times {rate} \times {t} = {solution}",
+                 text=f"Substitute $P = {p}$, $r = {rate}$, and $t = {t}$, then multiply.")
+    s.answer(solution, lead="The simple interest, in dollars, is")
+    return problem, solution, s.done()
 
 
 @register
@@ -141,7 +204,23 @@ def compound_interest():
         f"at a rate of ${r}\\%$ per year, compounded annually, for ${t}$ "
         f"years. {_ROUND_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    rate = num(r / 100)
+    s = Steps()
+    s.formula("The total amount with annual compounding", r"A = P(1 + r)^t")
+    s.step(f"Write the rate as a decimal: ${r}\\% = {rate}$.")
+    s.substitute(rf"A = {p}(1 + {rate})^{{{t}}} = {p}({num(1 + r / 100)})^{{{t}}}",
+                 text=f"Substitute $P = {p}$, $r = {rate}$, and $t = {t}$.")
+    s.step("Evaluate the power, then multiply by the principal. Keep full "
+           "precision until the end.",
+           rf"A {_eq(value)} {solution}")
+    if _is_exact(value):
+        lead = "The total amount in dollars is"
+    else:
+        lead = "Rounded to the nearest thousandth, the total amount in dollars is"
+    s.answer(solution, lead=lead)
+    return problem, solution, s.done()
 
 
 @register
@@ -165,7 +244,24 @@ def profit_loss_percent():
         f"This is a {kind}. Find the {kind} as a percentage of the cost "
         f"price. {_PERCENT_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    amount = abs(sell - cost)
+    s = Steps()
+    if kind == "profit":
+        s.step("The item sold for at least what it cost, so subtract the cost "
+               "price from the sell price to find the profit.",
+               rf"\text{{profit}} = {sell} - {cost} = {amount}")
+    else:
+        s.step("The item sold for less than it cost, so subtract the sell price "
+               "from the cost price to find the loss.",
+               rf"\text{{loss}} = {cost} - {sell} = {amount}")
+    s.formula(f"The {kind} percent",
+              rf"\text{{{kind} percent}} = \frac{{\text{{{kind}}}}}{{\text{{cost price}}}} \times 100")
+    s.substitute(rf"\frac{{{amount}}}{{{cost}}} \times 100 {_eq(value)} {solution}",
+                 text="Substitute and simplify.")
+    s.answer(solution, lead=_lead(value))
+    return problem, solution, s.done()
 
 
 @register
@@ -190,7 +286,18 @@ def conditional_probability():
         f"exercise is chosen at random, what is the probability they also eat "
         f"healthily? {_PROB_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    s = Steps()
+    s.step(f"The person is chosen only from the ${b_count}$ who exercise, so those "
+           "people are the whole sample space.")
+    s.formula("The conditional probability",
+              r"P(\text{healthy} \mid \text{exercise}) = "
+              r"\frac{\text{number who exercise and eat healthily}}{\text{number who exercise}}")
+    s.substitute(rf"P = \frac{{{ab_count}}}{{{b_count}}} {_eq(value)} {solution}",
+                 text="Substitute the counts and divide.")
+    s.answer(solution, lead=_lead(value))
+    return problem, solution, s.done()
 
 
 @register
@@ -216,4 +323,18 @@ def binomial_distribution():
         f"${num(p)}$. What is the probability of exactly ${k}$ successes? "
         f"{_PROB_HINT}"
     )
-    return problem, num(value)
+    solution = num(value)
+
+    q = num(1 - p)
+    s = Steps()
+    s.formula("The binomial probability of exactly $k$ successes",
+              r"P(X = k) = \binom{n}{k} p^k (1 - p)^{n - k}")
+    s.substitute(rf"P(X = {k}) = \binom{{{n}}}{{{k}}} ({num(p)})^{{{k}}} ({q})^{{{n - k}}}",
+                 text=f"Substitute $n = {n}$, $k = {k}$, and $p = {num(p)}$, "
+                      f"so $1 - p = {q}$.")
+    s.step(f"Count the arrangements: $\\binom{{{n}}}{{{k}}} = {math.comb(n, k)}$.",
+           rf"P(X = {k}) = {math.comb(n, k)} \cdot ({num(p)})^{{{k}}} ({q})^{{{n - k}}}")
+    s.step("Evaluate the powers and multiply, keeping full precision until the end.",
+           rf"P(X = {k}) {_eq(value)} {solution}")
+    s.answer(solution, lead=_lead(value))
+    return problem, solution, s.done()

@@ -3,6 +3,7 @@ import random
 
 from ._registry import register
 from ._format import num as _num
+from ._steps import Steps, paren, tex_frac
 
 
 def _format_polynomial(terms):
@@ -53,7 +54,21 @@ def vertex_form(min_val=-10, max_val=10, min_a=-5, max_a=5):
 
     problem = f"Find the coordinates of the vertex of $y={a_str}({h_str})^2{'+' if k >= 0 else '-'}{abs(k)}$"
     solution = f"$({h}, {k})$"
-    return problem, solution
+
+    s = Steps()
+    s.step("A quadratic in vertex form $y=a(x-h)^2+k$ has its vertex at $(h, k)$.")
+    if h == 0:
+        s.step("Inside the parentheses is just $x$, which is $x-0$, so $h=0$.")
+    elif h > 0:
+        s.step(f"Inside the parentheses is ${h_str}$, so $h={h}$.")
+    else:
+        s.step(
+            f"Inside the parentheses is ${h_str}$, which is $x-{paren(h)}$, so $h={h}$. "
+            "Notice that $h$ has the opposite sign of the number written next to $x$."
+        )
+    s.step(f"The number added outside the parentheses is ${k}$, so $k={k}$.")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -92,4 +107,23 @@ def aroc_over_interval(max_degree=5, max_coefficient=10, min_coefficient=-10):
         f"Round your answer to the nearest thousandth."
     )
     solution = f"${_num(ans)}$"
-    return problem, solution
+
+    s = Steps()
+    s.formula(
+        f"The average rate of change of $f(x)={function}$ from $x={x_value1}$ to $x={x_value2}$",
+        rf"\frac{{f({x_value2}) - f({x_value1})}}{{{x_value2} - {paren(x_value1)}}}",
+    )
+    s.step(f"Evaluate the function at $x={x_value1}$.", f"f({x_value1}) = {y_value1}")
+    s.step(f"Evaluate the function at $x={x_value2}$.", f"f({x_value2}) = {y_value2}")
+    dy, dx = y_value2 - y_value1, x_value2 - x_value1
+    exact = f" = {dy // dx}" if dy % dx == 0 else ""
+    s.substitute(
+        rf"\frac{{{y_value2} - {paren(y_value1)}}}{{{x_value2} - {paren(x_value1)}}} = {tex_frac(dy, dx)}{exact}",
+        text="Substitute the two values and simplify.",
+    )
+    if exact:
+        s.answer(solution)
+    else:
+        s.step("Divide.", rf"{tex_frac(dy, dx)} \approx {_num(ans)}")
+        s.answer(solution, lead="Rounded to the nearest thousandth, the answer is")
+    return problem, solution, s.done()

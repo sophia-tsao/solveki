@@ -9,11 +9,19 @@ import math
 import random
 import re
 from fractions import Fraction
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.test import TestCase
 
 from myapp.generators import calculus  # noqa: F401  (import registers generators)
 from myapp.generators import LOCAL_GENERATORS
+
+
+def _half_up(value, places):
+    """Round halves up, as served answers do (``round`` rounds them to even)."""
+    exact = Decimal(repr(float(value)))
+    return float(exact.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
 
 SAMPLES = 2000
 
@@ -107,7 +115,7 @@ class LimitRationalTests(TestCase):
         random.seed(0)
         g = gen("calc_limit_rational")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             c = int(m.group(1))
@@ -129,7 +137,7 @@ class DerivativePolynomialTests(TestCase):
         random.seed(0)
         g = gen("calc_derivative_polynomial")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             poly = parse_poly(self.P.search(problem).group(1))
             stated = parse_poly(solution)
             self.assertEqual(poly_norm(stated), poly_norm(poly_deriv(poly)),
@@ -143,7 +151,7 @@ class ProductRuleTests(TestCase):
         random.seed(0)
         g = gen("calc_product_rule")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             f1, f2 = parse_poly(m.group(1)), parse_poly(m.group(2))
@@ -164,7 +172,7 @@ class QuotientRuleTests(TestCase):
         random.seed(0)
         g = gen("calc_quotient_rule")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             num, den = parse_poly(m.group(1)), parse_poly(m.group(2))
@@ -183,7 +191,7 @@ class ChainRuleTests(TestCase):
         random.seed(0)
         g = gen("calc_chain_rule")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             inner = parse_poly(m.group(1))
@@ -206,7 +214,7 @@ class ExpLogTrigTests(TestCase):
         random.seed(0)
         g = gen("calc_derivative_exp_log_trig")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             c = int(self.C.search(problem).group(1))
             if self.LN.search(problem):
                 a = int(self.LN.search(problem).group(1))
@@ -223,7 +231,7 @@ class ExpLogTrigTests(TestCase):
             else:
                 self.fail(f"could not parse: {problem!r}")
             stated = float(self.VAL.search(solution).group(1))
-            self.assertAlmostEqual(stated, round(value, 3), places=6,
+            self.assertAlmostEqual(stated, _half_up(value, 3), places=6,
                                    msg=f"{problem!r} -> {solution!r}")
 
 
@@ -235,7 +243,7 @@ class HigherOrderTests(TestCase):
         random.seed(0)
         g = gen("calc_higher_order_derivative")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             order = int(m.group(1))
@@ -257,7 +265,7 @@ class TangentLineTests(TestCase):
         random.seed(0)
         g = gen("calc_tangent_line")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             poly = parse_poly(m.group(1))
@@ -279,7 +287,7 @@ class ExtremaTests(TestCase):
         random.seed(0)
         g = gen("calc_extrema")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             poly = parse_poly(self.P.search(problem).group(1))
             expected = solve_deriv_roots(poly_deriv(poly))
             stated = [Fraction(x.strip())
@@ -300,7 +308,7 @@ class InflectionTests(TestCase):
         random.seed(0)
         g = gen("calc_inflection_point")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             poly = parse_poly(self.P.search(problem).group(1))
             a, b = poly.get(3, 0), poly.get(2, 0)
             expected = Fraction(-b, 3 * a)
@@ -315,7 +323,7 @@ class DefiniteIntegralTests(TestCase):
         random.seed(0)
         g = gen("calc_definite_integral_poly")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group(1)), int(m.group(2))
@@ -333,7 +341,7 @@ class IndefiniteIntegralTests(TestCase):
         random.seed(0)
         g = gen("calc_indefinite_integral_poly")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             integrand = parse_poly(self.P.search(problem).group(1))
             anti = parse_poly(self.S.search(solution).group(1))
             self.assertEqual(poly_norm(poly_deriv(anti)), poly_norm(integrand),
@@ -347,7 +355,7 @@ class USubIntegralTests(TestCase):
         random.seed(0)
         g = gen("calc_usub_integral")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, q = int(m.group(1)), int(m.group(2))
@@ -368,7 +376,7 @@ class AreaBetweenCurvesTests(TestCase):
         random.seed(0)
         g = gen("calc_area_between_curves")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             f = parse_poly(m.group(1))
@@ -381,6 +389,24 @@ class AreaBetweenCurvesTests(TestCase):
             self.assertEqual(parse_frac(solution), expected,
                              f"{problem!r} -> {solution!r}")
 
+    def test_curves_do_not_cross_inside_the_interval(self):
+        # Area is the integral of |f - g|; it only equals |integral of (f - g)|
+        # when f - g keeps one sign on [a, b]. (A cubic f - g with a root at
+        # x = 0 inside the interval used to make the served area wrong.)
+        random.seed(0)
+        g = gen("calc_area_between_curves")
+        for _ in range(SAMPLES):
+            problem, _ = g()[:2]
+            m = self.P.search(problem)
+            f, gpoly = parse_poly(m.group(1)), parse_poly(m.group(2))
+            a, b = int(m.group(3)), int(m.group(4))
+            diff = dict(f)
+            for e, c in gpoly.items():
+                diff[e] = diff.get(e, 0) - c
+            for i in range(41):
+                x = a + Fraction(i * (b - a), 40)
+                self.assertGreaterEqual(poly_eval(diff, x), 0, f"{problem!r} at x={x}")
+
 
 class AverageValueTests(TestCase):
     P = re.compile(r"average value of \$f\(x\) = ([^$]+)\$ on "
@@ -390,7 +416,7 @@ class AverageValueTests(TestCase):
         random.seed(0)
         g = gen("calc_average_value")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             poly = parse_poly(m.group(1))
@@ -408,7 +434,7 @@ class RiemannSumTests(TestCase):
         random.seed(0)
         g = gen("calc_riemann_sum")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             side = m.group(1)
@@ -431,7 +457,7 @@ class LimitConjugateTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["calc_limit_conjugate"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             c = int(m.group("c"))
@@ -471,7 +497,7 @@ class ImplicitDifferentiationTests(TestCase):
         random.seed(0)
         g = gen("calc_implicit_differentiation")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             rel = self.REL.search(problem)
             self.assertIsNotNone(rel, f"could not parse: {problem!r}")
             lhs = rel.group(1)
@@ -494,7 +520,7 @@ class ParticleMotionTests(TestCase):
         random.seed(0)
         g = gen("calc_particle_motion")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             poly = parse_poly(self.S.search(problem).group(1).replace("t", "x"))
             if self.REST.search(problem):
                 A, B = poly.get(2, 0), poly.get(1, 0)
@@ -530,7 +556,7 @@ class VolumeRevolutionTests(TestCase):
         random.seed(0)
         g = gen("calc_volume_revolution")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             bm = self.BOUNDS.search(problem)
             a, b = int(bm.group(1)), int(bm.group(2))
             btw = self.BETWEEN.search(problem)
@@ -562,7 +588,7 @@ class LHopitalTests(TestCase):
         random.seed(0)
         g = gen("calc_lhopital")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.FRAC.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             num, den = m.group(1), m.group(2)
@@ -590,7 +616,7 @@ class LimitDefinitionDerivativeTests(TestCase):
         random.seed(0)
         g = gen("calc_limit_definition_derivative")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p = int(m.group(1))
@@ -615,7 +641,7 @@ class IntegrationByPartsTests(TestCase):
         random.seed(0)
         g = gen("calc_integration_by_parts")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group(1)), int(m.group(2))
@@ -648,7 +674,7 @@ class RelatedRatesTests(TestCase):
         random.seed(0)
         g = gen("calc_related_rates")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             cm, sm, lm = (self.CIRCLE.search(problem),
                           self.SPHERE.search(problem),
                           self.LADDER.search(problem))
@@ -679,7 +705,7 @@ class MvtFindCTests(TestCase):
         random.seed(0)
         g = gen("calc_mvt_find_c")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             poly = parse_poly(m.group(1))
@@ -691,7 +717,7 @@ class MvtFindCTests(TestCase):
                 A, B = poly.get(2, 0), poly.get(1, 0)
                 c = float(Fraction(slope - B, 2 * A))
             stated = float(self.VAL.search(solution).group(1))
-            self.assertAlmostEqual(stated, round(c, 3), places=6,
+            self.assertAlmostEqual(stated, _half_up(c, 3), places=6,
                                    msg=f"{problem!r} -> {solution!r}")
 
 
@@ -704,7 +730,7 @@ class TrapezoidalRuleTests(TestCase):
         random.seed(0)
         g = gen("calc_trapezoidal_rule")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group(1))
@@ -718,7 +744,7 @@ class TrapezoidalRuleTests(TestCase):
                 total += w * poly_eval(poly, x)
             expected = dx / 2 * total
             stated = float(self.VAL.search(solution).group(1))
-            self.assertAlmostEqual(stated, round(expected, 3), places=6,
+            self.assertAlmostEqual(stated, _half_up(expected, 3), places=6,
                                    msg=f"{problem!r} -> {solution!r}")
 
 
@@ -731,7 +757,7 @@ class SeparableOdeTests(TestCase):
         random.seed(0)
         g = gen("calc_separable_ode")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             k = int(m.group(1))
@@ -742,7 +768,7 @@ class SeparableOdeTests(TestCase):
             else:
                 expected = y0 * math.exp(k * (x1 - x0))
             stated = float(self.VAL.search(solution).group(1))
-            self.assertAlmostEqual(stated, round(expected, 3), places=6,
+            self.assertAlmostEqual(stated, _half_up(expected, 3), places=6,
                                    msg=f"{problem!r} -> {solution!r}")
 
 
@@ -753,7 +779,7 @@ class ConcavityIntervalTests(TestCase):
         random.seed(0)
         g = gen("calc_concavity_interval")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             poly = parse_poly(self.P.search(problem).group(1))
             A, B = poly.get(3, 0), poly.get(2, 0)
             x_inf = Fraction(-B, 3 * A)
@@ -778,7 +804,7 @@ class TaylorCoefficientTests(TestCase):
         random.seed(0)
         g = gen("calc_taylor_coefficient")
         for _ in range(SAMPLES):
-            problem, solution = g()
+            problem, solution = g()[:2]
             m = self.P.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             k = int(m.group(1))

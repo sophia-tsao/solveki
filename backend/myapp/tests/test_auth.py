@@ -205,7 +205,6 @@ class AuthGuardTests(TestCase):
 
     def test_protected_endpoints_reject_anonymous(self):
         cases = [
-            ("get", "/problem/"),
             ("get", "/deck/"),
             ("post", "/deck/advance/"),
             ("get", "/settings/"),

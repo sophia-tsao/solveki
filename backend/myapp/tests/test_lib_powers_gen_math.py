@@ -9,11 +9,19 @@ against the strict typeability rules (no LaTeX, no untypeable sci-notation, no
 import random
 import re
 from fractions import Fraction
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.test import TestCase
 
 from myapp.generators import lib_powers_gen  # noqa: F401 - registers generators
 from myapp.generators import LOCAL_GENERATORS
+
+
+def _half_up(value, places):
+    """Round halves up, as served answers do (``round`` rounds them to even)."""
+    exact = Decimal(repr(float(value)))
+    return float(exact.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
 
 SAMPLES = 500
 
@@ -59,7 +67,7 @@ class SystemOfEquationsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["system_of_equations"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
             assert_typeable(self, solution)
             eqs = self.EQ.findall(problem)
@@ -87,7 +95,7 @@ class CombineLikeTermsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["combine_like_terms"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
             assert_typeable(self, solution)
 
@@ -134,7 +142,7 @@ class PowerOfPowersTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["power_of_powers"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
             assert_typeable(self, solution)
             m = self.PROBLEM.search(problem)
@@ -154,7 +162,7 @@ class QuotientSameBaseTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["quotient_of_power_same_base"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
             assert_typeable(self, solution)
             m = self.PROBLEM.search(problem)
@@ -177,7 +185,7 @@ class QuotientSamePowerTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["quotient_of_power_same_power"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
             assert_typeable(self, solution)
             m = self.PROBLEM.search(problem)
@@ -209,7 +217,7 @@ class ProductScientificTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["product_of_scientific_notations"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
             assert_typeable(self, solution)
             m = self.PROBLEM.search(problem)
@@ -232,5 +240,5 @@ class ProductScientificTests(TestCase):
             self.assertLess(float(s.group(1)), 10.0, solution)
             self.assertEqual(int(s.group(2)), exponent, problem)
             self.assertAlmostEqual(
-                float(s.group(1)), round(float(mantissa), 3), places=3,
+                float(s.group(1)), _half_up(float(mantissa), 3), places=3,
                 msg=f"{problem!r} -> {solution!r}")

@@ -85,7 +85,7 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
             <h4>What it tracks per topic</h4>
             <p>
               An ease factor, an interval (days until next review), and a streak of successes.
-              A good result grows the gap (1 day → 6 days → longer, up to a year); a poor one
+              A good result on a due topic grows the gap (1 day → 3 days → 8 days → longer, up to a year); a poor one
               resets it to tomorrow.
             </p>
           </div>
@@ -130,8 +130,8 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
           <li>
             <span className="guide-step-num">3</span>
             <div className="guide-step-body">
-              <strong>Set the number of cards</strong>
-              <p>Choose how many cards a student answers to finish. Every card in their practice deck counts from the moment it's assigned, whatever its topic. SM-2 (section 2) picks which cards, so what's due surfaces first.</p>
+              <strong>Set the minimum cards</strong>
+              <p>Choose the fewest cards a student answers on the assigned topics. Solveki spreads them over the days until the due date. A student who gets them right finishes at that count; one who struggles gets more practice, up to 1.5 times as many, and is marked &ldquo;needs help&rdquo; if they reach that without getting solid. Cards on other topics don&rsquo;t count.</p>
             </div>
           </li>
           <li>

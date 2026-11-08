@@ -7,6 +7,7 @@ many random samples so the check covers its whole input space.
 """
 import math
 import re
+from decimal import Decimal, ROUND_HALF_UP
 
 from django.test import TestCase
 
@@ -14,6 +15,13 @@ from django.test import TestCase
 # LOCAL_GENERATORS with the stat_* generators.
 from myapp.generators import statistics_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+
+
+def _half_up(value, places):
+    """Round halves up, as served answers do (``round`` rounds them to even)."""
+    exact = Decimal(repr(float(value)))
+    return float(exact.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP))
+
 
 SAMPLES = 2000
 
@@ -45,7 +53,7 @@ class FiveNumberSummaryTests(TestCase):
             rf"(?P<q3>{NUM}), (?P<mx>{NUM})\$"
         )
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.DATA.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             data = [int(v) for v in m.group("data").split(", ")]
@@ -87,13 +95,13 @@ class ZScoreTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_z_score"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x, mean, sd = (
                 float(m.group("x")), float(m.group("mean")), float(m.group("sd"))
             )
-            expected = round((x - mean) / sd, 3)
+            expected = _half_up((x - mean) / sd, 3)
             stated = float(self.SOLUTION.search(solution).group("z"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -117,7 +125,7 @@ class CorrelationCoefficientTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_correlation_coefficient"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             points = _parse_points(problem)
             self.assertGreaterEqual(len(points), 4, f"parse: {problem!r}")
             n = len(points)
@@ -126,7 +134,7 @@ class CorrelationCoefficientTests(TestCase):
             sxy = sum((x - mx) * (y - my) for x, y in points)
             sxx = sum((x - mx) ** 2 for x, _ in points)
             syy = sum((y - my) ** 2 for _, y in points)
-            expected = round(sxy / math.sqrt(sxx * syy), 3)
+            expected = _half_up(sxy / math.sqrt(sxx * syy), 3)
             stated = float(self.SOLUTION.search(solution).group("r"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -144,15 +152,15 @@ class RegressionLineTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_regression_line"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             points = _parse_points(problem)
             n = len(points)
             mx = sum(x for x, _ in points) / n
             my = sum(y for _, y in points) / n
             sxy = sum((x - mx) * (y - my) for x, y in points)
             sxx = sum((x - mx) ** 2 for x, _ in points)
-            exp_m = round(sxy / sxx, 3)
-            exp_b = round(my - (sxy / sxx) * mx, 3)
+            exp_m = _half_up(sxy / sxx, 3)
+            exp_b = _half_up(my - (sxy / sxx) * mx, 3)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(s, f"could not parse solution: {solution!r}")
             stated_m = float(s.group("m"))
@@ -181,11 +189,11 @@ class MarginOfErrorTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_margin_of_error"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, n, z = float(m.group("p")), int(m.group("n")), float(m.group("z"))
-            expected = round(z * math.sqrt(p * (1 - p) / n), 3)
+            expected = _half_up(z * math.sqrt(p * (1 - p) / n), 3)
             stated = float(self.SOLUTION.search(solution).group("moe"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -204,11 +212,11 @@ class StandardErrorMeanTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_standard_error_mean"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             s, n = float(m.group("s")), int(m.group("n"))
-            expected = round(s / math.sqrt(n), 3)
+            expected = _half_up(s / math.sqrt(n), 3)
             stated = float(self.SOLUTION.search(solution).group("se"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -228,7 +236,7 @@ class SampleProportionCITests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_sample_proportion_ci"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, n, z = float(m.group("p")), int(m.group("n")), float(m.group("z"))
@@ -236,11 +244,11 @@ class SampleProportionCITests(TestCase):
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(s, f"could not parse solution: {solution!r}")
             self.assertAlmostEqual(
-                float(s.group("low")), round(p - moe, 3), places=3,
+                float(s.group("low")), _half_up(p - moe, 3), places=3,
                 msg=f"CI low wrong for {problem!r} -> {solution!r}",
             )
             self.assertAlmostEqual(
-                float(s.group("high")), round(p + moe, 3), places=3,
+                float(s.group("high")), _half_up(p + moe, 3), places=3,
                 msg=f"CI high wrong for {problem!r} -> {solution!r}",
             )
 
@@ -255,7 +263,7 @@ class RelativeFrequencyTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_relative_frequency"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             cm = self.COUNTS.search(problem)
             im = self.CATEGORY.search(problem)
             self.assertIsNotNone(cm, f"could not parse: {problem!r}")
@@ -294,7 +302,7 @@ class NormalProbabilityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_normal_probability"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PARAMS.search(problem)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")
             mean, sd = float(pm.group("mean")), float(pm.group("sd"))
@@ -310,7 +318,7 @@ class NormalProbabilityTests(TestCase):
                 self.assertIsNotNone(gt, f"could not parse event: {problem!r}")
                 b = float(gt.group("b"))
                 expected = 1.0 - _phi((b - mean) / sd)
-            expected = round(expected, 3)
+            expected = _half_up(expected, 3)
             stated = float(self.SOLUTION.search(solution).group("p"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -334,7 +342,7 @@ class TestStatisticTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_test_statistic"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             mm = self.MEAN.search(problem)
             if mm:
                 n = int(mm.group("n"))
@@ -349,7 +357,7 @@ class TestStatisticTests(TestCase):
                 phat = float(pm.group("phat"))
                 p0 = float(pm.group("p0"))
                 expected = (phat - p0) / math.sqrt(p0 * (1 - p0) / n)
-            expected = round(expected, 3)
+            expected = _half_up(expected, 3)
             stated = float(self.SOLUTION.search(solution).group("z"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -369,14 +377,14 @@ class DiscreteVarianceTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_discrete_variance"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.VALUES.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             vals = [int(v) for v in m.group("vals").split(", ")]
             probs = [float(p) for p in m.group("probs").split(", ")]
             ev = sum(p * v for p, v in zip(probs, vals))
             ev2 = sum(p * v * v for p, v in zip(probs, vals))
-            expected = round(ev2 - ev * ev, 3)
+            expected = _half_up(ev2 - ev * ev, 3)
             stated = float(self.SOLUTION.search(solution).group("v"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -394,7 +402,7 @@ class PercentileRankTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_percentile_rank"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             dm = self.DATA.search(problem)
             vm = self.VALUE.search(problem)
             self.assertIsNotNone(dm, f"could not parse: {problem!r}")
@@ -402,7 +410,7 @@ class PercentileRankTests(TestCase):
             data = [int(v) for v in dm.group("data").split(", ")]
             value = int(vm.group("v"))
             below = sum(1 for v in data if v < value)
-            expected = round(below / len(data) * 100, 3)
+            expected = _half_up(below / len(data) * 100, 3)
             stated = float(self.SOLUTION.search(solution).group("p"))
             self.assertAlmostEqual(
                 stated, expected, places=3,
@@ -423,7 +431,7 @@ class CountingProbabilityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_counting_probability"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group("n"))
@@ -456,7 +464,7 @@ class OddsProbabilityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["stat_odds_probability"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group("a")), int(m.group("b"))

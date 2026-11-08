@@ -15,14 +15,17 @@ precisely so the ``generator_name`` already stored on the Topic keeps working.
 import random
 
 from ._registry import register
+from ._steps import Steps
 
-# (display symbol, human name, how to compute the result set from a, b).
+# (display symbol, human name, how to compute the result set from a, b,
+# what the operation keeps — for the step-by-step explanation).
 _OPERATIONS = [
-    ("A ∪ B", "union", lambda a, b: a | b),
-    ("A ∩ B", "intersection", lambda a, b: a & b),
-    ("A - B", "difference A - B", lambda a, b: a - b),
-    ("B - A", "difference B - A", lambda a, b: b - a),
-    ("A △ B", "symmetric difference", lambda a, b: a ^ b),
+    ("A ∪ B", "union", lambda a, b: a | b, "every element that is in A, in B, or in both"),
+    ("A ∩ B", "intersection", lambda a, b: a & b, "only the elements that are in both A and B"),
+    ("A - B", "difference A - B", lambda a, b: a - b, "the elements of A that are not in B"),
+    ("B - A", "difference B - A", lambda a, b: b - a, "the elements of B that are not in A"),
+    ("A △ B", "symmetric difference", lambda a, b: a ^ b,
+     "the elements that are in exactly one of A and B, but not both"),
 ]
 
 
@@ -64,7 +67,7 @@ def set_operation(pool_min=1, pool_max=12):
     a = set(shared) | set(a_only)
     b = set(shared) | set(b_only)
 
-    symbol, name, compute = random.choice(_OPERATIONS)
+    symbol, name, compute, keeps = random.choice(_OPERATIONS)
     result = compute(a, b)
 
     problem = (
@@ -74,4 +77,14 @@ def set_operation(pool_min=1, pool_max=12):
         "spaces (e.g. 1,3,5)."
     )
     solution = _answer_str(result)
-    return problem, solution
+
+    s = Steps()
+    label = name if symbol in name else f"{name} ({symbol})"
+    s.step(f"The {label} contains {keeps}.")
+    s.step(
+        f"Sort the elements. In both sets: {_set_str(shared)}. "
+        f"Only in A: {_set_str(a_only)}. Only in B: {_set_str(b_only)}."
+    )
+    s.step(f"So {symbol} = {_set_str(result)}.")
+    s.answer(solution, lead="Listed in increasing order with commas, the answer is")
+    return problem, solution, s.done()

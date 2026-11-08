@@ -4,7 +4,7 @@ These do NOT test the correctness of a third-party generator's math (that is
 mathgenerator's responsibility). They assert only that every generator_name
 the seed data relies on is a real generator that returns a (problem, solution)
 pair — guarding against a library upgrade or a typo silently breaking a topic.
-_make_problem resolves a name via LOCAL_GENERATORS then getattr(mathgenerator,
+_make_problem_for_topic resolves a name via LOCAL_GENERATORS then getattr(mathgenerator,
 name); a name that no longer exists would otherwise surface as a 500 for a
 student.
 
@@ -13,11 +13,13 @@ LocalGeneratorTests, since their logic *is* our responsibility.
 """
 import random
 import re
+from unittest import mock
 
 import mathgenerator
 from django.test import TestCase
 
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._steps import Steps
 from myapp.management.commands.seed_topics import TOPICS
 from myapp.models import Course, Topic
 from myapp.views.problems import _make_problem_for_topic
@@ -42,6 +44,14 @@ class SeedGeneratorContractTests(TestCase):
         missing = sorted(seeded - known)
         self.assertEqual(missing, [], f"Unknown generator names: {missing}")
 
+    def test_every_seeded_topic_uses_a_local_generator(self):
+        # Library generators can't explain their answers, so every seeded topic
+        # needs one of ours (see generators/_steps.py).
+        library_backed = sorted(
+            {g for _topic, g in TOPICS if g is not None} - set(LOCAL_GENERATORS)
+        )
+        self.assertEqual(library_backed, [], f"Seeded topics without a local generator: {library_backed}")
+
     def test_names_produce_output(self):
         random.seed(0)
         broken = []
@@ -58,7 +68,7 @@ class SeedGeneratorContractTests(TestCase):
             ok, last_err = False, None
             for _ in range(_ATTEMPTS):
                 try:
-                    problem, solution = generator()
+                    problem, solution = generator()[:2]
                     if problem and solution is not None:
                         ok = True
                         break
@@ -77,7 +87,7 @@ class LocalGeneratorTests(TestCase):
         random.seed(0)
         for name, generator in LOCAL_GENERATORS.items():
             with self.subTest(generator=name):
-                problem, solution = generator()
+                problem, solution = generator()[:2]
                 self.assertIsInstance(problem, str)
                 self.assertTrue(problem)
                 self.assertIsInstance(solution, str)
@@ -85,9 +95,9 @@ class LocalGeneratorTests(TestCase):
 
     def test_vertex_form_is_deterministic_under_seed(self):
         random.seed(42)
-        problem1, solution1 = LOCAL_GENERATORS["vertex_form"]()
+        problem1, solution1 = LOCAL_GENERATORS["vertex_form"]()[:2]
         random.seed(42)
-        problem2, solution2 = LOCAL_GENERATORS["vertex_form"]()
+        problem2, solution2 = LOCAL_GENERATORS["vertex_form"]()[:2]
         self.assertEqual((problem1, solution1), (problem2, solution2))
 
 
@@ -164,4 +174,98 @@ class ServedProblemQualityTests(TestCase):
                 if self.LATEX_CMD.search(outside):
                     failures.append(f"{topic.generator_name}: raw LaTeX outside math mode {problem!r}")
                     break
+                step_error = self._step_error(result["steps"])
+                if step_error:
+                    failures.append(f"{topic.generator_name}: {step_error}")
+                    break
         self.assertEqual(failures, [], "Non-typeable served problems:\n" + "\n".join(failures))
+
+    def _step_error(self, steps):
+        """Why a served step-by-step explanation is malformed, or None.
+
+        Steps may use any LaTeX (they're rendered, not typed), but only inside
+        math mode: `text` needs balanced `$`, `math` is display LaTeX with none.
+        """
+        if not isinstance(steps, list):
+            return f"steps is not a list: {steps!r}"
+        for step in steps:
+            if set(step) != {"text", "math"} or not isinstance(step["text"], str) or not step["text"].strip():
+                return f"malformed step {step!r}"
+            text, math = step["text"], step["math"]
+            if text.count("$") % 2 != 0:
+                return f"unbalanced $ in step {text!r}"
+            if self.LATEX_CMD.search("".join(text.split("$")[::2])):
+                return f"raw LaTeX outside math mode in step {text!r}"
+            if math is not None and (not isinstance(math, str) or "$" in math):
+                return f"bad display math in step {math!r}"
+            # A non-raw "\times" or "\frac" silently becomes a tab or form feed.
+            if re.search(r"[\x00-\x1f]", text + (math or "")):
+                return f"control character in step {step!r}"
+            # In LaTeX a bare % comments out the rest of the expression.
+            latex = "".join(text.split("$")[1::2]) + (math or "")
+            if re.search(r"(?<!\\)%", latex):
+                return f"unescaped % in math in step {step!r}"
+            if self.LONG_DECIMAL.search(text) or self.LONG_DECIMAL.search(math or ""):
+                return f"over-precise decimal in step {step!r}"
+        return None
+
+
+class StepsReachAnswerTests(TestCase):
+    """Every local generator explains its answer, ending by stating it.
+
+    Checked on the served card (after the view's rounding), comparing with `$`
+    and whitespace removed: the final step's text and math must contain the
+    solution exactly as the student is asked to type it. `Steps.answer` does
+    this. It catches an explanation whose arithmetic drifts from the answer
+    key, or that stops short of the format the problem asks for.
+    """
+
+    SAMPLES = 200
+
+    @staticmethod
+    def _squash(text):
+        return re.sub(r"\s+", "", (text or "").replace("$", ""))
+
+    def test_final_step_states_the_answer(self):
+        random.seed(0)
+        failures = []
+        for name, generator in LOCAL_GENERATORS.items():
+            topic = Topic(id=1, generator_name=name)
+            for _ in range(self.SAMPLES):
+                made = _make_problem_for_topic(topic)
+                steps = made["steps"]
+                if not steps:
+                    failures.append(f"{name}: no step-by-step explanation")
+                    break
+                if len(steps) < 2:
+                    failures.append(f"{name}: only {len(steps)} step for {made['problem']!r}")
+                    break
+                last = self._squash(steps[-1]["text"]) + self._squash(steps[-1]["math"])
+                if self._squash(made["solution"]) not in last:
+                    failures.append(
+                        f"{name}: final step {steps[-1]!r} doesn't state {made['solution']!r}"
+                    )
+                    break
+        self.assertEqual(failures, [], "\n".join(failures))
+
+
+class ServedStepsTests(TestCase):
+    """`_make_problem_for_topic`'s handling of a generator's explanation."""
+
+    def _serve(self, generator):
+        topic = Topic(id=1, generator_name="fake_gen")
+        with mock.patch.dict(LOCAL_GENERATORS, {"fake_gen": generator}):
+            return _make_problem_for_topic(topic)
+
+    def test_steps_are_served_with_decimals_rounded(self):
+        steps = Steps().step("Multiply $3.14159265$ by $2$.", "6.2831853").step("Done.").done()
+        made = self._serve(lambda: ("$2\\pi=$", "$6.283$", steps))
+        self.assertEqual(made["steps"], [
+            {"text": "Multiply $3.142$ by $2$.", "math": "6.283"},
+            {"text": "Done.", "math": None},
+        ])
+
+    def test_generator_without_steps_serves_empty_steps(self):
+        made = self._serve(lambda: ("$1+1=$", "$2$"))
+        self.assertEqual(made["solution"], "2")
+        self.assertEqual(made["steps"], [])

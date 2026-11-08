@@ -144,7 +144,7 @@ def _build_courses():
     for name, (grade, topic_names) in specs.items():
         course = make_course(course_name=name, grade_level=grade)
         for tname in topic_names:
-            make_topic(course, topic_name=tname, generator_name="addition")
+            make_topic(course, topic_name=tname, generator_name="gcd")
         courses[name] = course
     return courses
 
@@ -201,7 +201,7 @@ class TopicOrderingTests(TestCase):
         unit_order = [t for u in units_for_course("Grade 8") for t in u["topics"]]
         course = make_course(course_name="Grade 8", grade_level=8)
         for tname in reversed(unit_order):
-            make_topic(course, topic_name=tname, generator_name="addition")
+            make_topic(course, topic_name=tname, generator_name="gcd")
 
         data = self.client.get(f"/courses/{course.id}/topics").json()
         self.assertEqual([t["topic_name"] for t in data["topics"]], unit_order)
@@ -210,7 +210,7 @@ class TopicOrderingTests(TestCase):
         g8_order = [t for u in units_for_course("Grade 8") for t in u["topics"]]
         course = make_course(course_name="Grade 8", grade_level=8)
         for tname in reversed(g8_order):
-            make_topic(course, topic_name=tname, generator_name="addition")
+            make_topic(course, topic_name=tname, generator_name="gcd")
 
         rows = self.client.get("/topics/").json()["topics"]
         g8_names = [t["topic_name"] for t in rows if t["course_id"] == course.id]
@@ -229,7 +229,7 @@ class DiagnosticStartTests(TestCase):
             "/diagnostic/start/", data=json.dumps(body), content_type="application/json"
         )
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_problems_drawn_only_from_learned_units(self, _mock_add):
         # Current unit g8-u2 -> learned = units 1 and 2 (four topics). The three
         # problems must all come from those, never the not-yet-reached units.
@@ -367,7 +367,7 @@ class DiagnosticSubmitTests(TestCase):
         # A topic the user picked by hand outside the diagnostic's plan is cleared
         # on submit, since the diagnostic owns the whole selection set.
         algebra2 = make_course(course_name="Algebra II", grade_level=11)
-        stray_topic = make_topic(algebra2, topic_name="Logarithm", generator_name="addition")
+        stray_topic = make_topic(algebra2, topic_name="Logarithm", generator_name="gcd")
         UserTopicSelection.objects.create(user=self.user, topic=stray_topic)
 
         self._submit({"current_course_id": self.courses["Grade 8"].id, "current_unit_key": "g8-u2"})

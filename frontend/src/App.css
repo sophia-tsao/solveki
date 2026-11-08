@@ -31,7 +31,7 @@ body {
 /* Blank for now — just the project blue bar anchored to the bottom. */
 .app-footer {
     flex-shrink: 0;
-    height: 56px;
+    height: 68px;
     background: #2563eb;
 }
 

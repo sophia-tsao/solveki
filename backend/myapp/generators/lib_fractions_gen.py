@@ -23,6 +23,7 @@ from fractions import Fraction
 from math import gcd
 
 from ._registry import register
+from ._steps import Steps, tex_frac
 
 
 def _factors_of(n):
@@ -50,6 +51,52 @@ def _frac_str(numerator, denominator):
     return f"{fr.numerator}/{fr.denominator}"
 
 
+def _factor_pairs(n):
+    """Factor pairs ``(a, b)`` with ``a * b == n`` and ``a <= b``, smallest first."""
+    return [(d, n // d) for d in _factors_of(n) if d * d <= n]
+
+
+def _prime_factorization(n):
+    """``{prime: exponent}`` for ``n >= 2``."""
+    powers, p = {}, 2
+    while p * p <= n:
+        while n % p == 0:
+            powers[p] = powers.get(p, 0) + 1
+            n //= p
+        p += 1
+    if n > 1:
+        powers[n] = powers.get(n, 0) + 1
+    return powers
+
+
+def _tex_powers(powers):
+    r"""``{2: 3, 3: 1}`` as ``2^{3} \times 3``."""
+    return r" \times ".join(
+        str(p) if e == 1 else f"{p}^{{{e}}}" for p, e in sorted(powers.items())
+    )
+
+
+def _simplify_step(s, numerator, denominator):
+    """Add the step that puts ``numerator/denominator`` in lowest terms."""
+    g = gcd(numerator, denominator)
+    fraction = tex_frac(numerator, denominator)
+    if denominator == 1:
+        s.step("A fraction with a denominator of $1$ is a whole number.",
+               f"{fraction} = {numerator}")
+    elif g == denominator:
+        s.step(f"The top divides evenly by the bottom: "
+               rf"${numerator} \div {denominator} = {numerator // denominator}$.",
+               f"{fraction} = {numerator // denominator}")
+    elif g > 1:
+        s.step(f"Simplify. Divide the top and bottom by ${g}$, the greatest "
+               "number that divides both.",
+               rf"\frac{{{numerator} \div {g}}}{{{denominator} \div {g}}} = "
+               f"{tex_frac(numerator // g, denominator // g)}")
+    else:
+        s.step(f"${numerator}$ and ${denominator}$ have no common factor other "
+               "than $1$, so the fraction is already in lowest terms.")
+
+
 @register
 def common_factors(min_val=2, max_val=100):
     r"""Common Factors of Two Numbers
@@ -71,7 +118,17 @@ def common_factors(min_val=2, max_val=100):
         "(e.g. 1, 2, 4)."
     )
     solution = _ascending_list(common)
-    return problem, solution
+
+    s = Steps()
+    s.step(f"List the factors of ${a}$ (the numbers that divide it evenly).",
+           f"{a}: " + ", ".join(map(str, _factors_of(a))))
+    s.step(f"List the factors of ${b}$.", f"{b}: " + ", ".join(map(str, _factors_of(b))))
+    if common == [1]:
+        s.step("The only number in both lists is $1$.")
+    else:
+        s.step("The common factors are the numbers that appear in both lists.")
+    s.answer(solution, lead="In ascending order, the answer is")
+    return problem, solution, s.done()
 
 
 @register
@@ -92,7 +149,18 @@ def factors(min_val=2, max_val=100):
         "(e.g. 1, 2, 3, 6)."
     )
     solution = _ascending_list(_factors_of(n))
-    return problem, solution
+
+    pairs = _factor_pairs(n)
+    s = Steps()
+    s.step(f"Find pairs of numbers that multiply to make ${n}$. Try $1$, $2$, "
+           "$3$, and so on. Stop when the pairs start to repeat.",
+           r", \quad ".join(rf"{x} \times {y}" for x, y in pairs))
+    if len(pairs) == 1:
+        s.step(rf"Only $1 \times {n}$ works, so ${n}$ is a prime number.")
+    else:
+        s.step("Write every number from the pairs, from smallest to largest.")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -117,7 +185,15 @@ def fraction_multiplication(max_val=10):
         "or an integer."
     )
     solution = _frac_str(a * c, b * d)
-    return problem, solution
+
+    s = Steps()
+    s.step("To multiply fractions, multiply the tops (numerators) and multiply "
+           "the bottoms (denominators).",
+           rf"\frac{{{a}}}{{{b}}} \times \frac{{{c}}}{{{d}}} = "
+           rf"\frac{{{a} \times {c}}}{{{b} \times {d}}} = {tex_frac(a * c, b * d)}")
+    _simplify_step(s, a * c, b * d)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -144,7 +220,17 @@ def divide_fractions(max_val=10):
     )
     # (a/b) / (c/d) = a*d / (b*c)
     solution = _frac_str(a * d, b * c)
-    return problem, solution
+
+    s = Steps()
+    s.step("To divide by a fraction, multiply by its reciprocal. Flip the "
+           "second fraction upside down.",
+           rf"\frac{{{a}}}{{{b}}} \div \frac{{{c}}}{{{d}}} = "
+           rf"\frac{{{a}}}{{{b}}} \times \frac{{{d}}}{{{c}}}")
+    s.step("Multiply the tops and multiply the bottoms.",
+           rf"\frac{{{a} \times {d}}}{{{b} \times {c}}} = {tex_frac(a * d, b * c)}")
+    _simplify_step(s, a * d, b * c)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -170,7 +256,28 @@ def greatest_common_divisor(min_val=2, max_val=100, count_choices=(2, 3)):
         "Give your answer as a single integer."
     )
     solution = str(result)
-    return problem, solution
+
+    factorizations = [_prime_factorization(v) if v > 1 else {} for v in numbers]
+    shared = {
+        p: min(f.get(p, 0) for f in factorizations)
+        for p in factorizations[0]
+        if all(p in f for f in factorizations)
+    }
+    s = Steps()
+    s.step("Write each number as a product of primes.",
+           r"\begin{aligned} "
+           + r" \\ ".join(f"{v} &= {_tex_powers(f)}" for v, f in zip(numbers, factorizations))
+           + r" \end{aligned}")
+    if shared:
+        product = _tex_powers(shared)
+        s.step("Take each prime that appears in every number, using the "
+               "smallest power of it that appears.",
+               rf"\text{{GCD}} = {product}"
+               + ("" if product == str(result) else f" = {result}"))
+    else:
+        s.step("No prime appears in every number, so the only common factor is $1$.")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -200,4 +307,16 @@ def dice_sum_probability(sides=6):
         "Give your answer as a fraction in lowest terms in the form a/b."
     )
     solution = _frac_str(favorable, total)
-    return problem, solution
+
+    rolls = [(x, target - x) for x in range(1, sides + 1) if 1 <= target - x <= sides]
+    s = Steps()
+    s.step(rf"Each die has ${sides}$ faces, so there are ${sides} \times {sides} = "
+           f"{total}$ equally likely outcomes.")
+    s.step(f"List the rolls (first die, second die) that add to ${target}$.",
+           r", \; ".join(f"({x}, {y})" for x, y in rolls))
+    s.step(f"Probability is favorable outcomes divided by total outcomes: "
+           f"${favorable}$ out of ${total}$.",
+           f"P = {tex_frac(favorable, total)}")
+    _simplify_step(s, favorable, total)
+    s.answer(solution)
+    return problem, solution, s.done()

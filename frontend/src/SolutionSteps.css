@@ -1,0 +1,61 @@
+/* The step-by-step solution on a card's incorrect back face. */
+.solution-steps {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.solution-steps-toggle {
+    padding: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2563eb;
+    background: none;
+    border: none;
+    cursor: pointer;
+}
+
+.solution-steps-toggle:hover {
+    text-decoration: underline;
+}
+
+/* No height cap or scrolling: the card grows to fit the whole explanation. */
+.solution-steps-list {
+    align-self: stretch;
+    margin: 0;
+    padding: 12px 14px 12px 34px;
+    text-align: left;
+    background: #f8fafc;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #374151;
+}
+
+.solution-step + .solution-step {
+    margin-top: 10px;
+}
+
+.solution-step::marker {
+    font-weight: 600;
+    color: #6b7280;
+}
+
+.solution-step-math {
+    margin-top: 4px;
+    text-align: center;
+}
+
+/* A long equation wraps into several KaTeX "base" boxes; space them so tall
+   fractions on consecutive lines don't touch. */
+.solution-step-math .katex .base {
+    margin: 0.2em 0;
+}
+
+/* KaTeX's default 1.21em makes inline math loom over the sentence around it. */
+.solution-step-text .katex {
+    font-size: 1.05em;
+}

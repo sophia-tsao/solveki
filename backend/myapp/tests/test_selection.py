@@ -209,8 +209,8 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.user = make_user()
         self.client.force_login(self.user)
         self.course = make_course()
-        self.add_topic = make_topic(self.course, generator_name="addition")
-        self.sub_topic = make_topic(self.course, generator_name="subtraction")
+        self.add_topic = make_topic(self.course, generator_name="gcd")
+        self.sub_topic = make_topic(self.course, generator_name="hcf")
         Settings.objects.update_or_create(
             user=self.user, defaults={"questions_per_day": 4}
         )
@@ -222,8 +222,8 @@ class TopicToggleDeckRegenerationTests(TestCase):
             content_type="application/json",
         )
 
-    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.hcf", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_selecting_topic_builds_tail_from_new_set(self, mock_add, mock_sub):
         # Deck starts built from addition only.
         select(self.user, self.add_topic)
@@ -242,8 +242,8 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(deck.current_index, 1)  # progress preserved
         self.assertEqual(deck.problems[0]["solution"], "2")  # answered card kept
 
-    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.hcf", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_deselecting_topic_purges_it_from_unanswered_tail(self, mock_add, mock_sub):
         select(self.user, self.add_topic)
         select(self.user, self.sub_topic)
@@ -258,8 +258,8 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(len(deck.problems), 4)
         self.assertTrue(all(p["solution"] == "2" for p in deck.problems))
 
-    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.hcf", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_swapping_courses_via_transient_empty_state_keeps_full_deck(
         self, mock_add, mock_sub
     ):
@@ -292,7 +292,7 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(data["current_number"], 3)
         self.assertEqual(data["total"], 4)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_reload_after_deselect_shows_no_topics(self, mock_add):
         # Reproduces the reported bug: after deselecting everything, reloading
         # the practice page (a fresh GET /deck/) must show the "pick a topic"
@@ -308,7 +308,7 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertTrue(data.get("no_topics"))
         self.assertFalse(data.get("completed"))
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_reload_reselect_refills_to_target(self, mock_add):
         # After deselect then reselect, a reload must present a full-size deck,
         # not a short one that reads as finished.
@@ -323,7 +323,7 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(data["total"], 4)
         self.assertEqual(data["current_number"], 2)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_short_deck_from_earlier_bug_is_healed_on_reload(self, mock_add):
         # A deck persisted shorter than questions_per_day (e.g. left over from
         # an earlier truncation bug) must top back up to the target on reload
@@ -340,13 +340,13 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(data["total"], 4)
         self.assertEqual(data["current_number"], 2)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_no_deck_yet_is_a_noop(self, mock_add):
         # No deck for today: toggling shouldn't create one.
         self._toggle(self.add_topic.id, True)
         self.assertFalse(DailyDeck.objects.filter(user=self.user).exists())
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_finished_deck_is_left_alone(self, mock_add):
         select(self.user, self.add_topic)
         self.client.get("/deck/")
@@ -361,8 +361,8 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(deck.current_index, 4)
         self.assertEqual(len(deck.problems), 4)
 
-    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.hcf", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_course_level_toggle_regenerates_tail(self, mock_add, mock_sub):
         select(self.user, self.add_topic)
         self.client.get("/deck/")
@@ -380,8 +380,8 @@ class TopicToggleDeckRegenerationTests(TestCase):
         self.assertEqual(len(deck.problems), 4)
         self.assertEqual(deck.current_index, 1)
 
-    @mock.patch("myapp.views.mathgenerator.subtraction", return_value=("$9-1=$", "$8$"))
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.hcf", return_value=("$9-1=$", "$8$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_toggle_defers_regeneration_until_deck_load(self, mock_add, mock_sub):
         # A toggle only flags the deck stale — it must NOT rebuild the tail on
         # the request path. The heavy regeneration happens on the next GET

@@ -3,14 +3,14 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 32px;
-    height: 56px;
+    height: 68px;
     background: #ffffff;
     border-bottom: 1px solid #dde3ed;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
 }
 
 .header-logo {
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
     color: #2563eb;
     letter-spacing: -0.02em;
@@ -25,8 +25,8 @@
 .header-nav button {
     background: none;
     border: none;
-    padding: 7px 16px;
-    font-size: 14px;
+    padding: 9px 18px;
+    font-size: 16px;
     font-weight: 500;
     color: #374151;
     border-radius: 6px;

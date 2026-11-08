@@ -18,7 +18,7 @@ from myapp.generators import lib_solids_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
 from myapp.generators._format import num
 
-SAMPLES = 500
+SAMPLES = 2000
 
 # Tokens that must never appear in a typeable problem/solution answer.
 _BANNED = [
@@ -53,7 +53,7 @@ class SurfaceAreaSphereTests(TestCase):
         gen = LOCAL_GENERATORS["surface_area_sphere"]
         m = re.compile(r"radius \$= (\d+) m\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             r = int(m.search(problem).group(1))
             expected = num(4 * math.pi * r ** 2)
@@ -66,7 +66,7 @@ class VolumeSphereTests(TestCase):
         gen = LOCAL_GENERATORS["volume_sphere"]
         m = re.compile(r"radius \$= (\d+) m\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             r = int(m.search(problem).group(1))
             expected = num((4 / 3) * math.pi * r ** 3)
@@ -79,7 +79,7 @@ class VolumeHemisphereTests(TestCase):
         gen = LOCAL_GENERATORS["volume_hemisphere"]
         m = re.compile(r"radius \$= (\d+) m\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             r = int(m.search(problem).group(1))
             expected = num((2 / 3) * math.pi * r ** 3)
@@ -92,7 +92,7 @@ class VolumePyramidTests(TestCase):
         gen = LOCAL_GENERATORS["volume_pyramid"]
         m = re.compile(r"base area \$= (\d+) m\^2\$ and height \$= (\d+) m\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             base_area, height = (int(g) for g in m.search(problem).groups())
             expected = num((1 / 3) * base_area * height)
@@ -105,7 +105,7 @@ class CurvedSurfaceAreaCylinderTests(TestCase):
         gen = LOCAL_GENERATORS["curved_surface_area_cylinder"]
         m = re.compile(r"radius \$= (\d+) m\$ and height \$= (\d+) m\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             r, h = (int(g) for g in m.search(problem).groups())
             expected = num(2 * math.pi * r * h)
@@ -118,7 +118,7 @@ class CubeRootTests(TestCase):
         gen = LOCAL_GENERATORS["cube_root"]
         m = re.compile(r"cube root of \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             n = int(m.search(problem).group(1))
             root = round(n ** (1 / 3))
@@ -135,7 +135,7 @@ class AreaOfTriangleTests(TestCase):
             r"side lengths \$= (\d+) m\$, \$= (\d+) m\$, and \$= (\d+) m\$"
         )
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             a, b, c = (int(g) for g in m.search(problem).groups())
             # Sides must form a strictly valid triangle.
@@ -151,8 +151,126 @@ class PythagoreanTheoremTests(TestCase):
         gen = LOCAL_GENERATORS["pythagorean_theorem"]
         m = re.compile(r"lengths \$= (\d+)\$ and \$= (\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, problem, solution)
             a, b = (int(g) for g in m.search(problem).groups())
             expected = num(math.sqrt(a ** 2 + b ** 2))
             self.assertEqual(solution, f"${expected}$", problem)
+
+
+_ROUND_HINT = "Round your answer to the nearest thousandth."
+
+
+def _samples(name):
+    """Yield ``(problem, solution)`` for SAMPLES seeded runs of a generator."""
+    random.seed(0)
+    gen = LOCAL_GENERATORS[name]
+    for _ in range(SAMPLES):
+        yield gen()[:2]
+
+
+class VolumeCubeTests(TestCase):
+    def test_solution(self):
+        m = re.compile(r"side length \$= (\d+) m\$\.$")
+        for problem, solution in _samples("volume_cube"):
+            _assert_typeable(self, problem, solution)
+            a = int(m.search(problem).group(1))
+            self.assertEqual(solution, f"${a * a * a} m^3$", problem)
+
+
+class VolumeCuboidTests(TestCase):
+    def test_solution(self):
+        m = re.compile(
+            r"length \$= (\d+) m\$, width \$= (\d+) m\$, and height \$= (\d+) m\$"
+        )
+        for problem, solution in _samples("volume_cuboid"):
+            _assert_typeable(self, problem, solution)
+            l, w, h = (int(g) for g in m.search(problem).groups())
+            self.assertEqual(solution, f"${l * w * h} m^3$", problem)
+
+
+class VolumeCylinderTests(TestCase):
+    def test_solution(self):
+        m = re.compile(r"radius \$= (\d+) m\$ and height \$= (\d+) m\$")
+        for problem, solution in _samples("volume_cylinder"):
+            _assert_typeable(self, problem, solution)
+            self.assertIn(_ROUND_HINT, problem)
+            r, h = (int(g) for g in m.search(problem).groups())
+            expected = num(math.pi * r * r * h)
+            self.assertEqual(solution, f"${expected} m^3$", problem)
+
+
+class VolumeConeTests(TestCase):
+    def test_solution(self):
+        m = re.compile(r"cone with radius \$= (\d+) m\$ and height \$= (\d+) m\$")
+        for problem, solution in _samples("volume_cone"):
+            _assert_typeable(self, problem, solution)
+            self.assertIn(_ROUND_HINT, problem)
+            r, h = (int(g) for g in m.search(problem).groups())
+            expected = num(math.pi * r * r * h / 3)
+            self.assertEqual(solution, f"${expected} m^3$", problem)
+
+
+class SurfaceAreaCubeTests(TestCase):
+    def test_solution(self):
+        m = re.compile(r"cube with side length \$= (\d+) m\$\.$")
+        for problem, solution in _samples("surface_area_cube"):
+            _assert_typeable(self, problem, solution)
+            a = int(m.search(problem).group(1))
+            self.assertEqual(solution, f"${6 * a * a} m^2$", problem)
+
+
+class SurfaceAreaCuboidTests(TestCase):
+    def test_solution(self):
+        m = re.compile(
+            r"length \$= (\d+) m\$, width \$= (\d+) m\$, and height \$= (\d+) m\$"
+        )
+        for problem, solution in _samples("surface_area_cuboid"):
+            _assert_typeable(self, problem, solution)
+            l, w, h = (int(g) for g in m.search(problem).groups())
+            self.assertEqual(solution, f"${2 * (l * w + l * h + w * h)} m^2$", problem)
+
+
+class SurfaceAreaConeTests(TestCase):
+    def test_solution(self):
+        m = re.compile(r"radius \$= (\d+) m\$ and slant height \$= (\d+) m\$")
+        for problem, solution in _samples("surface_area_cone"):
+            _assert_typeable(self, problem, solution)
+            self.assertIn(_ROUND_HINT, problem)
+            r, slant = (int(g) for g in m.search(problem).groups())
+            # A real cone's slant height is longer than its radius.
+            self.assertGreater(slant, r, problem)
+            expected = num(math.pi * r * r + math.pi * r * slant)
+            self.assertEqual(solution, f"${expected} m^2$", problem)
+
+
+class SurfaceAreaCylinderTests(TestCase):
+    def test_solution(self):
+        m = re.compile(r"radius \$= (\d+) m\$ and height \$= (\d+) m\$")
+        for problem, solution in _samples("surface_area_cylinder"):
+            _assert_typeable(self, problem, solution)
+            self.assertIn(_ROUND_HINT, problem)
+            r, h = (int(g) for g in m.search(problem).groups())
+            expected = num(2 * math.pi * r * r + 2 * math.pi * r * h)
+            self.assertEqual(solution, f"${expected} m^2$", problem)
+
+
+class SurfaceAreaPyramidTests(TestCase):
+    def test_solution(self):
+        m = re.compile(
+            r"length \$= (\d+) m\$ and width \$= (\d+) m\$\. Each triangular face "
+            r"on a length side has slant height \$= (\d+) m\$, and each face on a "
+            r"width side has slant height \$= (\d+) m\$"
+        )
+        for problem, solution in _samples("surface_area_pyramid"):
+            _assert_typeable(self, problem, solution)
+            length, width, slant_l, slant_w = (int(g) for g in m.search(problem).groups())
+            # The stated slant heights must describe one real pyramid: both
+            # imply the same (positive) vertical height squared.
+            h_sq_from_l = slant_l ** 2 - (width / 2) ** 2
+            h_sq_from_w = slant_w ** 2 - (length / 2) ** 2
+            self.assertGreater(h_sq_from_l, 0, problem)
+            self.assertEqual(h_sq_from_l, h_sq_from_w, problem)
+            # Base plus two triangles (1/2 * base * slant) on each pair of sides.
+            expected = length * width + 2 * (length * slant_l / 2) + 2 * (width * slant_w / 2)
+            self.assertEqual(solution, f"${num(expected)} m^2$", problem)

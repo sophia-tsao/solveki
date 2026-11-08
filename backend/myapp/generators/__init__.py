@@ -1,13 +1,27 @@
 """Solveki-local problem generators.
 
 These extend the stock ``mathgenerator`` library with generators we maintain
-ourselves. ``_make_problem`` resolves a name here first, then falls back to
+ourselves. ``_make_problem_for_topic`` resolves a name here first, then falls back to
 ``mathgenerator``.
 
 To add a generator: write a function returning ``(problem, solution)`` in the
 appropriate category module and decorate it with ``@register``. Then import
 that module below so its registration runs. The contract test in
 ``test_generators.py`` automatically covers every registered generator.
+
+A generator should also return a step-by-step explanation as a third value,
+``(problem, solution, steps)``, built with ``_steps.Steps``. A student sees it
+after missing both attempts, so write it like a Khan Academy / DeltaMath
+worked example:
+
+- 2-6 steps, one action each, using the problem's actual numbers.
+- Name the formula or rule before using it.
+- Show intermediate values with the same rounding as the answer.
+- End on the final value in the form the student must type it (e.g.
+  "Rounded to the nearest thousandth, the answer is $12.566$.").
+- Special branches (e.g. "no solution") get their own steps explaining why.
+
+Preview the wording with ``python manage.py preview_steps <generator_name>``.
 """
 from ._registry import LOCAL_GENERATORS, register  # noqa: F401
 
@@ -17,6 +31,9 @@ from . import (  # noqa: F401,E402
     algebra,
     algebra1,
     algebra2,
+    ap_precalc_functions,
+    ap_precalc_matrices,
+    ap_precalc_trig,
     arithmetic,
     calculus,
     geometry,
@@ -35,6 +52,7 @@ from . import (  # noqa: F401,E402
 from . import (  # noqa: F401,E402
     lib_algebra_extra_gen,
     lib_angles_gen,
+    lib_arith_gen,
     lib_finance_gen,
     lib_fractions_gen,
     lib_geometry_gen,

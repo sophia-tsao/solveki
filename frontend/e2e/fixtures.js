@@ -47,14 +47,18 @@ export async function setQuestionsPerDay(page, count) {
   });
 }
 
-// Answer the currently-shown problem. Reads the expected solution from the
-// deck response captured by the caller and types it, or types a deliberately
-// wrong answer when `correct` is false.
-export async function answerProblem(page, solution, { correct = true } = {}) {
+// Answer the currently-shown problem: types its solution, or a deliberately
+// wrong answer when `correct` is false. The deck payload never carries the
+// solution, so it comes from the E2E-only /deck/test-solution/ endpoint (404
+// unless ENABLE_TEST_LOGIN, like test-login).
+export async function answerProblem(page, { correct = true } = {}) {
   const input = page.locator('.math-problem-input');
-  // A non-numeric token so it's never string- or numeric-equal to the solution
-  // (parseFloat -> NaN), which is how MathProblemResponse checks correctness.
-  const value = correct ? solution : 'definitely-wrong';
+  let value = 'definitely-wrong'; // non-numeric, so never equal to a solution
+  if (correct) {
+    const res = await page.request.get(`${API_URL}/deck/test-solution/?today=${localDay()}`);
+    if (!res.ok()) throw new Error(`test-solution failed (${res.status()})`);
+    ({ solution: value } = await res.json());
+  }
   await input.fill(value);
   await page.locator('.math-problem-submit').click();
 }

@@ -27,12 +27,35 @@ function advanceBody() {
   return call && JSON.parse(call[1].body);
 }
 
+// Wait until the deck's progress bar reports the student on question `n` of
+// `total` (it shows no text; the position is its accessible value).
+async function findQuestion(n, total, timeout = 1000) {
+  return waitFor(() => {
+    const bar = screen.getByRole('progressbar', { name: "Today's practice" });
+    expect(bar).toHaveAttribute('aria-valuetext', `Question ${n} of ${total}`);
+    return bar;
+  }, { timeout });
+}
+
+// The deck payload carries no solution; answers are graded by /deck/check/.
 const ACTIVE_DECK = {
   problem: 'What is $2+2$?',
-  solution: '4',
   current_number: 1,
   total: 3,
 };
+
+// Scripted /deck/check/ verdicts: right, the first miss, and the final miss
+// (which reveals the solution).
+const CHECK_CORRECT = deckResponse({ correct: true, attempts_left: 2 });
+const CHECK_MISS = deckResponse({ correct: false, attempts_left: 1 });
+const CHECK_LAST_MISS = deckResponse({ correct: false, attempts_left: 0, solution: '4' });
+
+// The parsed JSON bodies of every answer-check call, in order.
+function checkBodies() {
+  return apiFetch.mock.calls
+    .filter(([url]) => url.startsWith('/deck/check/'))
+    .map(([, opts]) => JSON.parse(opts.body));
+}
 
 beforeEach(() => {
   apiFetch.mockReset();
@@ -45,7 +68,11 @@ describe('MathProblem — initial load', () => {
   it('renders the active problem after fetching the deck', async () => {
     apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    const bar = await findQuestion(1, 3);
+    // A progress bar, not "1 of 3" text: nothing answered yet of 3 cards.
+    expect(bar).toHaveAttribute('aria-valuenow', '0');
+    expect(bar).toHaveAttribute('aria-valuemax', '3');
+    expect(screen.queryByText(/of 3 questions/)).not.toBeInTheDocument();
     expect(screen.getByText('Attempt 1 of 2')).toBeInTheDocument();
     expect(apiFetch).toHaveBeenCalledWith('/deck/?today=2026-07-20');
   });
@@ -91,7 +118,7 @@ describe('MathProblem — day rollover', () => {
     localDay.mockReturnValue('2026-07-21');
     window.dispatchEvent(new Event('focus'));
 
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
     expect(apiFetch).toHaveBeenCalledTimes(2);
     expect(apiFetch).toHaveBeenLastCalledWith('/deck/?today=2026-07-21');
   });
@@ -128,7 +155,7 @@ describe('MathProblem — day rollover', () => {
     apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
 
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
     expect(apiFetch).toHaveBeenCalledTimes(1);
 
     // Same day (localDay unchanged): refocusing must not re-fetch — that would
@@ -146,21 +173,24 @@ describe('MathProblem — answering', () => {
     const user = userEvent.setup();
     apiFetch
       .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_CORRECT)
       .mockResolvedValueOnce(
         deckResponse({ ...ACTIVE_DECK, current_number: 2 }),
       );
 
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     await user.type(screen.getByRole('textbox'), '4');
     await user.click(screen.getByRole('button'));
 
+    // The answer is graded by the backend, for the card on screen.
+    expect(checkBodies()).toEqual([{ answer: '4', from_number: 1 }]);
     // "Correct!" interstitial shows before the 900ms advance fires.
-    expect(screen.getByText('Correct!')).toBeInTheDocument();
+    expect(await screen.findByText('Correct!')).toBeInTheDocument();
 
     // The advance is triggered by a real 900ms setTimeout, so allow headroom.
-    expect(await screen.findByText('2 of 3 questions', {}, { timeout: 2000 })).toBeInTheDocument();
+    expect(await findQuestion(2, 3, 2000)).toBeInTheDocument();
     // A first-attempt correct answer is reported as 'correct_first' so the
     // backend can update the topic's spaced-repetition schedule. `from_number`
     // is the card being left (card 1) so a stale/stray advance can be rejected.
@@ -168,26 +198,29 @@ describe('MathProblem — answering', () => {
   });
 
   it('bumps the attempt counter on the first wrong answer', async () => {
-    apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
+    apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK)).mockResolvedValueOnce(CHECK_MISS);
     const user = userEvent.setup();
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     await user.type(screen.getByRole('textbox'), '99');
     await user.click(screen.getByRole('button'));
 
     await screen.findByText('Attempt 2 of 2');
-    // No advance call yet — the user still has an attempt left.
-    expect(apiFetch).toHaveBeenCalledTimes(1);
+    // Only the check — no advance call yet, the user still has an attempt left.
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/The answer is/)).not.toBeInTheDocument();
   });
 
   it('advances after exhausting all attempts and clicking Continue', async () => {
     apiFetch
       .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS)
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
     const user = userEvent.setup();
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     const input = screen.getByRole('textbox');
     const button = screen.getByRole('button');
@@ -197,11 +230,11 @@ describe('MathProblem — answering', () => {
     await user.type(input, '98');
     await user.click(button); // attempt 2 exhausted -> flip (no auto-advance)
 
-    // The card flips to reveal the correct answer on its back...
-    expect(screen.getByText('Incorrect...')).toBeInTheDocument();
+    // The card flips to reveal the answer the backend sent with the last miss...
+    expect(await screen.findByText('Incorrect...')).toBeInTheDocument();
     expect(screen.getByText('The answer is 4')).toBeInTheDocument();
-    // ...and waits — no advance until the student acts.
-    expect(apiFetch).toHaveBeenCalledTimes(1);
+    // ...and waits — no advance until the student acts (just the two checks).
+    expect(apiFetch).toHaveBeenCalledTimes(3);
 
     // Clicking Continue accepts the miss and advances, reporting 'incorrect'.
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -210,14 +243,8 @@ describe('MathProblem — answering', () => {
     );
   });
 
-  it('overrides an incorrect grade to correct via "I got this correct"', async () => {
-    apiFetch
-      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
-      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
-    const user = userEvent.setup();
-    renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
-
+  // Burn both attempts with wrong answers so the card flips to "Incorrect...".
+  async function missTwice(user) {
     const input = screen.getByRole('textbox');
     const button = screen.getByRole('button');
     await user.type(input, '99');
@@ -225,22 +252,69 @@ describe('MathProblem — answering', () => {
     await screen.findByText('Attempt 2 of 2');
     await user.type(input, '98');
     await user.click(button); // exhausted -> flip to "Incorrect..."
+    expect(await screen.findByText('Incorrect...')).toBeInTheDocument();
+  }
 
-    expect(screen.getByText('Incorrect...')).toBeInTheDocument();
-    expect(apiFetch).toHaveBeenCalledTimes(1); // still waiting on the student
+  it('reports an issue via "Report issue" and grades the card correct', async () => {
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS)
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
+    const user = userEvent.setup();
+    renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    await missTwice(user);
+    expect(apiFetch).toHaveBeenCalledTimes(3); // the checks; still waiting on the student
 
-    // The student asserts the answer box was wrong; override grants full credit
-    // ('correct_first'), the same grade a clean first-try correct answer earns.
-    await user.click(screen.getByRole('button', { name: 'I got this correct' }));
+    await user.click(screen.getByRole('button', { name: 'Report issue' }));
+    const submit = screen.getByRole('button', { name: 'Submit report' });
+    expect(submit).toBeDisabled(); // no reason picked yet
+    await user.click(screen.getByRole('radio', { name: /marked incorrect/ }));
+    await user.type(screen.getByRole('textbox', { name: 'Describe the problem' }), '98 is right');
+    await user.click(submit);
 
     // The incorrect face eases into "Correct!" and dwells before advancing, so
     // the swap isn't blunt — the advance fires on a real 1400ms setTimeout.
+    // Reporting grants full credit ('correct_first'), so a faulty card doesn't
+    // drag the topic's schedule down.
     expect(screen.getByText('Correct!')).toBeInTheDocument();
+    expect(screen.getByText(/Thanks for the report/)).toBeInTheDocument();
     await waitFor(
       () =>
-        expect(advanceBody()).toMatchObject({ outcome: 'correct_first', from_number: 1 }),
+        expect(advanceBody()).toMatchObject({
+          outcome: 'correct_first',
+          from_number: 1,
+          report: { reason: 'answer_marked_wrong', details: '98 is right', user_answer: '98' },
+        }),
       { timeout: 2500 },
     );
+  });
+
+  it('requires a description for an "Other" report, and can be cancelled', async () => {
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS);
+    const user = userEvent.setup();
+    renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    await missTwice(user);
+
+    await user.click(screen.getByRole('button', { name: 'Report issue' }));
+    await user.click(screen.getByRole('radio', { name: 'Other' }));
+    const submit = screen.getByRole('button', { name: 'Submit report' });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByRole('textbox', { name: 'Describe the problem' }), '   ');
+    expect(submit).toBeDisabled(); // whitespace doesn't count
+    await user.type(screen.getByRole('textbox', { name: 'Describe the problem' }), 'Typo');
+    expect(submit).toBeEnabled();
+
+    // Cancelling returns to Continue / Report issue without advancing.
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Submit report' })).not.toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledTimes(3);
   });
 
   // Regression: the back face used to derive its outcome from the same state
@@ -251,12 +325,12 @@ describe('MathProblem — answering', () => {
   it('keeps the incorrect result on the back face while flipping to the next problem', async () => {
     apiFetch
       .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
-      .mockResolvedValueOnce(
-        deckResponse({ ...ACTIVE_DECK, solution: '7', current_number: 2 }),
-      );
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS)
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
     const user = userEvent.setup();
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     const input = screen.getByRole('textbox');
     const button = screen.getByRole('button');
@@ -266,27 +340,27 @@ describe('MathProblem — answering', () => {
     await user.type(input, '98');
     await user.click(button); // exhausted -> flip to "Incorrect..."
 
-    expect(screen.getByText('Incorrect...')).toBeInTheDocument();
+    expect(await screen.findByText('Incorrect...')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     // Advance loads the next problem; the back face must not flash "Correct!".
-    await screen.findByText('2 of 3 questions', {}, { timeout: 2500 });
+    await findQuestion(2, 3, 2500);
     expect(screen.queryByText('Correct!')).not.toBeInTheDocument();
     expect(screen.getByText('Incorrect...')).toBeInTheDocument();
   });
 
-  // Regression: the back face read the live `solution`, so when advance loaded
-  // the next problem the displayed answer briefly changed to the next
-  // problem's solution mid-flip. The answer is frozen at flip time.
+  // Regression: the back face once read the live problem's solution, so the
+  // displayed answer briefly changed mid-flip. The revealed answer must stay
+  // put while the next problem loads.
   it('freezes the revealed answer to the answered problem while flipping away', async () => {
     apiFetch
-      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK)) // solution '4'
-      .mockResolvedValueOnce(
-        deckResponse({ ...ACTIVE_DECK, solution: '7', current_number: 2 }),
-      );
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS) // reveals '4'
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
     const user = userEvent.setup();
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     const input = screen.getByRole('textbox');
     const button = screen.getByRole('button');
@@ -296,21 +370,79 @@ describe('MathProblem — answering', () => {
     await user.type(input, '98');
     await user.click(button); // exhausted -> flip showing "The answer is 4"
 
-    expect(screen.getByText('The answer is 4')).toBeInTheDocument();
+    expect(await screen.findByText('The answer is 4')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
-    // After the next problem (solution '7') loads, the back face must still
-    // show '4' — never '7'.
-    await screen.findByText('2 of 3 questions', {}, { timeout: 2500 });
+    // After the next problem loads, the back face must still show '4'.
+    await findQuestion(2, 3, 2500);
     expect(screen.getByText('The answer is 4')).toBeInTheDocument();
-    expect(screen.queryByText('The answer is 7')).not.toBeInTheDocument();
+  });
+
+  it('offers the step-by-step solution the backend sent with the last miss', async () => {
+    const steps = [
+      { text: 'Add the two numbers.', math: '2+2=4' },
+      { text: 'So the answer is $4$.', math: null },
+    ];
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(deckResponse({ correct: false, attempts_left: 0, solution: '4', steps }));
+    const user = userEvent.setup();
+    renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    await missTwice(user);
+
+    // Collapsed until asked for, so Continue / Report stay in view.
+    expect(screen.queryByText('Add the two numbers.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'See step-by-step solution' }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.getByText('Add the two numbers.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+  });
+
+  it('shows no steps toggle when the problem has no explanation', async () => {
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS);
+    const user = userEvent.setup();
+    renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    await missTwice(user);
+    expect(screen.queryByRole('button', { name: /step-by-step/ })).not.toBeInTheDocument();
+  });
+});
+
+describe('MathProblem — server-side checking', () => {
+  it('resumes the attempt the backend reports after a reload', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, attempt: 2 }));
+    renderWithClient(<MathProblem />);
+    expect(await screen.findByText('Attempt 2 of 2')).toBeInTheDocument();
+  });
+
+  it('reloads the deck when the answer was for a stale card', async () => {
+    const user = userEvent.setup();
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(deckResponse({}, { ok: false, status: 409 }))
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
+    const { container } = renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+
+    await user.type(screen.getByRole('textbox'), '4');
+    await user.click(screen.getByRole('button'));
+
+    // No verdict for the stale card; the deck refetch shows the current one.
+    expect(await findQuestion(2, 3)).toBeInTheDocument();
+    expect(container.querySelector('.math-problem-flipper.flipped')).not.toBeInTheDocument();
+    expect(advanceBody()).toBeUndefined();
   });
 });
 
 // Finish the single-card deck currently showing by answering it correctly.
 // Assumes the next queued apiFetch response is the advance result.
 async function finishSingleCardDeck(user) {
-  await screen.findByText('1 of 1 questions');
+  await findQuestion(1, 1);
   await user.type(screen.getByRole('textbox'), '4');
   await user.click(screen.getByRole('button'));
   await screen.findByText(/You've finished all 1 question/, {}, { timeout: 2500 });
@@ -323,10 +455,11 @@ describe('MathProblem — time on card', () => {
     try {
       apiFetch
         .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+        .mockResolvedValueOnce(CHECK_CORRECT)
         .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
       const user = userEvent.setup();
       renderWithClient(<MathProblem />);
-      await screen.findByText('1 of 3 questions');
+      await findQuestion(1, 3);
 
       now += 12_000; // the student works on the card for 12 seconds
       await user.type(screen.getByRole('textbox'), '4');
@@ -354,9 +487,9 @@ describe('MathProblem — learn more link', () => {
   it('links the question card to the video the backend sends', async () => {
     apiFetch.mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO));
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
-    const link = screen.getByRole('link', { name: /Learn more/ });
+    const link = screen.getByRole('link', { name: /Watch Video/ });
     expect(link).toHaveAttribute('href', VIDEO_URL);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -369,24 +502,27 @@ describe('MathProblem — learn more link', () => {
       deckResponse({ ...ACTIVE_DECK, topic_name: 'Linear Equations', learn_more_url: null }),
     );
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
-    expect(screen.queryByRole('link', { name: /Learn more/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Watch Video/ })).not.toBeInTheDocument();
   });
 
   it('omits the link for a payload without the field (older deck entries)', async () => {
     apiFetch.mockResolvedValueOnce(deckResponse(ACTIVE_DECK));
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
-    expect(screen.queryByRole('link', { name: /Learn more/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Watch Video/ })).not.toBeInTheDocument();
   });
 
-  it('keeps the "Learn more" link on the card when the student gets it wrong', async () => {
-    apiFetch.mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO));
+  it('keeps the "Watch Video" link on the card when the student gets it wrong', async () => {
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(CHECK_LAST_MISS);
     const user = userEvent.setup();
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     const input = screen.getByRole('textbox');
     const button = screen.getByRole('button', { name: 'Submit' });
@@ -396,10 +532,10 @@ describe('MathProblem — learn more link', () => {
     await user.type(input, '98');
     await user.click(button); // exhausted -> flip to the incorrect face
 
-    expect(screen.getByText('Incorrect...')).toBeInTheDocument();
+    expect(await screen.findByText('Incorrect...')).toBeInTheDocument();
     // Two links now exist (the front face is still mounted behind the flip); the
     // incorrect back face carries its own, both pointing at the topic's video.
-    const links = screen.getAllByRole('link', { name: /Learn more/ });
+    const links = screen.getAllByRole('link', { name: /Watch Video/ });
     expect(links).toHaveLength(2);
     links.forEach((link) => expect(link).toHaveAttribute('href', VIDEO_URL));
   });
@@ -409,17 +545,18 @@ describe('MathProblem — learn more link', () => {
     const user = userEvent.setup();
     apiFetch
       .mockResolvedValueOnce(deckResponse(DECK_WITH_VIDEO))
+      .mockResolvedValueOnce(CHECK_CORRECT)
       .mockResolvedValueOnce(
         deckResponse({ ...DECK_WITH_VIDEO, current_number: 2, learn_more_url: NEXT_URL }),
       );
     renderWithClient(<MathProblem />);
-    await screen.findByText('1 of 3 questions');
+    await findQuestion(1, 3);
 
     await user.type(screen.getByRole('textbox'), '4');
     await user.click(screen.getByRole('button'));
-    await screen.findByText('2 of 3 questions', {}, { timeout: 2000 });
+    await findQuestion(2, 3, 2000);
 
-    expect(screen.getByRole('link', { name: /Learn more/ })).toHaveAttribute('href', NEXT_URL);
+    expect(screen.getByRole('link', { name: /Watch Video/ })).toHaveAttribute('href', NEXT_URL);
   });
 });
 
@@ -428,6 +565,7 @@ describe('MathProblem — completion confetti', () => {
     const user = userEvent.setup();
     apiFetch
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
+      .mockResolvedValueOnce(CHECK_CORRECT)
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container } = renderWithClient(<MathProblem />);
@@ -459,6 +597,7 @@ describe('MathProblem — completion confetti', () => {
     // First finish: the original deck.
     apiFetch
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
+      .mockResolvedValueOnce(CHECK_CORRECT)
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container, unmount } = renderWithClient(<MathProblem />);
@@ -469,6 +608,7 @@ describe('MathProblem — completion confetti', () => {
     // Same day: questions-per-day raised, the student finishes the new cards.
     apiFetch
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
+      .mockResolvedValueOnce(CHECK_CORRECT)
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container: c2 } = renderWithClient(<MathProblem />);
@@ -485,6 +625,7 @@ describe('MathProblem — completion confetti', () => {
     // Genuine finish → confetti.
     apiFetch
       .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, total: 1 }))
+      .mockResolvedValueOnce(CHECK_CORRECT)
       .mockResolvedValueOnce(deckResponse({ completed: true, total: 1 }));
 
     const { container, unmount } = renderWithClient(<MathProblem />);

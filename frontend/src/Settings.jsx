@@ -1,75 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import './Settings.css';
-import { apiFetch, logout, deleteAccount, localDay } from './auth.js';
+import { logout, deleteAccount } from './auth.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('settings');
 
-// Mirrors MAX_QUESTIONS_PER_DAY in backend/myapp/views/settings.py.
-const MAX_QUESTIONS_PER_DAY = 100;
-
-async function fetchSettings() {
-  const response = await apiFetch(`/settings/`);
-  if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-  return response.json();
-}
-
 function Settings({ onLoggedOut }) {
-  const [questionsPerDay, setQuestionsPerDay] = useState(10);
-  const [status, setStatus] = useState(null);
   const [error, setError] = useState(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-
-  const { data: loaded, error: loadError } = useQuery({
-    queryKey: ['settings'],
-    queryFn: fetchSettings,
-  });
-
-  // Seed the editable fields from the fetched settings once they arrive. The
-  // form owns the values after that (the user edits them locally, then saves),
-  // so this only mirrors the server value in — it doesn't fight later edits
-  // because `loaded` doesn't change again unless we refetch.
-  useEffect(() => {
-    if (loaded) {
-      setQuestionsPerDay(loaded.questions_per_day);
-    }
-  }, [loaded]);
-
-  // Teachers don't practice, so the per-practice question count is irrelevant to
-  // them — hide it (and the Save button, since there's nothing left to save).
-  const isTeacher = loaded?.role === 'teacher';
-
-  const saveSettings = async () => {
-    setStatus(null);
-    setError(null);
-    const count = parseInt(questionsPerDay, 10);
-    if (isNaN(count) || count < 1) {
-      setError('Number of questions must be at least 1.');
-      return;
-    }
-    if (count > MAX_QUESTIONS_PER_DAY) {
-      setError(`Number of questions can be at most ${MAX_QUESTIONS_PER_DAY}.`);
-      return;
-    }
-    try {
-      // Send today so growing today's deck (on a raised count) targets the
-      // user's local day, matching the deck the practice page shows.
-      const response = await apiFetch(`/settings/?today=${localDay()}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ questions_per_day: count }),
-      });
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-      const result = await response.json();
-      log.info(`Settings saved (questions_per_day=${result.questions_per_day})`);
-      setQuestionsPerDay(result.questions_per_day);
-      setStatus('Settings saved.');
-    } catch (err) {
-      log.error('Failed to save settings:', err.message);
-      setError(err.message);
-    }
-  };
 
   const handleLogout = async () => {
     setError(null);
@@ -93,42 +31,10 @@ function Settings({ onLoggedOut }) {
     }
   };
 
-  // Gate the form on the initial load. Rendering the form with placeholder
-  // defaults first would (a) let a slow settings load land mid-edit and clobber
-  // what the user just typed, and (b) briefly show the wrong values. Wait until
-  // the real settings are in before showing anything editable.
-  if (loadError) {
-    return (
-      <div className="settings-card">
-        <p className="settings-error">Error: {loadError.message}</p>
-      </div>
-    );
-  }
-  if (!loaded) return <div className="settings-card" aria-busy="true" />;
-
   return (
     <div className="settings-card">
       <h2 className="settings-title">Settings</h2>
 
-      {!isTeacher && (
-        <>
-          <label className="settings-field">
-            <span className="settings-label">Questions per practice</span>
-            <input
-              className="settings-input"
-              type="number"
-              min="1"
-              max={MAX_QUESTIONS_PER_DAY}
-              value={questionsPerDay}
-              onChange={(e) => setQuestionsPerDay(e.target.value)}
-            />
-          </label>
-
-          <button className="settings-save" onClick={saveSettings}>Save</button>
-        </>
-      )}
-
-      {status && <p className="settings-status">{status}</p>}
       {error && <p className="settings-error">Error: {error}</p>}
 
       <div className="settings-account">

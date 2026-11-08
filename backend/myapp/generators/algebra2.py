@@ -3,13 +3,15 @@
 These fill computable gaps in the stock ``mathgenerator`` catalogue for the
 "Advanced Algebra: Concepts & Connections" course. Every generator in this
 module is named with an ``alg2_`` prefix, takes no required arguments, and
-returns a ``(problem, solution)`` pair of LaTeX strings.
+returns ``(problem, solution, steps)``: two LaTeX strings plus a step-by-step
+explanation built with ``_steps.Steps``.
 """
 import random
-from math import copysign, log, sqrt
+from math import copysign, isqrt, lcm, log, sqrt
 from fractions import Fraction
 
 from ._registry import register
+from ._steps import Steps, paren, tex_frac
 from ._format import num as _num
 from ._format import frac_from as _frac_from
 
@@ -109,6 +111,122 @@ def _signed(coeff, var):
     return f"{'+' if coeff >= 0 else '-'}{abs(coeff)}{var}"
 
 
+# --- Step-by-step helpers -------------------------------------------------
+
+def _join_signed(pieces):
+    """Join ``(sign, body)`` pairs into ``a+b-c``, with no leading ``+``."""
+    if not pieces:
+        return "0"
+    sign, body = pieces[0]
+    out = body if sign == "+" else f"-{body}"
+    for sign, body in pieces[1:]:
+        out += f"{sign}{body}"
+    return out
+
+
+def _sum_str(values):
+    """Integers as a signed sum: ``[18, 9, -1]`` -> ``'18+9-1'``."""
+    return _join_signed([("-" if v < 0 else "+", str(abs(v))) for v in values])
+
+
+def _linear(pairs):
+    """``[(2, 'x'), (-1, 'y')]`` -> ``'2x-y'``, dropping zero terms."""
+    return _join_signed([
+        ("-" if coeff < 0 else "+", f"{'' if abs(coeff) == 1 else abs(coeff)}{var}")
+        for coeff, var in pairs if coeff != 0
+    ])
+
+
+def _poly(coeffs):
+    """Highest-first coefficients rendered as a polynomial."""
+    return _format_polynomial(_coeffs_to_terms(coeffs))
+
+
+def _subst_poly(coeffs, x):
+    """The polynomial with ``x`` plugged into each term: ``2(3)^{2}+3(3)-1``."""
+    pieces = []
+    for coeff, exp in _coeffs_to_terms(coeffs):
+        if coeff == 0:
+            continue
+        mag = abs(coeff)
+        if exp == 0:
+            body = str(mag)
+        else:
+            power = "" if exp == 1 else f"^{{{exp}}}"
+            body = f"{'' if mag == 1 else mag}({x}){power}"
+        pieces.append(("-" if coeff < 0 else "+", body))
+    return _join_signed(pieces)
+
+
+def _evaluate_steps(s, name, coeffs, x):
+    """Substitute, evaluate each term, then add: the steps for ``name(x)``."""
+    lhs = f"{name}({x})"
+    s.substitute(f"{lhs} = {_subst_poly(coeffs, x)}", text=f"Substitute ${x}$ for every $x$.")
+    terms = [(c, e) for c, e in _coeffs_to_terms(coeffs) if c != 0]
+    values = [c * x ** e for c, e in terms]
+    if len(values) == 1:
+        text = "Multiply." if terms[0][1] <= 1 else "Evaluate the power, then multiply by the coefficient."
+        s.step(text, f"{lhs} = {values[0]}")
+    else:
+        s.step("Evaluate each term: powers first, then multiply by the coefficient.",
+               f"{lhs} = {_sum_str(values)}")
+        s.step("Add the terms.", f"{lhs} = {sum(values)}")
+
+
+def _root_factor(root):
+    """The factor a root gives: ``2`` -> ``(x-2)``, ``-3`` -> ``(x+3)``, ``0`` -> ``x``."""
+    return "x" if root == 0 else f"({_divisor_str(root)})"
+
+
+def _times_linear(coeffs, root):
+    """Multiply highest-first ``coeffs`` by ``(x - root)``."""
+    shifted = coeffs + [0]
+    scaled = [0] + [c * (-root) for c in coeffs]
+    return [s + t for s, t in zip(shifted, scaled)]
+
+
+def _multiply_out_step(s, coeffs, root):
+    """Add the step multiplying ``coeffs`` by ``(x - root)``; return the product."""
+    product = _times_linear(coeffs, root)
+    current, result = _poly(coeffs), _poly(product)
+    if root == 0:
+        s.step("Multiply by $x$, which raises each power by one.", f"x({current}) = {result}")
+        return product
+    first = _format_polynomial([(c, e + 1) for c, e in _coeffs_to_terms(coeffs)])
+    second = _format_polynomial([(-root * c, e) for c, e in _coeffs_to_terms(coeffs)])
+    expanded = first + (second if second.startswith("-") else f"+{second}")
+    sign = "-" if root > 0 else "+"
+    scale = "" if abs(root) == 1 else abs(root)
+    math = f"x({current}){sign}{scale}({current}) = {expanded}"
+    if expanded != result:
+        math += f" = {result}"
+    s.step(f"Multiply $({current})$ by $({_divisor_str(root)})$: distribute, then combine like terms.",
+           math)
+    return product
+
+
+def _tex_fraction(value):
+    """A ``Fraction`` as LaTeX: an integer, or ``\\frac`` with the sign out front."""
+    value = Fraction(value)
+    if value.denominator == 1:
+        return str(value.numerator)
+    return tex_frac(value.numerator, value.denominator)
+
+
+def _matrix(rows, kind="bmatrix"):
+    body = r" \\ ".join(" & ".join(str(v) for v in row) for row in rows)
+    return rf"\begin{{{kind}}} {body} \end{{{kind}}}"
+
+
+def _det3(m):
+    """Determinant of a 3x3 matrix and its first-row cofactor expansion."""
+    (a, b, c), (d, e, f), (g, h, i) = m
+    minors = (e * i - f * h, d * i - f * g, d * h - e * g)
+    value = a * minors[0] - b * minors[1] + c * minors[2]
+    expansion = f"{a}({minors[0]}) - {paren(b)}({minors[1]}) + {paren(c)}({minors[2]})"
+    return value, expansion
+
+
 @register
 def alg2_evaluate_polynomial(min_degree=2, max_degree=3, min_x=-5, max_x=5):
     r"""Evaluate a Polynomial at a Value
@@ -123,7 +241,11 @@ def alg2_evaluate_polynomial(min_degree=2, max_degree=3, min_x=-5, max_x=5):
     poly = _format_polynomial(_coeffs_to_terms(coeffs))
     problem = f"Evaluate $p(x)={poly}$ at $x={x}$"
     solution = f"${value}$"
-    return problem, solution
+
+    s = Steps()
+    _evaluate_steps(s, "p", coeffs, x)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -144,7 +266,27 @@ def alg2_polynomial_division(min_degree=2, max_degree=3, max_root=5):
         f"Format your answer as 'quotient ..., remainder ...'."
     )
     solution = f"quotient ${q_str}$, remainder ${remainder}$"
-    return problem, solution
+
+    s = Steps()
+    if r > 0:
+        which = f"Dividing by $({_divisor_str(r)})$ means using ${r}$."
+    else:
+        which = f"Since $({_divisor_str(r)})$ is $x-({r})$, use ${r}$."
+    missing = ", with $0$ for each missing power" if 0 in coeffs else ""
+    s.step(f"Use synthetic division. {which} Write the coefficients of $p(x)${missing}:",
+           r" \quad ".join(str(c) for c in coeffs))
+    rows, prev = [], coeffs[0]
+    for c in coeffs[1:]:
+        rows.append(rf"{c} + {paren(prev)} \cdot {paren(r)} &= {c + prev * r}")
+        prev = c + prev * r
+    s.step(f"Bring down the leading coefficient ${coeffs[0]}$. Then repeatedly multiply by "
+           f"${r}$ and add the result to the next coefficient:",
+           r"\begin{aligned} " + r" \\ ".join(rows) + r" \end{aligned}")
+    s.step(f"The last value, ${remainder}$, is the remainder. The other values are the "
+           f"coefficients of the quotient, one degree lower than $p(x)$.",
+           f"q(x) = {q_str}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -163,7 +305,14 @@ def alg2_remainder_theorem(min_degree=2, max_degree=3, max_root=5):
         f"Find the remainder when $p(x)={poly}$ is divided by $({_divisor_str(r)})$"
     )
     solution = f"${remainder}$"
-    return problem, solution
+
+    s = Steps()
+    which = "" if r > 0 else f" Here $({_divisor_str(r)})$ is $x-({r})$."
+    s.step(f"By the Remainder Theorem, the remainder when $p(x)$ is divided by $(x-r)$ is "
+           f"$p(r)$.{which} So evaluate $p({r})$.")
+    _evaluate_steps(s, "p", coeffs, r)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -190,7 +339,20 @@ def alg2_build_polynomial_from_roots(min_root=-4, max_root=4):
         roots_text = f"${roots[0]}$, ${roots[1]}$, and ${roots[2]}$"
     problem = f"Find a monic polynomial in standard form with roots {roots_text}"
     solution = f"${poly}$"
-    return problem, solution
+
+    s = Steps()
+    # Multiply the nonzero-root factors first; a root of 0 just contributes x
+    # (written in front, as in x(x-3)(x+3)).
+    zeros, nonzeros = [r for r in roots if r == 0], [r for r in roots if r != 0]
+    order = nonzeros + zeros
+    factored = "".join(_root_factor(r) for r in zeros + nonzeros)
+    s.step("Each root $r$ gives a factor $(x-r)$, so multiply one factor per root:",
+           f"p(x) = {factored}")
+    product = [1, -order[0]]
+    for root in order[1:]:
+        product = _multiply_out_step(s, product, root)
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -219,7 +381,17 @@ def alg2_add_complex(min_val=-9, max_val=9):
         f"Format your answer as such: 4-2i."
     )
     solution = f"${_complex_result_str(p, q)}$"
-    return problem, solution
+
+    s = Steps()
+    if operator == "+":
+        s.step("Add the real parts and the imaginary parts separately.")
+    else:
+        s.step("Subtract the real parts and the imaginary parts separately. The minus sign "
+               "applies to both parts of the second number.")
+    s.step("Real parts:", f"{a} {operator} {paren(c)} = {p}")
+    s.step("Imaginary parts (the coefficients of $i$):", f"{b} {operator} {paren(d)} = {q}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -237,7 +409,19 @@ def alg2_rational_exponent(min_m=2, max_m=5):
     value = m ** p
     problem = f"Evaluate ${base}^{{{p}/{q}}}$"
     solution = f"${value}$"
-    return problem, solution
+
+    s = Steps()
+    if q == 2:
+        root_name, root_tex = "square root", rf"\sqrt{{{base}}}"
+    else:
+        root_name, root_tex = "cube root", rf"\sqrt[3]{{{base}}}"
+    s.step("A rational exponent means a root, then a power:",
+           r"a^{p/q} = \left(\sqrt[q]{a}\right)^{p}")
+    s.step(f"The denominator ${q}$ means take the {root_name} of ${base}$. "
+           f"Since ${m}^{{{q}}} = {base}$:", f"{root_tex} = {m}")
+    s.step(f"The numerator ${p}$ is the power. Raise ${m}$ to it:", f"{m}^{{{p}}} = {value}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -255,7 +439,20 @@ def alg2_solve_radical_equation(max_a=4, min_x=-5, max_x=5, max_c=8):
     inside = f"{a}x{'+' if b >= 0 else '-'}{abs(b)}"
     problem = rf"Solve $\sqrt{{{inside}}}={c}$ for x"
     solution = f"$x={x}$"
-    return problem, solution
+
+    s = Steps()
+    s.step("Square both sides to remove the square root.",
+           f"{_format_polynomial([(a, 1), (b, 0)])} = {c * c}")
+    if b > 0:
+        s.step(f"Subtract ${b}$ from both sides.", f"{_linear([(a, 'x')])} = {c * c - b}")
+    elif b < 0:
+        s.step(f"Add ${-b}$ to both sides.", f"{_linear([(a, 'x')])} = {c * c - b}")
+    if a != 1:
+        s.step(f"Divide both sides by ${a}$.", f"x = {x}")
+    s.step(rf"Check: substituting $x={x}$ gives $\sqrt{{{c * c}}} = {c}$, which matches the "
+           f"right side, so the solution is not extraneous.")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -271,7 +468,13 @@ def alg2_solve_exponential_log(min_x=1, max_x=5):
     value = base ** x
     problem = f"Solve ${base}^x={value}$ for x"
     solution = f"$x={x}$"
-    return problem, solution
+
+    s = Steps()
+    s.step(f"Write ${value}$ as a power of ${base}$.", f"{base}^x = {base}^{{{x}}}")
+    s.step(rf"The bases are equal, so the exponents are equal. (Equivalently, take "
+           rf"$\log_{{{base}}}$ of both sides.)", f"x = {x}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -287,7 +490,16 @@ def alg2_evaluate_log(min_exp=1, max_exp=5):
     n = base ** exponent
     problem = rf"Evaluate $\log_{{{base}}}({n})$"
     solution = f"${exponent}$"
-    return problem, solution
+
+    s = Steps()
+    s.step(rf"$\log_{{{base}}}({n})$ asks: what power of ${base}$ gives ${n}$?",
+           f"{base}^{{?}} = {n}")
+    power = f"{base}^{{{exponent}}}"
+    if exponent > 1:
+        power += " = " + r" \cdot ".join([str(base)] * exponent)
+    s.step(f"The power ${exponent}$ works:", f"{power} = {n}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -306,7 +518,16 @@ def alg2_inverse_linear_function(max_m=6, max_b=10, min_t=-6, max_t=6):
         f"Given $f(x)={m}x{'+' if b >= 0 else '-'}{abs(b)}$, find $f^{{-1}}({a})$"
     )
     solution = f"${t}$"
-    return problem, solution
+
+    s = Steps()
+    s.step(f"$f^{{-1}}({a})$ is the input $x$ that $f$ sends to ${a}$, so solve $f(x)={a}$.",
+           f"{_format_polynomial([(m, 1), (b, 0)])} = {a}")
+    move = f"Subtract ${b}$ from" if b > 0 else f"Add ${-b}$ to"
+    s.step(f"{move} both sides.", f"{_linear([(m, 'x')])} = {a - b}")
+    if m != 1:
+        s.step(f"Divide both sides by ${m}$.", f"x = {t}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -327,7 +548,15 @@ def alg2_z_score(min_val=-20, max_val=20):
         f"Round your answer to the nearest thousandth."
     )
     solution = f"${_clean_num(z)}$"
-    return problem, solution
+
+    s = Steps()
+    s.formula("The z-score formula", r"z = \frac{x - \mu}{\sigma}")
+    s.substitute(rf"z = \frac{{{x} - {paren(mean)}}}{{{sd}}}",
+                 text=rf"Substitute $x = {x}$, $\mu = {mean}$, and $\sigma = {sd}$.")
+    s.step("Subtract in the numerator.", rf"z = {tex_frac(x - mean, sd)}")
+    s.step("Divide.", f"z = {_clean_num(z)}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -348,7 +577,17 @@ def alg2_empirical_rule(min_mean=0, max_mean=100, min_sd=1, max_sd=15):
         f"standard deviation(s) of the mean?"
     )
     solution = percent
-    return problem, solution
+
+    s = Steps()
+    s.step("The Empirical Rule says that in a normal distribution, about 68% of the data lies "
+           "within $1$ standard deviation of the mean, 95% within $2$, and 99.7% within $3$.")
+    s.step(rf"Here ${k}$ standard deviation(s) is ${k} \cdot {sd} = {k * sd}$, so this is the "
+           f"data between:",
+           rf"{mean} - {k * sd} = {mean - k * sd} \quad\text{{and}}\quad "
+           rf"{mean} + {k * sd} = {mean + k * sd}")
+    # Not s.answer: it would wrap "68%" in $...$, where % starts a LaTeX comment.
+    s.step(f"Within ${k}$ standard deviation(s), the answer is {percent}.")
+    return problem, solution, s.done()
 
 
 @register
@@ -375,7 +614,35 @@ def alg2_solve_system_matrix(max_coeff=5, min_sol=-6, max_sol=6):
         f"Format your answer as such: x=1, y=2."
     )
     solution = f"$x={x}, y={y}$"
-    return problem, solution
+
+    s = Steps()
+    # Scale both equations so the x-coefficients match, then subtract.
+    target = lcm(abs(a), abs(c))
+    m1, m2 = target // a, target // c
+    ky, rhs = b * m1 - d * m2, e * m1 - f * m2
+    scaled = [f"{_linear([(m * a_, 'x'), (m * b_, 'y')])} &= {m * e_}"
+              for m, a_, b_, e_ in ((m1, a, b, e), (m2, c, d, f))]
+    multiply = [f"the {which} equation by ${m}$"
+                for which, m in (("first", m1), ("second", m2)) if m != 1]
+    if multiply:
+        s.step(f"To eliminate $x$, multiply {' and '.join(multiply)} so both $x$-coefficients "
+               f"are ${target}$.",
+               r"\begin{aligned} " + r" \\ ".join(scaled) + r" \end{aligned}")
+        s.step("Subtract the second equation from the first. The $x$-terms cancel.",
+               f"{_linear([(ky, 'y')])} = {rhs}")
+    else:
+        s.step("The $x$-coefficients already match, so subtract the second equation from the "
+               "first to eliminate $x$.", f"{_linear([(ky, 'y')])} = {rhs}")
+    if ky != 1:
+        s.step(f"Divide both sides by ${ky}$.", f"y = {y}")
+    by = f"{'+' if b > 0 else '-'}{'' if abs(b) == 1 else abs(b)}({y})"
+    lines = [f"{_linear([(a, 'x')])}{by} &= {e}", f"{_linear([(a, 'x')])} &= {e - b * y}"]
+    if a != 1:
+        lines.append(f"x &= {x}")
+    s.step(f"Substitute $y = {y}$ into the first equation and solve for $x$.",
+           r"\begin{aligned} " + r" \\ ".join(lines) + r" \end{aligned}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -395,7 +662,14 @@ def alg2_log_product_rule(min_val=-6, max_val=6):
         f"Using the product rule for logarithms: given $\\log_b(x)={p}$ and "
         f"$\\log_b(y)={q}$, find $\\log_b(xy)$."
     )
-    return problem, f"${p + q}$"
+    solution = f"${p + q}$"
+
+    s = Steps()
+    s.formula("The product rule for logarithms", r"\log_b(xy) = \log_b(x) + \log_b(y)")
+    s.substitute(rf"\log_b(xy) = {p} + {paren(q)}")
+    s.step("Add.", rf"\log_b(xy) = {p + q}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -414,7 +688,15 @@ def alg2_log_quotient_rule(min_val=-6, max_val=6):
         f"Using the quotient rule for logarithms: given $\\log_b(x)={p}$ and "
         f"$\\log_b(y)={q}$, find $\\log_b(x/y)$."
     )
-    return problem, f"${p - q}$"
+    solution = f"${p - q}$"
+
+    s = Steps()
+    s.formula("The quotient rule for logarithms",
+              r"\log_b\left(\frac{x}{y}\right) = \log_b(x) - \log_b(y)")
+    s.substitute(rf"\log_b\left(\frac{{x}}{{y}}\right) = {p} - {paren(q)}")
+    s.step("Subtract.", rf"\log_b\left(\frac{{x}}{{y}}\right) = {p - q}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -433,7 +715,14 @@ def alg2_log_power_rule(min_val=-5, max_val=5, min_k=2, max_k=5):
         f"Using the power rule for logarithms: given $\\log_b(x)={p}$, find "
         f"$\\log_b(x^{{{k}}})$."
     )
-    return problem, f"${k * p}$"
+    solution = f"${k * p}$"
+
+    s = Steps()
+    s.formula("The power rule for logarithms", r"\log_b(x^{k}) = k \cdot \log_b(x)")
+    s.substitute(rf"\log_b(x^{{{k}}}) = {k} \cdot {paren(p)}")
+    s.step("Multiply.", rf"\log_b(x^{{{k}}}) = {k * p}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -458,7 +747,17 @@ def alg2_log_change_of_base(min_arg=2, max_arg=50):
         f"Use the change of base formula to evaluate $\\log_{{{base}}}({n})$. "
         f"Round your answer to the nearest thousandth."
     )
-    return problem, f"${_num(value)}$"
+    solution = f"${_num(value)}$"
+
+    s = Steps()
+    s.formula("The change of base formula", r"\log_b(n) = \frac{\ln n}{\ln b}")
+    s.substitute(rf"\log_{{{base}}}({n}) = \frac{{\ln {n}}}{{\ln {base}}}")
+    s.step(rf"Use a calculator: $\ln {n} \approx {_num(log(n))}$ and "
+           rf"$\ln {base} \approx {_num(log(base))}$.")
+    s.step("Divide, using the unrounded logarithms to avoid rounding error.",
+           rf"\log_{{{base}}}({n}) \approx {_num(value)}")
+    s.answer(solution, lead="Rounded to the nearest thousandth, the answer is")
+    return problem, solution, s.done()
 
 
 @register
@@ -478,22 +777,39 @@ def alg2_rationalize_denominator():
         a, b = random.sample(_NON_SQUARES, 2)
         denom = f"\\sqrt{{{a}}}-\\sqrt{{{b}}}"
         result = a - b
+        first, second = rf"\sqrt{{{a}}}", rf"\sqrt{{{b}}}"
+        squares = f"{a} - {b}"
     elif form == "radical_minus_int":
         a = random.choice(_NON_SQUARES)
         d = random.randint(1, 4)
         denom = f"\\sqrt{{{a}}}-{d}"
         result = a - d * d
+        first, second = rf"\sqrt{{{a}}}", str(d)
+        squares = f"{a} - {d * d}"
     else:  # int_minus_radical
         a = random.choice(_NON_SQUARES)
         d = random.randint(1, 4)
         denom = f"{d}-\\sqrt{{{a}}}"
         result = d * d - a
+        first, second = str(d), rf"\sqrt{{{a}}}"
+        squares = f"{d * d} - {a}"
     problem = (
         f"Rationalize the denominator of $\\frac{{1}}{{{denom}}}$ by multiplying "
         f"by the conjugate. What is the resulting rational denominator (an "
         f"integer)?"
     )
-    return problem, f"${result}$"
+    solution = f"${result}$"
+
+    s = Steps()
+    conjugate = f"{first}+{second}"
+    s.step(f"The conjugate of ${denom}$ is ${conjugate}$. Multiply the numerator and "
+           f"denominator by it.",
+           rf"\frac{{1}}{{{denom}}} \cdot \frac{{{conjugate}}}{{{conjugate}}}")
+    s.formula("The denominator is a difference of squares, and the rule", r"(p-q)(p+q) = p^2 - q^2")
+    s.step("Apply it. Squaring removes the square roots.",
+           rf"({denom})({conjugate}) = ({first})^2 - ({second})^2 = {squares} = {result}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -518,7 +834,26 @@ def alg2_radical_equation_conjugate(min_root=2, max_root=6):
     problem = (
         f"Solve $\\sqrt{{x+{a}}} {op} \\sqrt{{x+{b}}} = {c}$ for x."
     )
-    return problem, f"$x={x}$"
+    solution = f"$x={x}$"
+
+    s = Steps()
+    other_op = "-" if op == "+" else "+"
+    root_a, root_b = rf"\sqrt{{x+{a}}}", rf"\sqrt{{x+{b}}}"
+    conjugate = f"{root_a} {other_op} {root_b}"
+    other = (a - b) // c  # (P^2 - Q^2) / (P +- Q) = P -+ Q, exactly
+    s.step(f"Multiply both sides by the conjugate ${conjugate}$. The left side becomes a "
+           f"difference of squares.",
+           rf"(x+{a}) - (x+{b}) = {c}\left({conjugate}\right)")
+    divide = "" if c == 1 else f", then divide both sides by ${c}$"
+    s.step(f"Simplify the left side to ${a - b}${divide}.", f"{conjugate} = {other}")
+    s.step(f"Add this to the original equation. The ${root_b}$ terms cancel.",
+           rf"2{root_a} = {c + other} \quad\Rightarrow\quad {root_a} = {big}")
+    s.step("Square both sides and solve for $x$.",
+           rf"x + {a} = {big * big} \quad\Rightarrow\quad x = {x}")
+    s.step(rf"Check: $\sqrt{{{x}+{a}}} {op} \sqrt{{{x}+{b}}} = {big} {op} {small} = {c}$, "
+           f"which matches.")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 def _linear_factor(k):
@@ -560,7 +895,18 @@ def alg2_function_composition(min_c=-5, max_c=5, min_x=-4, max_x=4):
     problem = (
         f"Given $f(x)={f_str}$ and $g(x)={g_str}$, find $(f \\circ g)({x0})$"
     )
-    return problem, f"${value}$"
+    solution = f"${value}$"
+
+    s = Steps()
+    s.step(rf"$(f \circ g)({x0})$ means $f(g({x0}))$. Work from the inside out: find "
+           f"$g({x0})$ first.")
+    _evaluate_steps(s, "g", g_coeffs, x0)
+    outer = f"f({inner}) = {_subst_poly(f_coeffs, inner)}"
+    if b != 0:
+        outer += f" = {_sum_str([a * inner, b])}"
+    s.step(f"Now substitute $g({x0}) = {inner}$ into $f$.", f"{outer} = {value}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -593,7 +939,20 @@ def alg2_solve_rational_equation(min_v=-6, max_v=6, min_s=-5, max_s=5):
         f"\\frac{{{c}}}{{{_linear_factor(q)}}}$ for x. "
         f"Express your answer as a fraction a/b or an integer."
     )
-    return problem, f"$x={_frac_from(s)}$"
+    solution = f"$x={_frac_from(s)}$"
+
+    st = Steps()
+    st.step("Cross-multiply.", f"{a}({_linear_factor(q)}) = {c}({_linear_factor(p)})")
+    st.step("Distribute.",
+            f"{_format_polynomial([(a, 1), (a * q, 0)])} = {_format_polynomial([(c, 1), (c * p, 0)])}")
+    st.step("Move the $x$-terms to the left side and the constants to the right.",
+            f"{_linear([(a - c, 'x')])} = {c * p - a * q}")
+    if a - c != 1:
+        st.step(f"Divide both sides by ${a - c}$.", f"x = {_frac_from(s)}")
+    st.step(f"Check: $x={_frac_from(s)}$ makes the denominators ${s + p}$ and ${s + q}$, "
+            f"neither of which is zero, so the solution is valid.")
+    st.answer(solution)
+    return problem, solution, st.done()
 
 
 @register
@@ -627,7 +986,17 @@ def alg2_rational_expression_ops(min_c=-6, max_c=6):
         f"expression, e.g. (x+1)/(x-2)."
     )
     solution = f"$({_linear_factor(a)})/({_linear_factor(c)})$"
-    return problem, solution
+
+    s = Steps()
+    fa, fb, fc = _linear_factor(a), _linear_factor(b), _linear_factor(c)
+    if op == "\\div":
+        s.step("Dividing by a fraction means multiplying by its reciprocal.",
+               rf"\frac{{{fa}}}{{{fb}}} \cdot \frac{{{fb}}}{{{fc}}}")
+    s.step("Multiply the numerators and multiply the denominators.",
+           rf"\frac{{({fa})({fb})}}{{({fb})({fc})}}")
+    s.step(f"Cancel the common factor $({fb})$.", rf"\frac{{{fa}}}{{{fc}}}")
+    s.answer(solution, lead="Written with a slash, the answer is")
+    return problem, solution, s.done()
 
 
 def _imag_str(mag_fraction):
@@ -670,7 +1039,27 @@ def alg2_complex_division(min_v=-6, max_v=6):
     sign = "+" if imag > 0 else "-"
     imag_str = _imag_str(_frac_from(abs(imag)))
     solution = f"${real_str}{sign}{imag_str}$"
-    return problem, solution
+
+    s = Steps()
+    num_z, den_z, conj = _complex_str(a, b), _complex_str(c, d), _complex_str(c, -d)
+    s.step(f"Multiply the numerator and denominator by ${conj}$, the conjugate of the "
+           f"denominator.",
+           rf"\frac{{{num_z}}}{{{den_z}}} \cdot \frac{{{conj}}}{{{conj}}}")
+    foil = [(a * c, ""), (-a * d, "i"), (b * c, "i"), (-b * d, "i^2")]
+    expanded = _join_signed([
+        ("-" if v < 0 else "+", f"{'' if abs(v) == 1 and unit else abs(v)}{unit}")
+        for v, unit in foil if v != 0
+    ])
+    s.step("Expand the numerator with FOIL.", f"({num_z})({conj}) = {expanded}")
+    numerator = _complex_str(a * c + b * d, b * c - a * d)
+    s.step("Replace $i^2$ with $-1$ and combine like terms.", f"({num_z})({conj}) = {numerator}")
+    s.step("Multiply out the denominator, using $(c+di)(c-di) = c^2+d^2$.",
+           f"({den_z})({conj}) = {paren(c)}^2 + {paren(d)}^2 = {denom}")
+    s.step("Divide each part by the denominator and simplify.",
+           rf"\frac{{{numerator}}}{{{denom}}} = {_tex_fraction(real)} {sign} "
+           rf"{_tex_fraction(abs(imag))}i")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -692,7 +1081,21 @@ def alg2_complex_modulus(min_v=-9, max_v=9):
         f"Find $|{_complex_str(a, b)}|$. "
         f"Round to the nearest thousandth if irrational."
     )
-    return problem, f"${_num(value)}$"
+    solution = f"${_num(value)}$"
+
+    s = Steps()
+    z, total = _complex_str(a, b), a * a + b * b
+    s.formula("The modulus of $a+bi$", r"|a+bi| = \sqrt{a^2+b^2}")
+    s.substitute(rf"|{z}| = \sqrt{{{paren(a)}^2 + {paren(b)}^2}}")
+    s.step("Square and add.", rf"|{z}| = \sqrt{{{a * a} + {b * b}}} = \sqrt{{{total}}}")
+    if isqrt(total) ** 2 == total:
+        s.step(f"${total}$ is a perfect square.", rf"\sqrt{{{total}}} = {isqrt(total)}")
+        s.answer(solution)
+    else:
+        s.step(f"${total}$ is not a perfect square, so use a calculator.",
+               rf"\sqrt{{{total}}} \approx {_num(value)}")
+        s.answer(solution, lead="Rounded to the nearest thousandth, the answer is")
+    return problem, solution, s.done()
 
 
 @register
@@ -718,7 +1121,20 @@ def alg2_inverse_nonlinear(min_v=-6, max_v=6):
     solution = (
         f"$({_linear_factor(-k)})^(1/3){'+' if h > 0 else '-'}{abs(h)}$"
     )
-    return problem, solution
+
+    s = Steps()
+    y_minus_h = _linear_factor(-h).replace("x", "y")
+    k_term = f"{'+' if k > 0 else '-'}{abs(k)}"
+    s.step("Replace $f(x)$ with $y$.", f"y = {fx}")
+    s.step("Swap $x$ and $y$.", f"x = ({y_minus_h})^3{k_term}")
+    move = f"Subtract ${k}$ from" if k > 0 else f"Add ${-k}$ to"
+    s.step(f"{move} both sides.", f"{_linear_factor(-k)} = ({y_minus_h})^3")
+    s.step("Take the cube root of both sides.", rf"\sqrt[3]{{{_linear_factor(-k)}}} = {y_minus_h}")
+    move = f"Add ${h}$ to" if h > 0 else f"Subtract ${-h}$ from"
+    s.step(f"{move} both sides. This is $f^{{-1}}(x)$.",
+           rf"f^{{-1}}(x) = \sqrt[3]{{{_linear_factor(-k)}}}{'+' if h > 0 else '-'}{abs(h)}")
+    s.answer(solution, lead="Writing the cube root as the power ^(1/3), the answer is")
+    return problem, solution, s.done()
 
 
 def _divisors(n):
@@ -758,7 +1174,24 @@ def alg2_rational_root_list():
         f"negatives in the same order, separated by commas."
     )
     solution = ", ".join(candidates)
-    return problem, solution
+
+    s = Steps()
+    s.step(rf"By the Rational Root Theorem, every rational root has the form "
+           rf"$\pm\frac{{p}}{{q}}$, where $p$ divides the constant term ${const}$ and $q$ "
+           rf"divides the leading coefficient ${lead}$.")
+    s.step("List the factors of each.",
+           rf"p: {', '.join(map(str, _divisors(const)))} \qquad q: {', '.join(map(str, _divisors(lead)))}")
+    positives_tex = ", ".join(_tex_fraction(c) for c in positives)
+    if lead == 1:
+        s.step(r"Since $q$ can only be $1$, the positive candidates are just the factors of "
+               f"${const}$:", positives_tex)
+    else:
+        s.step(r"Form every fraction $\frac{p}{q}$, reduce it, drop duplicates, and sort:",
+               positives_tex)
+    s.step("Each candidate can also be negative, so list the negatives after them in the "
+           "same order.")
+    s.answer(solution, lead="With the positives first and then the negatives, the answer is")
+    return problem, solution, s.done()
 
 
 @register
@@ -796,7 +1229,27 @@ def alg2_solve_system_three(max_coeff=3, min_sol=-4, max_sol=4):
         f"Format your answer as (x, y, z)."
     )
     solution = f"$({x}, {y}, {z})$"
-    return problem, solution
+
+    s = Steps()
+    consts = [ca * x + cb * y + cc * z for ca, cb, cc in rows]
+    det, expansion = _det3(rows)
+    s.step("Use Cramer's rule. First find the determinant $D$ of the coefficient matrix, "
+           "expanding along the first row.",
+           f"D = {_matrix(rows, 'vmatrix')} = {expansion} = {det}")
+    dets = []
+    for col, var in enumerate("xyz"):
+        replaced = [row[:col] + [k] + row[col + 1:] for row, k in zip(rows, consts)]
+        value, expansion = _det3(replaced)
+        dets.append(value)
+        s.step(f"For $D_{var}$, replace the ${var}$-column with the constants "
+               f"${', '.join(map(str, consts))}$.",
+               f"D_{var} = {_matrix(replaced, 'vmatrix')} = {expansion} = {value}")
+    s.step("Divide each by $D$.", r", \quad ".join(
+        f"{var} = \\frac{{D_{var}}}{{D}} = {tex_frac(value, det)} = {answer}"
+        for var, value, answer in zip("xyz", dets, (x, y, z))
+    ))
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -828,7 +1281,24 @@ def alg2_matrix_operation(min_v=-6, max_v=6):
         f"Give the entry in row {i}, column {j} (an integer)."
     )
     solution = f"${entry}$"
-    return problem, solution
+
+    s = Steps()
+    s.step("Write the matrices.", rf"A = {_matrix(A)}, \quad B = {_matrix(B)}")
+    if op == "add":
+        s.step(f"To add matrices, add the entries in the same position. In row {i}, "
+               f"column {j}:",
+               f"{A[i - 1][j - 1]} + {paren(B[i - 1][j - 1])} = {entry}")
+    else:
+        row = A[i - 1]
+        col = [B[0][j - 1], B[1][j - 1]]
+        s.step(f"The row {i}, column {j} entry of $AB$ combines row {i} of $A$ with "
+               f"column {j} of $B$.",
+               rf"{_matrix([row])} \text{{ and }} {_matrix([[col[0]], [col[1]]])}")
+        s.step("Multiply matching entries and add.",
+               rf"{row[0]} \cdot {paren(col[0])} + {row[1]} \cdot {paren(col[1])} "
+               f"= {row[0] * col[0]} + {paren(row[1] * col[1])} = {entry}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -854,7 +1324,29 @@ def alg2_solve_polynomial_factoring(min_root=-5, max_root=5):
         f"to greatest, separated by commas."
     )
     solution = ", ".join(str(r) for r in sorted(roots))
-    return problem, solution
+
+    s = Steps()
+    # Pull out the root a student would find first: 0 if the constant term is
+    # 0, else the smallest candidate (positive before negative).
+    first = min(roots, key=lambda r: (abs(r), r < 0))
+    rest = sorted(r for r in roots if r != first)
+    quadratic = _poly(_synthetic_division(coeffs, first)[0])
+    if first == 0:
+        s.step("The constant term is $0$, so every term has a factor of $x$. Factor it out.",
+               f"p(x) = x({quadratic})")
+    else:
+        s.step(f"By the Rational Root Theorem, any integer root divides the constant term "
+               f"${coeffs[-1]}$. Testing these, $x={first}$ works:",
+               f"p({first}) = {_subst_poly(coeffs, first)} = 0")
+        s.step(f"So $({_divisor_str(first)})$ is a factor. Divide it out with synthetic division.",
+               f"p(x) = ({_divisor_str(first)})({quadratic})")
+    s.step(f"Factor ${quadratic}$: find two numbers that multiply to ${rest[0] * rest[1]}$ and add "
+           f"to ${-(rest[0] + rest[1])}$. They are ${-rest[0]}$ and ${-rest[1]}$.",
+           "p(x) = " + "".join(_root_factor(r) for r in [first] + rest))
+    s.step("Set each factor equal to zero (Zero Product Property).",
+           r", \quad ".join(f"x = {r}" for r in [first] + rest))
+    s.answer(solution, lead="From least to greatest, the answer is")
+    return problem, solution, s.done()
 
 
 @register
@@ -888,7 +1380,20 @@ def alg2_conic_equation(min_axis=2, max_axis=8):
             f"its standard-form equation as x^2/A-y^2/B=1 with integers A and B."
         )
         solution = f"$x^2/{A}-y^2/{B}=1$"
-    return problem, solution
+
+    s = Steps()
+    sign = "+" if kind == "ellipse" else "-"
+    if kind == "ellipse":
+        s.formula("The standard form of an ellipse centered at the origin",
+                  r"\frac{x^2}{a^2} + \frac{y^2}{b^2} = 1")
+    else:
+        s.formula("The standard form of a left-right hyperbola centered at the origin",
+                  r"\frac{x^2}{a^2} - \frac{y^2}{b^2} = 1")
+    s.substitute(rf"\frac{{x^2}}{{{a}^2}} {sign} \frac{{y^2}}{{{b}^2}} = 1",
+                 text=f"Substitute $a = {a}$ and $b = {b}$.")
+    s.step("Square the semi-axes.", rf"\frac{{x^2}}{{{A}}} {sign} \frac{{y^2}}{{{B}}} = 1")
+    s.answer(solution, lead="Written with slashes, the answer is")
+    return problem, solution, s.done()
 
 
 @register
@@ -917,4 +1422,19 @@ def alg2_polynomial_end_behavior(min_degree=2, max_degree=5):
         f"separated by a comma (the x -> -inf value first)."
     )
     solution = f"{left}, {right}"
-    return problem, solution
+
+    s = Steps()
+    tex = {"inf": r"\infty", "-inf": r"-\infty"}
+    s.step(f"For large $|x|$, the leading term ${_format_polynomial([(lead, degree)])}$ "
+           f"controls the end behavior.")
+    s.step(rf"The leading coefficient ${lead}$ is {'positive' if lead > 0 else 'negative'}, so "
+           rf"the right end goes {'up' if lead > 0 else 'down'}: as $x \to \infty$, "
+           rf"$y \to {tex[right]}$.")
+    if degree % 2 == 0:
+        s.step(rf"The degree ${degree}$ is even, so both ends go the same way: as "
+               rf"$x \to -\infty$, $y \to {tex[left]}$.")
+    else:
+        s.step(rf"The degree ${degree}$ is odd, so the ends go opposite ways: as "
+               rf"$x \to -\infty$, $y \to {tex[left]}$.")
+    s.answer(solution, lead=r"Listing the $x \to -\infty$ value first, the answer is")
+    return problem, solution, s.done()

@@ -5,6 +5,7 @@ import 'katex/dist/katex.min.css';
 import './MathProblem.css';
 import MathProblemDisplay from './MathProblemDisplay.jsx'
 import MathProblemResponse from './MathProblemResponse.jsx'
+import SolutionSteps from './SolutionSteps.jsx';
 import { apiFetch, localDay } from './auth.js';
 import { createLogger } from './logger.js';
 
@@ -40,8 +41,73 @@ function LearnMoreLink({ url }) {
       // bubbling into any card-level handler.
       onClick={(e) => e.stopPropagation()}
     >
-      Learn more ↗
+      Watch Video ↗
     </a>
+  );
+}
+
+// Reasons a student can pick when reporting a card from its incorrect back
+// face. Values match ProblemReport.REASON_CHOICES on the backend; "other"
+// requires a typed description.
+const REPORT_REASONS = [
+  { value: 'answer_marked_wrong', label: 'My answer was correct or equivalent, but was marked incorrect' },
+  { value: 'solution_incorrect', label: "Solveki's solution is incorrect" },
+  { value: 'other', label: 'Other' },
+];
+
+// The "Report issue" form shown on the incorrect back face. Submitting hands
+// the chosen reason (and description) to `onSubmit`.
+function ReportIssueForm({ onSubmit, onCancel }) {
+  const [reason, setReason] = useState(null);
+  const [details, setDetails] = useState('');
+  const canSubmit = reason !== null && (reason !== 'other' || details.trim() !== '');
+  const submit = (e) => {
+    e.preventDefault();
+    if (canSubmit) onSubmit({ reason, details: details.trim() });
+  };
+  return (
+    <form className="math-problem-report" onSubmit={submit}>
+      <fieldset className="math-problem-report-reasons">
+        <legend className="math-problem-report-legend">What's wrong with this question?</legend>
+        {REPORT_REASONS.map((r) => (
+          <label key={r.value} className="math-problem-report-reason">
+            <input
+              type="radio"
+              name="report-reason"
+              value={r.value}
+              checked={reason === r.value}
+              onChange={() => setReason(r.value)}
+            />
+            {r.label}
+          </label>
+        ))}
+      </fieldset>
+      <textarea
+        className="math-problem-report-details"
+        aria-label="Describe the problem"
+        placeholder={reason === 'other' ? 'Describe the problem' : 'Add details (optional)'}
+        maxLength={2000}
+        rows={3}
+        value={details}
+        onChange={(e) => setDetails(e.target.value)}
+      />
+      <div className="math-problem-back-actions">
+        <button
+          type="button"
+          className="math-problem-back-button math-problem-back-secondary"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="math-problem-back-button math-problem-back-report"
+          disabled={!canSubmit}
+        >
+          Submit report
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -86,22 +152,26 @@ function MathProblem() {
   const [problem, setProblem] = useState(null);
   const [topicName, setTopicName] = useState(null);
   const [learnMoreUrl, setLearnMoreUrl] = useState(null);
-  const [solution, setSolution] = useState(null);
   const [currentNumber, setCurrentNumber] = useState(null);
   const [total, setTotal] = useState(null);
   const [status, setStatus] = useState('loading'); // loading | active | no_topics | completed
   const [error, setError] = useState(null);
   const [flipped, setFlipped] = useState(false); // true rotates the card to its back
   const [result, setResult] = useState('correct'); // 'correct' | 'incorrect' — back-face content
-  const [resultAnswer, setResultAnswer] = useState(null); // solution frozen for the back face
+  const [resultAnswer, setResultAnswer] = useState(null); // solution revealed on the incorrect back face
+  const [resultSteps, setResultSteps] = useState([]); // its step-by-step explanation, if the generator gave one
   const [attempt, setAttempt] = useState(1);
   const [overriding, setOverriding] = useState(false); // true while the incorrect face eases into "Correct!"
+  const [reporting, setReporting] = useState(false); // true while the incorrect face shows the report form
+  const [reported, setReported] = useState(false); // true once a report was filed for the current card
   const [showConfetti, setShowConfetti] = useState(false);
   // When the current card appeared, and how long the student took to answer it
   // (frozen at the final answer, so the dwell on the back face doesn't count).
   // Reported with the advance so teachers can see time spent reviewing.
   const shownAtRef = useRef(Date.now());
   const answerSecondsRef = useRef(0);
+  // The student's last (wrong) answer, sent with a report so admins can see it.
+  const lastAnswerRef = useRef('');
   const MAX_ATTEMPTS = 2;
 
   // Fire confetti. Celebration is gated entirely by the `celebrate` flag below
@@ -136,11 +206,13 @@ function MathProblem() {
     setProblem(result.problem);
     setTopicName(result.topic_name ?? null);
     setLearnMoreUrl(result.learn_more_url ?? null);
-    setSolution(result.solution?.replace(/\$/g, ''));
     setCurrentNumber(result.current_number);
     setTotal(result.total);
-    setAttempt(1);
+    // The backend counts attempts, so a reload resumes the one in progress.
+    setAttempt(result.attempt ?? 1);
     setOverriding(false);
+    setReporting(false);
+    setReported(false);
     setFlipped(false);
     setStatus('active');
     shownAtRef.current = Date.now();
@@ -192,12 +264,14 @@ function MathProblem() {
   // timer from finishing yesterday's last card, firing after the deck has
   // rolled over to today's card 1 — can't step the fresh deck past card 1.
   // `seconds` is how long the student spent answering the card being left.
+  // `report`, when set, files a problem report against that card.
   const advanceDeck = useMutation({
-    mutationFn: async ({ outcome, fromNumber, seconds }) => {
+    mutationFn: async ({ outcome, fromNumber, seconds, report }) => {
       const body = {};
       if (typeof outcome === 'string') body.outcome = outcome;
       if (typeof fromNumber === 'number') body.from_number = fromNumber;
       if (typeof seconds === 'number') body.seconds = seconds;
+      if (report) body.report = report;
       const response = await apiFetch(`/deck/advance/?today=${localDay()}`, {
         method: 'POST',
         ...(Object.keys(body).length ? { body: JSON.stringify(body) } : {}),
@@ -213,6 +287,25 @@ function MathProblem() {
       setError(err.message);
     },
   });
+
+  // Ask the backend to grade `answer` against the current card. The deck
+  // payload never carries the solution (it would be readable in dev tools), so
+  // this is the only place an answer is checked. Resolves to the parsed
+  // response ({ correct, attempts_left, solution? }), or null after a stale
+  // card (409), in which case the deck is reloaded to resync.
+  const checkAnswer = async (answer, fromNumber) => {
+    const response = await apiFetch(`/deck/check/?today=${localDay()}`, {
+      method: 'POST',
+      body: JSON.stringify({ answer, from_number: fromNumber }),
+    });
+    if (response.status === 409) {
+      log.warn('Answer was for a stale card; reloading the deck');
+      deckQuery.refetch();
+      return null;
+    }
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+    return response.json();
+  };
 
   // The deck resets at the start of each day, but the SPA can sit open across
   // midnight (a student leaves the tab up overnight). Fetching only on mount
@@ -262,20 +355,42 @@ function MathProblem() {
     setTimeout(() => advanceDeck.mutate({ outcome, fromNumber: from, seconds }), 1400);
   };
 
-  const handleIncorrect = () => {
-    if (attempt < MAX_ATTEMPTS) {
-      setAttempt(attempt + 1);
+  // Submit an answer for grading, then route to the correct/incorrect flow.
+  // Resolves to the verdict (true/false, or null for none) for the answer box.
+  const handleSubmit = async (answer) => {
+    let check;
+    try {
+      check = await checkAnswer(answer, currentNumber);
+    } catch (err) {
+      log.error('Failed to check answer:', err.message);
+      setError(err.message);
+      return null;
+    }
+    if (!check) return null;
+    if (check.correct) handleCorrect();
+    else handleIncorrect(answer, check);
+    return check.correct;
+  };
+
+  const handleIncorrect = (answer, check) => {
+    lastAnswerRef.current = answer ?? '';
+    if (check.attempts_left > 0) {
+      setAttempt(MAX_ATTEMPTS - check.attempts_left + 1);
     } else {
       // Out of attempts: flip to show the correct answer. Unlike the correct
       // face (which auto-advances), the incorrect face waits for the student to
-      // act — either accepting the miss ("Continue") or overriding it ("I got
-      // this correct") if the answer box wrongly marked a correct answer wrong.
-      // A timed auto-advance would give no time to read the answer or override.
-      // Freeze the answer on the back face so it isn't replaced by the next
-      // problem's solution while the card rotates back to the front.
+      // act — either accepting the miss ("Continue") or reporting the card
+      // ("Report issue") if it was marked wrong unfairly or the question itself
+      // is faulty. A timed auto-advance would give no time to read the answer
+      // or file a report.
+      // The backend reveals the solution (and its steps) only now that attempts
+      // are used up. They stay in `resultAnswer`/`resultSteps` until the next
+      // miss, so the back face keeps showing them while the card rotates to the
+      // next problem.
       stopCardTimer();
       setResult('incorrect');
-      setResultAnswer(solution);
+      setResultAnswer(check.solution?.replace(/\$/g, ''));
+      setResultSteps(check.steps ?? []);
       setFlipped(true);
     }
   };
@@ -284,21 +399,27 @@ function MathProblem() {
   const handleAcceptIncorrect = () =>
     advanceDeck.mutate({ outcome: 'incorrect', fromNumber: currentNumber, seconds: answerSecondsRef.current });
 
-  // From the incorrect back face: the student says the answer box wrongly
-  // marked them wrong. Override to a clean correct grade (full credit). The
-  // back face is already showing, so we can't lean on the flip to soften the
-  // swap the way the front-face correct flow does — instead `overriding` fades
-  // the "Correct!" content in over the incorrect content, and we hold that beat
-  // (matching handleCorrect's dwell) before advancing so the reveal isn't blunt.
-  const handleOverrideCorrect = () => {
-    log.info('Student overrode an incorrect grade to correct');
+  // From the incorrect back face: the student reports the card — their answer
+  // was wrongly marked wrong, the solution is wrong, or something else. The
+  // report rides along with the advance, which grades the card as a clean
+  // correct (full credit) so a faulty card can't drag the topic's schedule
+  // down. The back face is already showing, so we can't lean on the flip to
+  // soften the swap the way the front-face correct flow does — instead
+  // `overriding` fades the "Correct!" content in over the incorrect content,
+  // and we hold that beat (matching handleCorrect's dwell) before advancing so
+  // the reveal isn't blunt.
+  const handleReportSubmit = ({ reason, details }) => {
+    log.info('Student reported a problem:', reason);
     // Capture the card being answered now, so a stray timer firing after a
     // day-rollover reload carries a stale from_number the backend will reject.
     const from = currentNumber;
+    const seconds = answerSecondsRef.current;
+    const report = { reason, details, user_answer: lastAnswerRef.current };
+    setReporting(false);
+    setReported(true);
     setResult('correct');
     setOverriding(true);
-    const seconds = answerSecondsRef.current;
-    setTimeout(() => advanceDeck.mutate({ outcome: 'correct_first', fromNumber: from, seconds }), 1400);
+    setTimeout(() => advanceDeck.mutate({ outcome: 'correct_first', fromNumber: from, seconds, report }), 1400);
   };
 
   if (error) return <div>Error: {error}</div>;
@@ -341,13 +462,24 @@ function MathProblem() {
       <div className={`math-problem-flipper${flipped ? ' flipped' : ''}`}>
         <div className="math-problem-card math-problem-face math-problem-face-front">
           <LearnMoreLink url={learnMoreUrl} />
-          <div className="math-problem-meta">
-            <span className="math-problem-progress">{currentNumber} of {total} questions</span>
-            <span className="math-problem-attempt">Attempt {attempt} of {MAX_ATTEMPTS}</span>
+          <div
+            className="math-problem-progress"
+            role="progressbar"
+            aria-label="Today's practice"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={currentNumber - 1}
+            aria-valuetext={`Question ${currentNumber} of ${total}`}
+          >
+            <div
+              className="math-problem-progress-fill"
+              style={{ width: `${(100 * (currentNumber - 1)) / Math.max(1, total)}%` }}
+            />
           </div>
           {topicName && <span className="math-problem-topic">{topicName}</span>}
           <MathProblemDisplay problem={renderMixedLatex(problem)} />
-          <MathProblemResponse solution={solution} onCorrect={handleCorrect} onIncorrect={handleIncorrect} />
+          <span className="math-problem-attempt">Attempt {attempt} of {MAX_ATTEMPTS}</span>
+          <MathProblemResponse resetKey={`${currentNumber}:${problem}`} onSubmit={handleSubmit} />
         </div>
         <div
           className={`math-problem-card math-problem-face math-problem-face-back ${
@@ -363,20 +495,26 @@ function MathProblem() {
               </svg>
               <span className="math-problem-incorrect-text">Incorrect...</span>
               <span className="math-problem-answer">The answer is {resultAnswer}</span>
-              <div className="math-problem-back-actions">
-                <button
-                  className="math-problem-back-button math-problem-back-continue"
-                  onClick={handleAcceptIncorrect}
-                >
-                  Continue
-                </button>
-                <button
-                  className="math-problem-back-button math-problem-back-override"
-                  onClick={handleOverrideCorrect}
-                >
-                  I got this correct
-                </button>
-              </div>
+              {/* Keyed per card so each new miss starts with the steps collapsed. */}
+              <SolutionSteps key={currentNumber} steps={resultSteps} />
+              {reporting ? (
+                <ReportIssueForm onSubmit={handleReportSubmit} onCancel={() => setReporting(false)} />
+              ) : (
+                <div className="math-problem-back-actions">
+                  <button
+                    className="math-problem-back-button math-problem-back-continue"
+                    onClick={handleAcceptIncorrect}
+                  >
+                    Continue
+                  </button>
+                  <button
+                    className="math-problem-back-button math-problem-back-secondary"
+                    onClick={() => setReporting(true)}
+                  >
+                    Report issue
+                  </button>
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -389,6 +527,11 @@ function MathProblem() {
                 <path d="M7 12.5l3.2 3.2L17 9" stroke="#16a34a" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span className={`math-problem-correct-text${overriding ? ' math-problem-reveal' : ''}`}>Correct!</span>
+              {reported && (
+                <span className="math-problem-report-thanks math-problem-reveal">
+                  Thanks for the report! We'll take a look.
+                </span>
+              )}
             </>
           )}
         </div>

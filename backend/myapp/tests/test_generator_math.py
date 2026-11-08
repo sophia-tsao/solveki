@@ -33,7 +33,7 @@ class VertexFormMathTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["vertex_form"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
 
@@ -70,7 +70,7 @@ class AngleSumMathTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["angle_sum"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pairs = self.PAIR.findall(problem)
             self.assertEqual(len(pairs), 2, f"could not parse: {problem!r}")
             angle_a = self._angle(*pairs[0])
@@ -94,7 +94,7 @@ class AngleSumMathTests(TestCase):
         random.seed(1)
         gen = LOCAL_GENERATORS["angle_sum"]
         for _ in range(SAMPLES):
-            _problem, solution = gen()
+            _problem, solution = gen()[:2]
             fr = self.FRAC.search(solution)
             num, den = int(fr.group(1)), int(fr.group(2))
             self.assertEqual(
@@ -135,7 +135,7 @@ class ArocMathTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["aroc_over_interval"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             terms = self._parse_poly(m.group("poly"))
@@ -153,7 +153,7 @@ class ArocMathTests(TestCase):
         random.seed(2)
         gen = LOCAL_GENERATORS["aroc_over_interval"]
         for _ in range(SAMPLES):
-            problem, _solution = gen()
+            problem, _solution = gen()[:2]
             poly = self.PROBLEM.search(problem).group("poly")
             self.assertNotRegex(
                 poly, r"\d+x\^\d{2,}",

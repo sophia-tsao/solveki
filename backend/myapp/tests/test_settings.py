@@ -66,7 +66,7 @@ class SettingsDeckResizeTests(TestCase):
         self.user = make_user()
         self.client.force_login(self.user)
         self.course = make_course()
-        self.topic = make_topic(self.course, generator_name="addition")
+        self.topic = make_topic(self.course, generator_name="gcd")
         select(self.user, self.topic)
         Settings.objects.update_or_create(
             user=self.user, defaults={"questions_per_day": 10}
@@ -77,7 +77,7 @@ class SettingsDeckResizeTests(TestCase):
             "/settings/", data=json.dumps(body), content_type="application/json"
         )
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_increasing_count_grows_todays_deck(self, mock_gen):
         # Build today's deck at the current count of 10.
         self.assertEqual(self.client.get("/deck/").json()["total"], 10)
@@ -88,7 +88,7 @@ class SettingsDeckResizeTests(TestCase):
         self.assertEqual(len(deck.problems), 15)
         self.assertEqual(self.client.get("/deck/").json()["total"], 15)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_growth_preserves_progress(self, mock_gen):
         self.client.get("/deck/")  # build deck at 10
         self.client.post("/deck/advance/")
@@ -101,7 +101,7 @@ class SettingsDeckResizeTests(TestCase):
         self.assertEqual(deck.current_index, 2)  # progress untouched
         self.assertEqual(self.client.get("/deck/").json()["current_number"], 3)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_decreasing_count_leaves_todays_deck_untouched(self, mock_gen):
         self.client.get("/deck/")  # build deck at 10
 
@@ -111,13 +111,13 @@ class SettingsDeckResizeTests(TestCase):
         self.assertEqual(len(deck.problems), 10)  # not shrunk today
         self.assertEqual(deck.current_index, 0)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_no_deck_yet_is_a_noop(self, mock_gen):
         # No deck built for today; saving should not create one.
         self._patch({"questions_per_day": 15})
         self.assertFalse(DailyDeck.objects.filter(user=self.user).exists())
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_decreasing_below_answered_reads_as_finished(self, mock_gen):
         # Reported bug: build a 15-card deck, answer 11, then lower the count to
         # 8. The practice page must read as finished (all 8 done), not keep
@@ -133,7 +133,7 @@ class SettingsDeckResizeTests(TestCase):
         self.assertTrue(data.get("completed"))
         self.assertEqual(data["total"], 8)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_decreasing_above_answered_caps_visible_total(self, mock_gen):
         # Lowering the count to a value still above progress caps the visible
         # total without losing the student's place.
@@ -149,7 +149,7 @@ class SettingsDeckResizeTests(TestCase):
         self.assertEqual(data["current_number"], 4)
         self.assertEqual(data["total"], 8)
 
-    @mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_decreasing_then_increasing_restores_stored_cards(self, mock_gen):
         # The cap is display-only: the extra stored cards survive a decrease, so
         # bumping the count back up presents them again without regenerating.

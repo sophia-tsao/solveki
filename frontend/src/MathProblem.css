@@ -1,7 +1,9 @@
 .math-problem-stack {
     position: relative;
-    width: 420px;
-    margin: 48px auto 0;
+    width: 540px;
+    /* Bottom margin keeps a card grown by a long step-by-step solution off
+       the footer. */
+    margin: 48px auto 32px;
     /* Room above the front card for the peeking cards behind it. */
     padding-top: 30px;
     /* Perspective for the front card's 3D flip. */
@@ -11,20 +13,20 @@
 .math-problem-card {
     position: relative;
     z-index: 3;
-    width: 420px;
-    min-height: 168px;
+    width: 540px;
+    min-height: 220px;
     box-sizing: border-box;
     background: #ffffff;
     border: 1px solid #dde3ed;
     border-left: 4px solid #2563eb;
     border-radius: 8px;
     margin: 0 auto;
-    padding: 24px 20px;
+    padding: 32px 28px;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: 20px;
 }
 
 /* Cards peeking out behind the current one. No blue accent line — only the
@@ -33,7 +35,7 @@
 .math-problem-card-behind {
     position: absolute;
     left: 50%;
-    min-height: 168px;
+    min-height: 220px;
     border-left: 1px solid #dde3ed;
     transform-origin: top center;
 }
@@ -70,28 +72,29 @@
     text-align: center;
 }
 
-.math-problem-meta {
-    align-self: stretch;
-    display: flex;
-    align-items: center;
-    /* Group the labels to the left so the top-right corner is free for the
-       "Learn more" link; leave room on the right so a long progress/attempt
-       pair never slides under the link. */
-    justify-content: flex-start;
-    gap: 14px;
-    padding-right: 92px;
-}
-
+/* How far through today's deck the student is: the share of cards answered.
+   Its own row across the card's full width, at the top of the card. */
 .math-problem-progress {
-    font-size: 12px;
-    font-weight: 700;
-    color: #2563eb;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    align-self: stretch;
+    height: 8px;
+    border-radius: 999px;
+    background: #dbeafe;
+    overflow: hidden;
 }
 
+.math-problem-progress-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: #2563eb;
+    transition: width 0.3s ease;
+}
+
+/* Sits just above the answer box, lined up with its left edge, and pulled
+   closer to it than the card's usual gap so it reads as the box's label. */
 .math-problem-attempt {
-    font-size: 12px;
+    align-self: stretch;
+    margin-bottom: -12px;
+    font-size: 13px;
     font-weight: 600;
     color: #6b7280;
     text-transform: uppercase;
@@ -99,7 +102,7 @@
 }
 
 /* A pill badge echoing the brand-blue, uppercase, letter-spaced treatment of
-   the meta labels above, so the topic reads as an on-brand category tag rather
+   the card's labels, so the topic reads as an on-brand category tag rather
    than a plain heading. */
 .math-problem-topic {
     align-self: center;
@@ -107,7 +110,7 @@
     border-radius: 999px;
     background: rgba(37, 99, 235, 0.1);
     color: #2563eb;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -122,7 +125,7 @@
     top: 10px;
     right: 14px;
     z-index: 4;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #2563eb;
     text-decoration: none;
@@ -135,7 +138,7 @@
 }
 
 .math-problem-display {
-    font-size: 17px;
+    font-size: 21px;
     font-weight: 600;
     color: #111827;
     text-align: center;
@@ -144,8 +147,8 @@
 
 .math-problem-input {
     width: 100%;
-    padding: 10px 14px;
-    font-size: 15px;
+    padding: 12px 16px;
+    font-size: 17px;
     border: 1.5px solid #dde3ed;
     border-radius: 8px;
     outline: none;
@@ -165,8 +168,8 @@
 }
 
 .math-problem-submit {
-    padding: 10px 18px;
-    font-size: 15px;
+    padding: 12px 22px;
+    font-size: 17px;
     font-weight: 600;
     color: #ffffff;
     background: #2563eb;
@@ -219,8 +222,9 @@
 .math-problem-flipper {
     position: relative;
     z-index: 3;
-    width: 420px;
+    width: 540px;
     margin: 0 auto;
+    display: grid;
     transform-style: preserve-3d;
     transition: transform 0.6s cubic-bezier(0.4, 0.15, 0.2, 1);
 }
@@ -231,6 +235,7 @@
 
 /* Both faces stack in the same spot; only the one facing the viewer shows. */
 .math-problem-face {
+    grid-area: 1 / 1;
     backface-visibility: hidden;
 }
 
@@ -244,6 +249,14 @@
     flex-direction: column;
     justify-content: center;
     gap: 10px;
+}
+
+/* Once flipped, the back face joins the front's grid cell so the card grows
+   to fit it (e.g. an expanded step-by-step solution) instead of spilling out
+   of the flipper. Unflipped it stays out of flow, so a tall incorrect face
+   left over from the last card can't stretch the next card's front. */
+.math-problem-flipper.flipped .math-problem-face-back {
+    position: relative;
 }
 
 /* Ease the accent bar between outcomes so an override from incorrect (red) to
@@ -278,33 +291,33 @@
 }
 
 .math-problem-result-icon {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     flex-shrink: 0;
 }
 
 .math-problem-correct-text {
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 600;
     color: #16a34a;
     letter-spacing: -0.01em;
 }
 
 .math-problem-incorrect-text {
-    font-size: 20px;
+    font-size: 24px;
     font-weight: 600;
     color: #dc2626;
     letter-spacing: -0.01em;
 }
 
 .math-problem-answer {
-    font-size: 15px;
+    font-size: 17px;
     font-weight: 500;
     color: #374151;
 }
 
-/* Actions on the incorrect back face: accept the miss, or override it if the
-   answer box wrongly marked a correct answer wrong. */
+/* Actions on the incorrect back face: accept the miss, or report the card if
+   it was marked wrong unfairly or the question itself is faulty. */
 .math-problem-back-actions {
     display: flex;
     gap: 8px;
@@ -333,17 +346,98 @@
     box-shadow: 0 3px 10px rgba(220, 38, 38, 0.25);
 }
 
-/* Secondary: override to correct. Outlined so it reads as the less-default
-   choice, in the success green to signal what it grants. */
-.math-problem-back-override {
-    color: #16a34a;
+/* Secondary: "Report issue" (and the report form's Cancel). Outlined in a
+   neutral gray so it reads as the less-default choice. */
+.math-problem-back-secondary {
+    color: #374151;
     background: #ffffff;
-    border: 1.5px solid #16a34a;
+    border: 1.5px solid #d1d5db;
 }
 
-.math-problem-back-override:hover {
-    background: #f0fdf4;
-    box-shadow: 0 3px 10px rgba(22, 163, 74, 0.2);
+.math-problem-back-secondary:hover {
+    background: #f9fafb;
+    border-color: #9ca3af;
+}
+
+/* The "Report issue" form, shown in place of the actions on the incorrect
+   back face. */
+.math-problem-report {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.math-problem-report-reasons {
+    align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 0;
+    padding: 0;
+    border: none;
+}
+
+.math-problem-report-legend {
+    padding: 0;
+    margin-bottom: 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #111827;
+}
+
+.math-problem-report-reason {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 14px;
+    color: #374151;
+    cursor: pointer;
+}
+
+.math-problem-report-reason input {
+    margin: 2px 0 0;
+    flex-shrink: 0;
+}
+
+.math-problem-report-details {
+    align-self: stretch;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    resize: vertical;
+}
+
+.math-problem-report-details:focus {
+    outline: none;
+    border-color: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+/* Primary action of the report form. */
+.math-problem-back-report {
+    color: #ffffff;
+    background: #2563eb;
+    border: none;
+}
+
+.math-problem-back-report:hover:not(:disabled) {
+    background: #1d4ed8;
+    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+}
+
+.math-problem-back-report:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.math-problem-report-thanks {
+    font-size: 14px;
+    color: #6b7280;
 }
 
 .confetti {

@@ -315,6 +315,42 @@ LEARN_MORE_VIDEOS = {
     "pc_partial_fractions": "Mt92Ozs7aJg",  # Integration with partial fractions
     "pc_polar_rectangular_equation": "7Xoub1BHb6o",  # Converting Polar Equations to Rectangular Equations (Mario's Math Tutoring)
     "pc_orthogonal_projection": "27vT-NWuw0M",  # Introduction to projections
+    "pc_change_in_tandem": "kQf0gmw-6Po",  # Describing the average rate of change using the concavity of the graph
+    "pc_second_differences": "cGRJ55Q-9ks",  # Connecting average rates of change with the concavity of a graph
+    "pc_degree_from_differences": "Vm7H0VTlIco",  # Polynomials intro
+    "pc_complex_conjugate_zeros": "dnjK4DPqh0k",  # Solving quadratic equations: complex roots
+    "pc_even_odd_function": "fTeO-V_VgEc",  # Even and odd functions: Equations
+    "pc_function_transformation": "ENFNyNPYfZU",  # Identifying function transformations
+    "pc_identify_model": "721RrH6auoU",  # Linear vs. exponential growth: from data
+    "pc_quadratic_model_predict": "WDO-eotwPP8",  # Constructing models of data sets using technology and regressions
+    "pc_exponential_from_two_points": "FRW7SINSYco",  # Constructing exponential models
+    "pc_rewrite_exponential": "vSijVSL3ChU",  # Equivalent forms of exponential expressions
+    "pc_residual": "yMgFHbjbAW8",  # Introduction to residuals and least squares regression
+    "pc_inverse_exponential": "Obch1OP5QyA",  # Relationship between exponentials & logarithms
+    "pc_log_function_features": "DhW9pz5Vfwo",  # Relationship between exponentials & logarithms: graphs
+    "pc_solve_log_equation": "ZQUuhYgjqmw",  # Solving logarithmic equations
+    "pc_exp_log_inequality": "Kv2iHde7Xgw",  # Logarithmic equations: variable in the argument
+    "pc_log_model_context": "CIJXML8n6mI",  # Constructing logarithmic functions from tables
+    "pc_semilog_model": "DhW9pz5Vfwo",  # Relationship between exponentials & logarithms: graphs
+    "pc_periodic_values": "GIhvaBecuO8",  # Exploring the characteristics of periodic functions
+    "pc_sinusoidal_model": "2pwnr_soZEU",  # Trig word problem: solving for temperature
+    "pc_sinusoid_transformations": "QnuCfZD2Xyw",  # Graphing sinusoidal functions with transformations
+    "pc_tangent_features": "XwyawGBo3Lw",  # Understanding the tangent function
+    "pc_reciprocal_trig_values": "Q7htxHDN8LE",  # Finding reciprocal trig ratios
+    "pc_trig_inequality": "c-VkOXIGTqU",  # Interpreting solutions of trigonometric equations
+    "pc_polar_graph_features": "KbPj4xXrBrk",  # Graphing polar functions
+    "pc_polar_rate_of_change": "oDKomV5oLrI",  # Describing characteristics of polar function graphs
+    "pc_parametric_position": "m6c6dlmUT1c",  # Parametric equations intro
+    "pc_parametric_rate_of_change": "s0C08510fHs",  # Determining the average rate of change of parametric planar motion functions over a given interval
+    "pc_parametric_circle_line": "hWhs2cIj7Cw",  # Parametric representations of lines
+    "pc_implicit_curve_points": "eKygWXbAZRI",  # Parameterizing implicitly defined functions
+    "pc_parametrize_ellipse": "eKygWXbAZRI",  # Parameterizing implicitly defined functions
+    "pc_classify_conic": "0A7RR0oy2ho",  # Intro to conic sections
+    "pc_vector_valued_function": "bb4bSCjlFAw",  # Parametric curves
+    "pc_inverse_matrix_entry": "iUQR0enP7RQ",  # Intro to matrix inverses
+    "pc_matrix_transform_point": "ondmopWLiEg",  # Matrix vector products as linear transformations
+    "pc_matrix_composition": "f_DTiXZpb8M",  # Compositions of linear transformations 1
+    "pc_markov_transition": "NKG6DifB3OA",  # Using matrices to manipulate data: Game show
     # AP Calculus
     "int_matrix_22_determinant": "ZAkmBOCiNqU",  # Intro to determinant notation and computation
     "power_rule_differentiation": "bRZmfc1YFsQ",  # Exploring the power rule

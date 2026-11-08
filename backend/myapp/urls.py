@@ -6,9 +6,10 @@ urlpatterns = [
     path('auth/test-login/', views.test_login, name="test_login"),
     path('auth/logout/', views.logout_view, name="logout"),
     path('auth/delete/', views.delete_account, name="delete_account"),
-    path('problem/', views.generate_problem, name="generate_problem"),
     path('deck/', views.get_deck, name="get_deck"),
     path('deck/advance/', views.advance_deck, name="advance_deck"),
+    path('deck/check/', views.check_answer, name="check_answer"),
+    path('deck/test-solution/', views.test_solution, name="test_solution"),
     path('dashboard/', views.view_dashboard, name="view_dashboard"),
     path('practice-calendar/', views.view_practice_calendar, name="view_practice_calendar"),
     path('settings/', views.settings_view, name="settings_view"),
@@ -41,6 +42,7 @@ urlpatterns = [
 
     # Teacher analytics.
     path('teacher/overview/', views.teacher_overview, name="teacher_overview"),
+    path('teacher/overview/focus/', views.overview_focus, name="overview_focus"),
     path('teacher/proficiency-history/', views.proficiency_history, name="proficiency_history"),
     path('teacher/students/<int:student_id>/', views.student_detail, name="student_detail"),
 ]

@@ -3,10 +3,15 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('answer');
 
+// The answer box. It never sees the solution: `onSubmit(answer)` asks the
+// backend to grade the answer and resolves to true (correct), false
+// (incorrect), or null (no verdict, e.g. the request failed). The box only
+// shows the feedback. `resetKey` changes whenever a new problem loads.
 function MathProblemResponse(props) {
     const [response, setResponse] = useState("");
     const [boxColor, setBoxColor] = useState('black');
     const [showIncorrect, setShowIncorrect] = useState(false);
+    const [checking, setChecking] = useState(false);
     const inputRef = useRef(null);
     useEffect(() => {
         // Reset the box state whenever a new problem loads.
@@ -15,32 +20,35 @@ function MathProblemResponse(props) {
         setShowIncorrect(false);
         // Focus the answer box so the user can type right away.
         inputRef.current?.focus();
-    }, [props.solution]);
+    }, [props.resetKey]);
     function updateResponse(event) {
         setResponse(event.target.value);
     }
-    function submitResponse() {
-        // Ignore blank or whitespace-only submissions; they are neither correct nor incorrect.
-        if (response.trim() === "") {
+    async function submitResponse() {
+        // Ignore blank or whitespace-only submissions; they are neither correct
+        // nor incorrect. Also ignore a resubmit while a check is in flight.
+        if (response.trim() === "" || checking) {
             return;
         }
-        const numResponse = parseFloat(response);
-        const numSolution = parseFloat(props.solution);
-        const isCorrect = response === props.solution ||
-            (!isNaN(numResponse) && !isNaN(numSolution) && numResponse === numSolution);
-        if(isCorrect){
+        setChecking(true);
+        let isCorrect;
+        try {
+            isCorrect = await props.onSubmit(response);
+        } finally {
+            setChecking(false);
+        }
+        if (isCorrect === true) {
             log.debug('Correct answer submitted');
             setResponse("");
             setBoxColor('black');
-            props.onCorrect();
-        }else{
-            log.debug('Incorrect answer submitted; expected solution:', props.solution);
+        } else if (isCorrect === false) {
+            log.debug('Incorrect answer submitted');
             setResponse("");
             setBoxColor('red');
             setShowIncorrect(true);
             setTimeout(() => setShowIncorrect(false), 1500);
-            props.onIncorrect?.();
         }
+        // Any other result: no verdict, so the typed answer stays put.
     }
     function inputKeyPress(event){
         if(event.key==="Enter"){
@@ -59,7 +67,7 @@ function MathProblemResponse(props) {
             <button
                 className={`math-problem-submit${showIncorrect ? ' math-problem-submit-incorrect' : ''}`}
                 onClick={submitResponse}
-                disabled={response.trim() === ""}
+                disabled={response.trim() === "" || checking}
             >
                 {showIncorrect ? 'Incorrect!' : 'Submit'}
             </button>

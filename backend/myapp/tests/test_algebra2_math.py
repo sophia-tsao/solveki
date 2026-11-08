@@ -56,7 +56,7 @@ class EvaluatePolynomialTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_evaluate_polynomial"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             coeffs = parse_poly(m.group("poly"))
@@ -79,7 +79,7 @@ class PolynomialDivisionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_polynomial_division"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             sm = self.SOLUTION.search(solution)
             self.assertIsNotNone(pm, f"could not parse problem: {problem!r}")
@@ -108,7 +108,7 @@ class RemainderTheoremTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_remainder_theorem"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             r = int(m.group("r")) if m.group("sign") == "-" else -int(m.group("r"))
@@ -128,7 +128,7 @@ class BuildPolynomialTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_build_polynomial_from_roots"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             rm = self.PROBLEM.search(problem)
             self.assertIsNotNone(rm, f"could not parse: {problem!r}")
             roots = [int(n) for n in self.NUM.findall(rm.group("roots"))]
@@ -166,7 +166,7 @@ class AddComplexTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_add_complex"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.OPERANDS.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = int(m.group("a"))
@@ -194,7 +194,7 @@ class RationalExponentTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_rational_exponent"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             base = int(m.group("base"))
@@ -217,7 +217,7 @@ class SolveRadicalTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_solve_radical_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b, c = int(m.group("a")), int(m.group("b")), int(m.group("c"))
@@ -237,7 +237,7 @@ class SolveExponentialTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_solve_exponential_log"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             base, value = int(m.group("base")), int(m.group("value"))
@@ -254,7 +254,7 @@ class EvaluateLogTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_evaluate_log"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             base, n = int(m.group("base")), int(m.group("n"))
@@ -273,7 +273,7 @@ class InverseLinearTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_inverse_linear_function"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             mm, b, a = int(m.group("m")), int(m.group("b")), int(m.group("a"))
@@ -294,7 +294,7 @@ class ZScoreTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_z_score"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x, mean, sd = int(m.group("x")), int(m.group("mean")), int(m.group("sd"))
@@ -313,7 +313,7 @@ class EmpiricalRuleTests(TestCase):
         gen = LOCAL_GENERATORS["alg2_empirical_rule"]
         expected = {1: "68%", 2: "95%", 3: "99.7%"}
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             k = int(m.group("k"))
@@ -329,7 +329,7 @@ class SolveSystemMatrixTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_solve_system_matrix"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             eqs = self.EQ.findall(problem)
             self.assertEqual(len(eqs), 2, f"could not parse: {problem!r}")
             sm = self.SOLUTION.search(solution)
@@ -350,7 +350,7 @@ class LogProductRuleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_log_product_rule"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, q = int(m.group("p")), int(m.group("q"))
@@ -366,7 +366,7 @@ class LogQuotientRuleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_log_quotient_rule"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, q = int(m.group("p")), int(m.group("q"))
@@ -382,7 +382,7 @@ class LogPowerRuleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_log_power_rule"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, k = int(m.group("p")), int(m.group("k"))
@@ -398,7 +398,7 @@ class LogChangeOfBaseTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_log_change_of_base"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             base, n = int(m.group("base")), int(m.group("n"))
@@ -422,7 +422,7 @@ class RationalizeDenominatorTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_rationalize_denominator"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             d = self.DENOM.search(problem)
             self.assertIsNotNone(d, f"could not parse: {problem!r}")
             denom = d.group("denom")
@@ -451,7 +451,7 @@ class RadicalEquationConjugateTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_radical_equation_conjugate"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b, c = int(m.group("a")), int(m.group("b")), int(m.group("c"))
@@ -472,7 +472,7 @@ class FunctionCompositionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_function_composition"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             cf = parse_poly(m.group("f"))
@@ -495,7 +495,7 @@ class SolveRationalEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_solve_rational_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, c = int(m.group("a")), int(m.group("c"))
@@ -527,7 +527,7 @@ class RationalExpressionOpsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_rational_expression_ops"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             sm = self.SOLUTION.search(solution)
@@ -568,7 +568,7 @@ class ComplexDivisionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_complex_division"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = int(m.group("a"))
@@ -595,7 +595,7 @@ class ComplexModulusTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_complex_modulus"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = int(m.group("a"))
@@ -622,7 +622,7 @@ class InverseNonlinearTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_inverse_nonlinear"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             sm = self.SOLUTION.search(solution)
@@ -652,7 +652,7 @@ class RationalRootListTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_rational_root_list"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             coeffs = parse_poly(m.group("poly"))
@@ -675,7 +675,7 @@ class SolveSystemThreeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_solve_system_three"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             eqs = self.EQ.findall(problem)
             self.assertEqual(len(eqs), 3, f"could not parse: {problem!r}")
             sm = self.SOLUTION.search(solution)
@@ -700,7 +700,7 @@ class MatrixOperationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_matrix_operation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             nums = [int(g) for g in m.groups()]
@@ -723,7 +723,7 @@ class SolvePolynomialFactoringTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_solve_polynomial_factoring"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             coeffs = parse_poly(m.group("poly"))
@@ -745,7 +745,7 @@ class ConicEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_conic_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             a = int(self.A_VAL.search(problem).group("a"))
             b = int(self.B_VAL.search(problem).group("b"))
             sm = self.SOLUTION.search(solution)
@@ -765,7 +765,7 @@ class PolynomialEndBehaviorTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg2_polynomial_end_behavior"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             coeffs = parse_poly(m.group("poly"))
@@ -778,3 +778,93 @@ class PolynomialEndBehaviorTests(TestCase):
                 left = "-inf" if lead > 0 else "inf"
             self.assertEqual(solution, f"{left}, {right}",
                              f"{problem!r} -> {solution!r}")
+
+
+# --- Step-by-step explanations ----------------------------------------------
+
+ALG2_GENERATORS = sorted(
+    name for name, gen in LOCAL_GENERATORS.items() if gen.__module__ == algebra2.__name__
+)
+STEP_SAMPLES = 300
+
+
+def _squash(text):
+    return re.sub(r"\s+", "", (text or "").replace("$", ""))
+
+
+class StepsTests(TestCase):
+    """The worked solutions: well-sized, end on the answer, and their math holds."""
+
+    def test_every_generator_has_steps_ending_on_the_answer(self):
+        random.seed(0)
+        for name in ALG2_GENERATORS:
+            gen = LOCAL_GENERATORS[name]
+            for _ in range(STEP_SAMPLES):
+                problem, solution, steps = gen()
+                self.assertTrue(2 <= len(steps) <= 6, f"{name}: {len(steps)} steps for {problem!r}")
+                last = _squash(steps[-1]["text"]) + _squash(steps[-1]["math"])
+                self.assertIn(_squash(solution), last, f"{name}: {problem!r}")
+
+    def test_evaluated_terms_sum_to_the_value(self):
+        # "p(3) = 36-15-4" followed by "p(3) = 17".
+        random.seed(0)
+        for name in ("alg2_evaluate_polynomial", "alg2_remainder_theorem"):
+            gen = LOCAL_GENERATORS[name]
+            for _ in range(STEP_SAMPLES):
+                problem, solution, steps = gen()
+                terms = steps[-3]["math"].split("=")[1]
+                total = sum(int(t) for t in re.findall(r"[+-]?\d+", terms))
+                self.assertEqual(f"${total}$", solution, f"{problem!r}: {terms!r}")
+
+    def test_synthetic_division_quotient_matches_solution(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["alg2_polynomial_division"]
+        for _ in range(STEP_SAMPLES):
+            problem, solution, steps = gen()
+            quotient = steps[-2]["math"].removeprefix("q(x) = ")
+            self.assertIn(f"quotient ${quotient}$", solution, f"{problem!r}")
+
+    def test_elimination_step_holds_at_the_solution(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["alg2_solve_system_matrix"]
+        sol_re = re.compile(r"x=(-?\d+), y=(-?\d+)")
+        for _ in range(STEP_SAMPLES):
+            problem, solution, steps = gen()
+            y = int(sol_re.search(solution).group(2))
+            # The first step whose math is a lone "ky = r" equation.
+            eq = next(s["math"] for s in steps if re.fullmatch(r"-?\d*y = -?\d+", s["math"] or ""))
+            lhs, rhs = eq.split(" = ")
+            coeff = lhs.removesuffix("y")
+            k = {"": 1, "-": -1}[coeff] if coeff in ("", "-") else int(coeff)
+            self.assertEqual(k * y, int(rhs), f"{problem!r}: {eq!r}")
+
+    def test_cramer_determinants_are_right(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["alg2_solve_system_three"]
+        det_re = re.compile(r"\\begin\{vmatrix\}(.*?)\\end\{vmatrix\}.* = (-?\d+)$")
+        for _ in range(STEP_SAMPLES):
+            problem, solution, steps = gen()
+            for step in steps[:4]:
+                m = det_re.search(step["math"])
+                self.assertIsNotNone(m, step["math"])
+                rows = [[int(v) for v in row.split("&")] for row in m.group(1).split(r"\\")]
+                (a, b, c), (d, e, f), (g, h, i) = rows
+                det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+                self.assertEqual(det, int(m.group(2)), f"{problem!r}: {step['math']!r}")
+
+    def test_complex_division_numerator_is_the_conjugate_product(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["alg2_complex_division"]
+        z_re = re.compile(r"\((-?\d+)([+-]\d*)i\)/\((-?\d+)([+-]\d*)i\)")
+
+        def coeff(tok):
+            return int(tok + "1") if tok in "+-" else int(tok)
+
+        for _ in range(STEP_SAMPLES):
+            problem, solution, steps = gen()
+            a, b, c, d = z_re.search(problem).groups()
+            a, b, c, d = int(a), coeff(b), int(c), coeff(d)
+            numerator = (complex(a, b) * complex(c, -d))
+            combined = steps[2]["math"].split(" = ")[1]
+            self.assertEqual(combined, algebra2._complex_str(int(numerator.real), int(numerator.imag)),
+                             f"{problem!r}")

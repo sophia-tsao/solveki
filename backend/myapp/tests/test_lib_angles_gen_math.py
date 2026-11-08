@@ -8,7 +8,9 @@ no banned LaTeX tokens, and no number carrying more than three decimals.
 import math
 import random
 import re
+from decimal import Decimal, ROUND_HALF_UP
 from fractions import Fraction
+from unittest.mock import patch
 
 from django.test import TestCase
 
@@ -30,6 +32,12 @@ _BANNED = [
 _TOO_MANY_DECIMALS = re.compile(r"\d+\.\d{4,}")
 
 
+def _half_up(value):
+    """Round a ``Decimal`` to the nearest thousandth, halves up, as typed."""
+    text = str(value.quantize(Decimal("0.001"), rounding=ROUND_HALF_UP))
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
 def _assert_typeable(test, problem, solution):
     for token in _BANNED:
         test.assertNotIn(token, solution, f"banned {token!r} in solution: {solution!r}")
@@ -47,7 +55,7 @@ class AngleRegularPolygonTests(TestCase):
         gen = LOCAL_GENERATORS["angle_regular_polygon"]
         pat = re.compile(r"polygon with \$(\d+)\$ sides")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group(1))
@@ -62,7 +70,7 @@ class AngleBtwVectorsTests(TestCase):
         gen = LOCAL_GENERATORS["angle_btw_vectors"]
         pat = re.compile(r"vectors \(([-\d, ]+)\) and \(([-\d, ]+)\)")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = [int(v) for v in m.group(1).split(", ")]
@@ -82,7 +90,7 @@ class DegreeToRadTests(TestCase):
         gen = LOCAL_GENERATORS["degree_to_rad"]
         pat = re.compile(r"Convert \$(\d+)\$ degrees to radians")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             deg = int(m.group(1))
@@ -97,7 +105,7 @@ class RadianToDegTests(TestCase):
         gen = LOCAL_GENERATORS["radian_to_deg"]
         pat = re.compile(r"Convert \$([-\d.]+)\$ radians to degrees")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             rad = float(m.group(1))
@@ -112,7 +120,7 @@ class ComplexToPolarTests(TestCase):
         gen = LOCAL_GENERATORS["complex_to_polar"]
         pat = re.compile(r"number \$(-?\d+)([+-]\d+)i\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = int(m.group(1))
@@ -130,7 +138,7 @@ class TrigDifferentiationTests(TestCase):
         pat = re.compile(r"Differentiate \$(.+?)\$ with respect")
         seen = set()
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             func = m.group(1)
@@ -148,13 +156,20 @@ class FractionToDecimalTests(TestCase):
         gen = LOCAL_GENERATORS["fraction_to_decimal"]
         pat = re.compile(r"fraction \$(\d+)/(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n, d = int(m.group(1)), int(m.group(2))
-            expected = num(n / d)
+            expected = _half_up(Decimal(n) / Decimal(d))
             self.assertEqual(solution, expected, f"for {n}/{d}: {problem!r}")
             _assert_typeable(self, problem, solution)
+
+    def test_exact_ties_round_half_up(self):
+        # 1/16 = 0.0625 is an exact tie; float round() would give 0.062.
+        gen = LOCAL_GENERATORS["fraction_to_decimal"]
+        for n, d, expected in [(1, 16, "0.063"), (3, 16, "0.188"), (5, 16, "0.313")]:
+            with patch("random.randint", side_effect=[n, d]):
+                self.assertEqual(gen()[1], expected, f"{n}/{d}")
 
 
 class CelsiusToFahrenheitTests(TestCase):
@@ -163,10 +178,84 @@ class CelsiusToFahrenheitTests(TestCase):
         gen = LOCAL_GENERATORS["celsius_to_fahrenheit"]
         pat = re.compile(r"Convert \$(-?\d+)\$ degrees Celsius")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             c = int(m.group(1))
             expected = num(Fraction(c) * 9 / 5 + 32)
             self.assertEqual(solution, expected, f"for {c}: {problem!r}")
             _assert_typeable(self, problem, solution)
+
+
+NEW_SAMPLES = 2000
+
+
+def _degrees(pattern, problem, test):
+    m = re.search(pattern, problem)
+    test.assertIsNotNone(m, f"could not parse: {problem!r}")
+    return [int(g) for g in m.groups()]
+
+
+class ComplementarySupplementaryTests(TestCase):
+    PATTERN = re.compile(
+        r"angle that is (complementary|supplementary) to an angle measuring "
+        r"\$(\d+)\^\\circ\$"
+    )
+
+    def test_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["complementary_and_supplementary_angle"]
+        kinds = set()
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            m = self.PATTERN.search(problem)
+            self.assertIsNotNone(m, f"could not parse: {problem!r}")
+            kind, angle = m.group(1), int(m.group(2))
+            total = 90 if kind == "complementary" else 180
+            self.assertEqual(int(solution), total - angle, problem)
+            self.assertGreater(int(solution), 0, problem)
+            self.assertEqual(solution, str(int(solution)))
+            kinds.add(kind)
+        self.assertEqual(kinds, {"complementary", "supplementary"})
+
+
+class ThirdAngleOfTriangleTests(TestCase):
+    def test_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["third_angle_of_triangle"]
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            a, b = _degrees(
+                r"triangle measure \$(\d+)\^\\circ\$ and \$(\d+)\^\\circ\$",
+                problem, self,
+            )
+            self.assertEqual(solution, str(180 - a - b), problem)
+            self.assertGreater(int(solution), 0, problem)
+
+
+class FourthAngleOfQuadrilateralTests(TestCase):
+    def test_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["fourth_angle_of_quadrilateral"]
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            a, b, c = _degrees(
+                r"measure \$(\d+)\^\\circ\$, \$(\d+)\^\\circ\$, "
+                r"and \$(\d+)\^\\circ\$",
+                problem, self,
+            )
+            self.assertEqual(solution, str(360 - a - b - c), problem)
+            # Every angle (including the answer) is a convex-quadrilateral angle.
+            for angle in (a, b, c, int(solution)):
+                self.assertTrue(0 < angle < 180, problem)
+
+
+class SumOfPolygonAnglesTests(TestCase):
+    def test_matches(self):
+        random.seed(0)
+        gen = LOCAL_GENERATORS["sum_of_polygon_angles"]
+        for _ in range(NEW_SAMPLES):
+            problem, solution = gen()[:2]
+            (n,) = _degrees(r"polygon with \$(\d+)\$ sides", problem, self)
+            self.assertGreaterEqual(n, 3)
+            self.assertEqual(solution, str((n - 2) * 180), problem)

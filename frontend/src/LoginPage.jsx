@@ -160,10 +160,10 @@ function WhySolveki() {
         <div className="landing-feature">
           <h2>Assign topics to practice</h2>
           <p>
-            Pick the topics you want a class working on and how many cards a day
-            their deck should hold. Solveki adds those topics to each student's
-            practice and schedules them with spaced repetition &mdash; give every
-            class its own due date.
+            Pick the topics you want a class working on and how many cards they
+            should answer. Solveki adds those topics to each student's practice,
+            gives extra practice to students who struggle, and schedules reviews
+            with spaced repetition &mdash; give every class its own due date.
           </p>
         </div>
         <div className="landing-feature">
@@ -215,7 +215,7 @@ function Faq() {
     },
     {
       q: 'What can teachers assign?',
-      a: 'You pick the topics you want a class practicing and how many cards a day their deck should hold. Those topics are added to each student’s practice and scheduled with spaced repetition, and you can give every class its own due date.',
+      a: 'You pick the topics you want a class practicing and the fewest cards each student should answer on them. Those topics are added to each student’s practice and scheduled with spaced repetition; students who struggle get extra practice. You can give every class its own due date.',
     },
     {
       q: 'What can teachers see?',

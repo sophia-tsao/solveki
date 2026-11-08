@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
 import { BandBar, BandLegend } from './BandBar.jsx';
+import AssignmentProgress from './AssignmentProgress.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
 import './Teacher.css';
 
@@ -41,7 +42,9 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
       <h1>{assignment.title}</h1>
       {assignment.description && <p className="teacher-card-stat">{assignment.description}</p>}
       <p className="teacher-card-stat">
-        {topics.length} topic{topics.length === 1 ? '' : 's'} · {assignment.deck_size} cards to finish
+        {topics.length} topic{topics.length === 1 ? '' : 's'} · at least {assignment.deck_size} cards
+        {' '}(up to {assignment.max_cards} for students who struggle)
+        {!assignment.allow_late && ' · no late work'}
       </p>
 
       <div className="teacher-header" style={{ marginTop: '0.5rem' }}>
@@ -99,17 +102,14 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
         <table className="teacher-table">
           <thead>
             <tr>
-              <th>Student</th><th>Cards</th><th>Familiarity</th><th>Due</th>
+              <th>Student</th><th>Completion</th><th>Familiarity</th><th>Due</th>
             </tr>
           </thead>
           <tbody>
             {students.map((s) => (
               <tr key={s.student_id}>
                 <td className="clickable" onClick={() => onOpenStudent(s.student_id)}>{s.name}</td>
-                <td>
-                  {s.status === 'done' ? 'Done' : `${s.cards_answered} / ${assignment.deck_size}`}
-                  {s.overdue && <span className="teacher-overdue"> · overdue</span>}
-                </td>
+                <td><AssignmentProgress row={s} /></td>
                 <td style={{ minWidth: '160px' }}><BandBar counts={s.proficiency} /></td>
                 <td>{fmtDue(s.due_at)}</td>
               </tr>

@@ -46,7 +46,7 @@ class LawOfSinesTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_law_of_sines"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             A, B, a = int(m.group("A")), int(m.group("B")), int(m.group("a"))
@@ -67,7 +67,7 @@ class LawOfCosinesSideTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_law_of_cosines_side"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b, C = int(m.group("a")), int(m.group("b")), int(m.group("C"))
@@ -88,7 +88,7 @@ class ObliqueTriangleAreaTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_oblique_triangle_area"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b, C = int(m.group("a")), int(m.group("b")), int(m.group("C"))
@@ -106,7 +106,7 @@ class InverseTrigTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_inverse_trig"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             func = m.group("func")
@@ -133,7 +133,7 @@ class DoubleAngleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_double_angle"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             given, num, den = m.group("given"), int(m.group("num")), int(m.group("den"))
@@ -159,7 +159,7 @@ class DoubleAngleTests(TestCase):
         random.seed(1)
         gen = LOCAL_GENERATORS["pc_double_angle"]
         for _ in range(SAMPLES):
-            _p, solution = gen()
+            _p, solution = gen()[:2]
             fr = self.FRAC.search(solution)
             self.assertEqual(math.gcd(int(fr.group("n")), int(fr.group("d"))), 1,
                              f"fraction not reduced: {solution!r}")
@@ -173,7 +173,7 @@ class SolveTrigEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_solve_trig_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             func = m.group("func")
@@ -200,7 +200,7 @@ class PolarToRectangularTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_polar_to_rectangular"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             r, theta = int(m.group("r")), int(m.group("theta"))
@@ -223,7 +223,7 @@ class RectangularToPolarTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_rectangular_to_polar"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x, y = int(m.group("x")), int(m.group("y"))
@@ -249,7 +249,7 @@ class FiniteGeometricSumTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_finite_geometric_sum"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n, a, r = int(m.group("n")), int(m.group("a")), int(m.group("r"))
@@ -268,7 +268,7 @@ class SigmaArithmeticSumTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_sigma_arithmetic_sum"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group("n"))
@@ -302,7 +302,7 @@ class SequenceLimitTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_sequence_limit"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             num_lead = self._leading(m.group("num"))
@@ -328,7 +328,7 @@ class VectorAddTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_vector_add"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             ux, uy = int(m.group("ux")), int(m.group("uy"))
@@ -359,7 +359,7 @@ class ParametricToRectangularTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pc_parametric_to_rectangular"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = int(m.group("a"))

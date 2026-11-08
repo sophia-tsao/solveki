@@ -2,7 +2,7 @@
 
 Each generator is a zero-required-arg callable returning a ``(problem,
 solution)`` tuple — the same contract as a ``mathgenerator`` generator, so the
-two are interchangeable in ``_make_problem``. Decorate a generator with
+two are interchangeable in ``_make_problem_for_topic``. Decorate a generator with
 ``@register`` and it becomes resolvable by its function name.
 """
 

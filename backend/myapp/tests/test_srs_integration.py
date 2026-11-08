@@ -11,7 +11,7 @@ of practice without touching the clock. Each day the flow is: GET /deck/ to buil
 or load the day's deck, then POST /deck/advance/ with an `outcome` to answer and
 grade the current card.
 
-The `addition` generator is mocked so problem text is deterministic; scheduling,
+The `gcd` generator is mocked so problem text is deterministic; scheduling,
 not problem content, is what's under test.
 """
 import datetime
@@ -24,7 +24,7 @@ from myapp.models import DailyDeck, Settings, TopicReview
 from .factories import make_user, make_course, make_topic, select
 
 
-@mock.patch("myapp.views.mathgenerator.addition", return_value=("$1+1=$", "$2$"))
+@mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
 class SM2LifecycleTests(TestCase):
     """Drive the full spaced-repetition loop through the HTTP endpoints."""
 
@@ -65,9 +65,10 @@ class SM2LifecycleTests(TestCase):
 
     def test_correct_answers_grow_the_interval_across_days(self, _gen):
         # A single topic answered correctly each day should walk the SM-2
-        # success ladder: due tomorrow (interval 1), then +6 days, then the
-        # ease-multiplied step — all driven purely through the HTTP loop.
-        topic = make_topic(self.course, generator_name="addition")
+        # success ladder: due tomorrow (interval 1), then 1 day * ease (3 days),
+        # then the next ease-multiplied step — all driven purely through the
+        # HTTP loop.
+        topic = make_topic(self.course, generator_name="gcd")
         select(self.user, topic)
         self._set_questions_per_day(1)
 
@@ -84,22 +85,22 @@ class SM2LifecycleTests(TestCase):
         self._load_deck(day2)
         self._answer_current(day2, "correct_first")
         review = self._review(topic)
-        self.assertEqual(review.interval, 6)
+        self.assertEqual(review.interval, 3)
         self.assertEqual(review.repetitions, 2)
-        self.assertEqual(review.due_date, day2 + datetime.timedelta(days=6))
+        self.assertEqual(review.due_date, day2 + datetime.timedelta(days=3))
 
-        # Third success multiplies the interval by the ease factor (> 6 days).
+        # Third success multiplies the interval by the ease factor (> 3 days).
         day3 = review.due_date
         self._load_deck(day3)
         self._answer_current(day3, "correct_first")
         review = self._review(topic)
         self.assertEqual(review.repetitions, 3)
-        self.assertGreater(review.interval, 6)
+        self.assertGreater(review.interval, 3)
         self.assertEqual(review.due_date, day3 + datetime.timedelta(days=review.interval))
 
     def test_wrong_answer_reschedules_topic_for_the_next_day(self, _gen):
         # A lapse must bring the topic back tomorrow: interval 1, reps reset.
-        topic = make_topic(self.course, generator_name="addition")
+        topic = make_topic(self.course, generator_name="gcd")
         select(self.user, topic)
         self._set_questions_per_day(1)
 
@@ -115,8 +116,8 @@ class SM2LifecycleTests(TestCase):
         # The payoff of scheduling: after one day, a topic answered correctly
         # (now due in 6+ days) must fall behind a topic that lapsed (due
         # tomorrow). The next day's deck should lead with the lapsed topic.
-        mastered = make_topic(self.course, topic_name="Mastered", generator_name="addition")
-        lapsed = make_topic(self.course, topic_name="Lapsed", generator_name="addition")
+        mastered = make_topic(self.course, topic_name="Mastered", generator_name="gcd")
+        lapsed = make_topic(self.course, topic_name="Lapsed", generator_name="gcd")
         select(self.user, mastered)
         select(self.user, lapsed)
         # Give both a couple of prior successes so "mastered" earns a long
@@ -153,15 +154,16 @@ class SM2LifecycleTests(TestCase):
         deck2 = DailyDeck.objects.get(user=self.user, date=day2)
         self.assertEqual(deck2.problems[0]["topic_id"], lapsed.id)
 
-    def test_lapsed_topic_gets_more_of_the_deck_next_day(self, _gen):
+    def test_lapsed_topic_gets_its_full_review_next_day(self, _gen):
         # The SM-2 dose signal end to end: with two topics and a 10-card day,
-        # answering topic 1 correctly (pushed 6+ days out) and topic 2 wrong
-        # (due tomorrow) must make topic 2 occupy MORE of the next day's deck —
-        # not the flat 5/5 split. Both still appear (variety floor).
+        # answering topic 1 correctly (pushed days out) and topic 2 wrong (due
+        # tomorrow) must give topic 2 its full review next day — 20 / ease
+        # cards at its lowered ease — ahead of the student's own practice.
         from collections import Counter
+        from myapp import practice
 
-        mastered = make_topic(self.course, topic_name="Mastered", generator_name="addition")
-        lapsed = make_topic(self.course, topic_name="Lapsed", generator_name="addition")
+        mastered = make_topic(self.course, topic_name="Mastered", generator_name="gcd")
+        lapsed = make_topic(self.course, topic_name="Lapsed", generator_name="gcd")
         select(self.user, mastered)
         select(self.user, lapsed)
         for t in (mastered, lapsed):
@@ -180,20 +182,23 @@ class SM2LifecycleTests(TestCase):
         for card in deck.problems:
             self._answer_current(day1, outcomes[card["topic_id"]])
 
-        # Next day: lapsed is due, mastered is scheduled out. Lapsed should take
-        # the larger share of the deck, and both should still be present.
+        # Next day: lapsed is due, mastered is scheduled out. The lapsed topic's
+        # review is required work, so it comes first and isn't squeezed into
+        # the 10-card setting.
         day2 = day1 + datetime.timedelta(days=1)
         self._load_deck(day2)
         deck2 = DailyDeck.objects.get(user=self.user, date=day2)
         counts = Counter(c["topic_id"] for c in deck2.problems)
-        self.assertEqual(sum(counts.values()), 10)
-        self.assertGreater(counts[lapsed.id], counts[mastered.id])
-        self.assertGreaterEqual(counts[mastered.id], 1)
+        expected = practice.review_cards(self._review(lapsed).ease)
+        self.assertGreater(expected, 10 // 2)
+        self.assertEqual(counts[lapsed.id], expected)
+        self.assertEqual(deck2.problems[0]["topic_id"], lapsed.id)
+        self.assertGreaterEqual(sum(counts.values()), 10)
 
     def test_new_topic_enters_rotation_and_is_scheduled_after_first_review(self, _gen):
         # A never-practiced topic has no TopicReview row (treated as due now),
         # so it appears immediately; answering it creates its schedule.
-        topic = make_topic(self.course, generator_name="addition")
+        topic = make_topic(self.course, generator_name="gcd")
         select(self.user, topic)
         self._set_questions_per_day(1)
 
@@ -209,41 +214,75 @@ class SM2LifecycleTests(TestCase):
             TopicReview.objects.filter(user=self.user, topic=topic).exists()
         )
 
-    def test_repeated_topic_in_one_day_only_grades_down(self, _gen):
+    def test_repeated_topic_in_one_day_counts_as_one_review(self, _gen):
         # With one topic and a multi-card day, the topic repeats within the deck.
-        # The once-per-day rule: the first answer sets the schedule; a later
-        # passing repeat can't raise it, but a later miss pulls it down.
-        topic = make_topic(self.course, generator_name="addition")
+        # The day counts as one review graded by its accuracy: repeats never
+        # climb the ladder twice, one slip among right answers isn't a lapse,
+        # and a day mostly wrong is.
+        topic = make_topic(self.course, generator_name="gcd")
         select(self.user, topic)
-        self._set_questions_per_day(3)
+        TopicReview.objects.create(
+            user=self.user, topic=topic, ease=2.5, interval=3, repetitions=2,
+            due_date=self.START,
+        )
+        self._set_questions_per_day(4)
 
         day1 = self.START
         self._load_deck(day1)
+        for outcome in ("correct_first", "correct_first", "incorrect", "correct_first"):
+            self._answer_current(day1, outcome)
+        review = self._review(topic)
+        # 3 of 4 right (75%): a normal pass, one rung up from the 3-day step.
+        self.assertEqual(review.repetitions, 3)
+        self.assertEqual(review.interval, 8)
+        self.assertAlmostEqual(review.ease, 2.5)
 
-        # First card correct: schedules the topic out one day.
-        self._answer_current(day1, "correct_first")
-        after_first = self._review(topic)
-        self.assertEqual(after_first.interval, 1)
-        self.assertEqual(after_first.repetitions, 1)
+        day2 = review.due_date
+        self._load_deck(day2)
+        for outcome in ("incorrect", "incorrect", "correct_first", "incorrect"):
+            self._answer_current(day2, outcome)
+        review = self._review(topic)
+        self.assertEqual((review.interval, review.repetitions), (1, 0))
+        self.assertEqual(review.due_date, day2 + datetime.timedelta(days=1))
 
-        # Second card (same topic) correct again: must NOT advance the schedule.
-        self._answer_current(day1, "correct_first")
-        after_second = self._review(topic)
-        self.assertEqual(after_second.interval, after_first.interval)
-        self.assertEqual(after_second.repetitions, after_first.repetitions)
+    def test_early_review_pass_keeps_schedule_but_miss_resets(self, _gen):
+        # The deck shows a lone topic every day, due or not. Passing it before
+        # it's due must not climb the ladder a rung a day; missing it still
+        # resets it to tomorrow.
+        topic = make_topic(self.course, generator_name="gcd")
+        select(self.user, topic)
+        self._set_questions_per_day(1)
 
-        # Third card (same topic) wrong: pulls the schedule down to a lapse.
-        self._answer_current(day1, "incorrect")
-        after_third = self._review(topic)
-        self.assertEqual(after_third.repetitions, 0)
-        self.assertEqual(after_third.due_date, day1 + datetime.timedelta(days=1))
+        day1 = self.START
+        day2 = day1 + datetime.timedelta(days=1)
+        for day in (day1, day2):  # both due: 1 day, then 3
+            self._load_deck(day)
+            self._answer_current(day, "correct_first")
+        scheduled = self._review(topic)
+        self.assertEqual(scheduled.interval, 3)
+
+        day3 = day2 + datetime.timedelta(days=1)  # early: due on day 5
+        self._load_deck(day3)
+        self._answer_current(day3, "correct_first")
+        review = self._review(topic)
+        self.assertEqual(
+            (review.ease, review.interval, review.repetitions, review.due_date),
+            (scheduled.ease, scheduled.interval, scheduled.repetitions, scheduled.due_date),
+        )
+
+        day4 = day3 + datetime.timedelta(days=1)  # still early
+        self._load_deck(day4)
+        self._answer_current(day4, "incorrect")
+        review = self._review(topic)
+        self.assertEqual((review.interval, review.repetitions), (1, 0))
+        self.assertEqual(review.due_date, day4 + datetime.timedelta(days=1))
 
     def test_full_week_of_practice_keeps_a_consistent_schedule(self, _gen):
         # A longer walk: practice one topic correctly whenever it comes due over
         # a simulated stretch, and assert the schedule stays monotonic and the
         # due_date always equals today + interval (the invariant the deck relies
         # on for ordering). Guards against drift between reps/interval/due_date.
-        topic = make_topic(self.course, generator_name="addition")
+        topic = make_topic(self.course, generator_name="gcd")
         select(self.user, topic)
         self._set_questions_per_day(1)
 

@@ -9,7 +9,7 @@ Practice is scheduled with spaced repetition: each answer grades the underlying
 topic on the SM-2 algorithm, and the daily deck surfaces topics in due order and
 gives more of the deck to the topics that are due, so struggled-with topics come
 back soon and take up more of your session while mastered ones resurface less
-often. Each card has a **Learn more** link to a video that teaches its topic (a
+often. Each card has a **Watch Video** link to a video that teaches its topic (a
 Khan Academy video wherever one exists), shown on the question and again after
 a wrong answer. Admins can change any topic's video from the Django admin.
 
@@ -21,15 +21,17 @@ profile questions plus a few generated problems infer their level per math
 category and pick starting topics with a pre-seeded review schedule.
 
 Teachers get a separate side of the app: create **classes** that students join
-with a code, author **assignments** (a set of topics plus how many cards a day
-the practice deck should hold), and assign them to classes with due dates.
-Assigning it adds its topics to each enrolled student's own practice (and to
-anyone who joins the class later), and their deck grows to fit the assignment's
-cards, so assignment work is graded and scheduled by the same SM-2 engine as
-normal practice. Teachers track progress through a
+with a code, author **assignments** (a set of topics plus the fewest cards to
+answer on them), and assign them to classes with due dates. Assigning it adds
+its topics to each enrolled student's own practice (and to anyone who joins the
+class later), and their daily decks carry its cards until the due date, so
+assignment work is graded and scheduled by the same SM-2 engine as normal
+practice. Students who get the topics right finish at the teacher's count;
+students who struggle get extra practice, up to 1.5 times as many cards.
+Teachers track progress through a
 familiarity-over-time view (the share of topics in each proficiency band, for
-all students or a single class), a per-assignment report of proficiency on the
-assigned topics and who has practiced by the due date, and a per-student view of
+all students or a single class), a per-assignment report of each student's
+completion and proficiency on the assigned topics, and a per-student view of
 their SM-2 progress and assignment history.
 
 Problems are produced by [mathgenerator](https://github.com/lukew3/mathgenerator),
@@ -120,10 +122,12 @@ The backend exposes a small JSON API under the app's URLs, including:
 
 - `GET /auth/me/`, `POST /auth/google/`, `POST /auth/logout/`,
   `DELETE /auth/delete/` — authentication and account deletion
-- `GET /problem/` — generate a problem
 - `GET /deck/`, `POST /deck/advance/` — the daily practice deck; each card
-  includes its topic name and "Learn more" link. Advancing may report an
-  answer outcome that updates the topic's spaced-repetition schedule.
+  includes its topic name and "Learn more" link, but not its solution. Advancing
+  may report an answer outcome that updates the topic's spaced-repetition
+  schedule.
+- `POST /deck/check/` — grade an answer to the current card on the server; the
+  solution is only returned once the card's attempts run out
 - `GET /dashboard/` — selected/upcoming topics with their SM-2 state
 - `GET /practice-calendar/` — per-day practice status for a calendar month
 - `GET /courses/`, `GET /courses/<id>/topics`, `PATCH /courses/<id>/select`,

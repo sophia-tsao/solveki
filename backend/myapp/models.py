@@ -73,26 +73,30 @@ class TopicReview(models.Model):
 class DailyTopicGrade(models.Model):
     """Records that a topic has been graded on a given day, for the once-per-day rule.
 
-    A topic can appear more than once in a day's deck (the deck fills to
-    `questions_per_day`, repeating topics when few are selected). Only the first
-    answer for a topic each day sets its SM-2 schedule; later repeats may only
-    pull it *down* (a miss re-grades as a lapse; a success does nothing). See the
-    grading module for the rule.
+    A topic usually appears several times in a day's deck. Its SM-2 schedule
+    moves once per day, by the grade for all of that day's answers on it (see
+    `srs.grade_day`).
 
-    To apply that without compounding — repeated misses must not drop ease over
-    and over — this stores a snapshot of the topic's SM-2 state *before* the
-    day's first grade (`snapshot_*`) plus the worst quality seen so far today
-    (`applied_quality`). Each occurrence recomputes the TopicReview from the
-    snapshot using min(applied_quality, this_quality), so the day's net effect is
-    always "first grade, then only downward", computed from a single fixed base.
+    To apply that without compounding, this stores a snapshot of the topic's
+    SM-2 state *before* the day's first answer (`snapshot_*`). Every answer
+    recomputes the TopicReview from the snapshot and the day's answers so far,
+    so the day's net effect is always one review from a single fixed base.
+    `applied_quality` is the quality that recompute last gave; `early` records
+    whether the topic wasn't due yet when the day started (an early pass leaves
+    the schedule alone); `floor_interval` is set when finishing an assignment
+    today lifted the topic to "familiar" (see `practice.GRADUATION_INTERVAL`),
+    so later recomputes keep that lift.
     """
     user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="daily_topic_grades")
     topic = models.ForeignKey('Topic', on_delete=models.CASCADE, related_name="daily_grades")
     date = models.DateField()
-    applied_quality = models.IntegerField()  # worst SM-2 quality applied so far today
+    applied_quality = models.IntegerField()  # SM-2 quality from today's answers so far
     snapshot_ease = models.FloatField()
     snapshot_interval = models.IntegerField()
     snapshot_repetitions = models.IntegerField()
+    snapshot_due_date = models.DateField(blank=True, null=True)
+    early = models.BooleanField(default=False)
+    floor_interval = models.IntegerField(default=0)
 
     class Meta:
         constraints = [
@@ -140,7 +144,7 @@ class AnswerRecord(models.Model):
     append-only log, written on each graded deck advance, backs the teacher
     views' accuracy, time-spent and "struggled with most" figures.
 
-    `outcome` is the advance's reported outcome (see `_OUTCOME_QUALITY`).
+    `outcome` is the advance's reported outcome (see `srs.CREDIT`).
     `seconds` is the client-measured time from the card appearing to the
     student answering it, capped server-side so a tab left open doesn't count
     as hours of review; 0 when the client didn't report it.
@@ -157,6 +161,46 @@ class AnswerRecord(models.Model):
 
     def __str__(self):
         return f"Answer({self.user} -> {self.topic} on {self.date}: {self.outcome})"
+
+class ProblemReport(models.Model):
+    """A student's report that a practice card's question or solution was wrong.
+
+    Filed from the incorrect back face of a card ("Report issue"), which also
+    grades the card as correct (`correct_first`) so a faulty problem doesn't
+    drag the topic's schedule down. The card's problem and solution are
+    snapshotted here from the server-side deck — decks are pruned daily, and
+    generated problems aren't stored anywhere else — so an admin can see
+    exactly what was shown. Reviewed from the Django admin; `resolved` lets
+    them tick reports off.
+
+    `topic` is SET_NULL so a report outlives its topic being deleted.
+    `user_answer` is the student's last answer to the card, when the client sent it.
+    """
+    ANSWER_MARKED_WRONG = "answer_marked_wrong"
+    SOLUTION_INCORRECT = "solution_incorrect"
+    OTHER = "other"
+    REASON_CHOICES = [
+        (ANSWER_MARKED_WRONG, "My answer was correct/equivalent but marked incorrect"),
+        (SOLUTION_INCORRECT, "Solveki's solution is incorrect"),
+        (OTHER, "Other"),
+    ]
+
+    user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="problem_reports")
+    topic = models.ForeignKey('Topic', blank=True, null=True, on_delete=models.SET_NULL, related_name="problem_reports")
+    reason = models.CharField(max_length=30, choices=REASON_CHOICES)
+    details = models.TextField(blank=True, default="")
+    problem = models.TextField()
+    solution = models.TextField()
+    # The step-by-step explanation the student was shown, so a "solution is
+    # incorrect" report can be checked against it too.
+    steps = models.JSONField(default=list, blank=True)
+    user_answer = models.CharField(max_length=500, blank=True, default="")
+    date = models.DateField()  # the student's local day the card was from
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Report({self.user} -> {self.topic} on {self.date}: {self.reason})"
 
 class ProficiencySnapshot(models.Model):
     """A daily count of how many of a user's selected topics sit in each proficiency band.
@@ -257,14 +301,15 @@ class Assignment(models.Model):
     """A teacher-authored task, assignable to one or more classes.
 
     An assignment is a single idea: the teacher picks a set of topics to add to
-    students' spaced-repetition decks (stored as `AssignmentTopic` rows) and how
-    many cards the student must answer (`deck_size`). Assigning it to a class
-    (or a student joining a class that has it) adds its topics to the student's
-    own selections and stretches their practice deck to fit the remaining cards;
-    the student then practices through their normal deck, so SM-2 always
-    schedules the work. The assignment is complete once the student has answered
-    `deck_size` cards (any topic) since it reached them — see
-    `StudentAssignment.cards_answered`. The assignment's topics also drive its
+    students' spaced-repetition decks (stored as `AssignmentTopic` rows) and the
+    fewest cards the student must answer on them (`deck_size`). Assigning it to a
+    class (or a student joining a class that has it) adds its topics to the
+    student's own selections and spreads its cards over their daily decks until
+    it's due; the student practices through their normal deck, so SM-2 always
+    schedules the work. A student who isn't solid on the topics after
+    `deck_size` cards gets more, up to `practice.MAX_CARDS_MULTIPLIER` times as
+    many — see `StudentAssignment`. `allow_late` decides whether cards answered
+    after the due date still count. The assignment's topics also drive its
     familiarity report.
 
     An assignment is authored once and handed to classes through
@@ -274,6 +319,7 @@ class Assignment(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, default="")
     deck_size = models.IntegerField(default=10)
+    allow_late = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -324,11 +370,16 @@ class StudentAssignment(models.Model):
     their selections and their deck grows to cover the assignment's remaining
     cards). Opening it just routes the student to their normal practice page, so
     there's no separate assignment quiz to store. Every card the student answers
-    in their deck while the assignment is in progress — whatever its topic —
-    bumps `cards_answered`; once that reaches
-    the assignment's `deck_size` the row is marked completed. Familiarity on the
-    assignment's topics is still read from the SM-2 state for the teacher's
-    report.
+    in their deck while the assignment is in progress bumps `cards_answered`,
+    if it's on one of the assignment's topics (cards
+    after the due date only count if the assignment allows late work).
+    `cards_needed` starts at the assignment's `deck_size` and grows while a
+    topic isn't solid (see `practice.cards_needed`); the row is completed when
+    the student is solid after `deck_size` cards, or at the maximum
+    (`max_reached`, shown to the teacher as "needs help"). `completion_pct` is
+    the teacher-facing progress and never goes down; `late` marks completion
+    after the due date. Familiarity on the assignment's topics is still read
+    from the SM-2 state for the teacher's report.
     """
     NOT_STARTED = "not_started"
     IN_PROGRESS = "in_progress"
@@ -341,6 +392,10 @@ class StudentAssignment(models.Model):
     status = models.CharField(max_length=12, choices=STATUS_CHOICES, default=NOT_STARTED)
     started_at = models.DateTimeField(blank=True, null=True)
     cards_answered = models.IntegerField(default=0)
+    cards_needed = models.IntegerField(default=0)  # 0 until the first card: read as deck_size
+    completion_pct = models.IntegerField(default=0)
+    max_reached = models.BooleanField(default=False)
+    late = models.BooleanField(default=False)
     completed_at = models.DateTimeField(blank=True, null=True)
 
     class Meta:
@@ -358,6 +413,10 @@ class DailyDeck(models.Model):
     date = models.DateField()
     problems = models.JSONField(default=list)
     current_index = models.IntegerField(default=0)
+    # Wrong answers submitted for the current card (see check_answer). Kept
+    # server-side so the solution is only revealed once attempts run out, and
+    # reset whenever the current card changes.
+    attempts = models.IntegerField(default=0)
     # Set when the user's topic selection changes so the unanswered tail is
     # rebuilt lazily on the next practice-page load (see _mark_deck_stale /
     # _get_or_create_today_deck) rather than synchronously on every toggle.

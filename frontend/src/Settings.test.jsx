@@ -4,124 +4,33 @@ import userEvent from '@testing-library/user-event';
 import { renderWithClient } from './test-utils.jsx';
 
 vi.mock('./auth.js', () => ({
-  apiFetch: vi.fn(),
   logout: vi.fn(),
   deleteAccount: vi.fn(),
-  localDay: vi.fn(() => '2026-07-20'),
 }));
 
-import { apiFetch, logout, deleteAccount } from './auth.js';
+import { logout, deleteAccount } from './auth.js';
 import Settings from './Settings.jsx';
 
-function jsonResponse(payload, { ok = true, status = 200 } = {}) {
-  return { ok, status, json: async () => payload };
-}
-
 beforeEach(() => {
-  apiFetch.mockReset();
   logout.mockReset();
   deleteAccount.mockReset();
 });
 
-describe('Settings — loading', () => {
-  it('populates fields from the fetched settings', async () => {
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'en', questions_per_day: 15 }),
-    );
+describe('Settings', () => {
+  it('has no questions-per-practice field', () => {
     renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() =>
-      expect(screen.getByRole('spinbutton')).toHaveValue(15),
-    );
-    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-  });
-
-  it('shows an error when the fetch fails', async () => {
-    apiFetch.mockResolvedValueOnce(jsonResponse({}, { ok: false, status: 500 }));
-    renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await screen.findByText(/Error: HTTP error! Status: 500/);
-  });
-
-  it('hides the questions-per-practice field for teachers', async () => {
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'en', questions_per_day: 10, role: 'teacher' }),
-    );
-    renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await screen.findByRole('button', { name: 'Log out' });
     expect(screen.queryByText('Questions per practice')).not.toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
-    // Nothing editable is left for teachers, so there's no Save either.
     expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
   });
 });
 
-describe('Settings — saving', () => {
-  beforeEach(() => {
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'en', questions_per_day: 10 }),
-    );
-  });
-
-  it('PATCHes the new values and shows a confirmation', async () => {
-    const user = userEvent.setup();
-    renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
-
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'en', questions_per_day: 20 }),
-    );
-    const input = screen.getByRole('spinbutton');
-    await user.clear(input);
-    await user.type(input, '20');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-
-    await screen.findByText('Settings saved.');
-    const patchCall = apiFetch.mock.calls.find((c) => c[1]?.method === 'PATCH');
-    expect(JSON.parse(patchCall[1].body)).toEqual({ questions_per_day: 20 });
-  });
-
-  it('rejects a questions-per-day below 1 without calling the API', async () => {
-    const user = userEvent.setup();
-    renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
-
-    const input = screen.getByRole('spinbutton');
-    await user.clear(input);
-    await user.type(input, '0');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-
-    await screen.findByText(/Number of questions must be at least 1/);
-    // Only the initial load call — no PATCH attempted.
-    expect(apiFetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('rejects a questions-per-day above 100 without calling the API', async () => {
-    const user = userEvent.setup();
-    renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
-
-    const input = screen.getByRole('spinbutton');
-    await user.clear(input);
-    await user.type(input, '101');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-
-    await screen.findByText(/Number of questions can be at most 100/);
-    expect(apiFetch).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('Settings — account actions', () => {
-  beforeEach(() => {
-    apiFetch.mockResolvedValueOnce(
-      jsonResponse({ language: 'en', questions_per_day: 10 }),
-    );
-  });
-
   it('logs out and notifies the parent', async () => {
     const onLoggedOut = vi.fn();
     logout.mockResolvedValueOnce({ ok: true });
     const user = userEvent.setup();
     renderWithClient(<Settings onLoggedOut={onLoggedOut} />);
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     await user.click(screen.getByRole('button', { name: 'Log out' }));
     await waitFor(() => expect(onLoggedOut).toHaveBeenCalledTimes(1));
@@ -132,7 +41,6 @@ describe('Settings — account actions', () => {
     deleteAccount.mockResolvedValueOnce({ ok: true });
     const user = userEvent.setup();
     renderWithClient(<Settings onLoggedOut={onLoggedOut} />);
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     // First click reveals the confirmation, does not delete.
     await user.click(screen.getByRole('button', { name: 'Delete account' }));
@@ -147,7 +55,6 @@ describe('Settings — account actions', () => {
   it('cancels the delete confirmation', async () => {
     const user = userEvent.setup();
     renderWithClient(<Settings onLoggedOut={() => {}} />);
-    await waitFor(() => expect(screen.getByRole('spinbutton')).toHaveValue(10));
 
     await user.click(screen.getByRole('button', { name: 'Delete account' }));
     await user.click(screen.getByRole('button', { name: 'Cancel' }));

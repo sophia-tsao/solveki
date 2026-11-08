@@ -72,7 +72,7 @@ class UnitRateTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_unit_rate"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"travels \$(\d+)\$ miles in \$(\d+)\$ hours", problem)
             d, t = int(m.group(1)), int(m.group(2))
             self.assertEqual(d % t, 0)
@@ -85,7 +85,7 @@ class EquivalentRatioTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_equivalent_ratio"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"\$(\d+):(\d+) = (\d+):\\square\$", problem)
             a, b, c = int(m.group(1)), int(m.group(2)), int(m.group(3))
             d = int(re.search(r"\$(\d+)\$", solution).group(1))
@@ -99,7 +99,7 @@ class SolveProportionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_solve_proportion"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"\\frac\{(\d+)\}\{(\d+)\} = \\frac\{x\}\{(\d+)\}", problem)
             a, b, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
             x = int(re.search(r"\$(-?\d+)\$", solution).group(1))
@@ -112,7 +112,7 @@ class IntegerOperationsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_integer_operations"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"\((-?\d+)\) (\+|-|\\times|\\div) \((-?\d+)\)", problem)
             a, op, b = int(m.group(1)), m.group(2), int(m.group(3))
             if op == "+":
@@ -134,7 +134,7 @@ class RationalOperationsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_rational_operations"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"\\frac\{(-?\d+)\}\{(\d+)\} (\+|-|\\times|\\div) "
                 r"\\frac\{(-?\d+)\}\{(\d+)\}",
@@ -160,7 +160,7 @@ class AbsoluteValueTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_absolute_value"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             result = int(re.search(r"\$(-?\d+)\$", solution).group(1))
             m = re.search(r"\|(-?\d+) - (-?\d+)\|", problem)
             if m:
@@ -178,7 +178,7 @@ class OneStepInequalityTests(TestCase):
         gen = LOCAL_GENERATORS["pre_one_step_inequality"]
         sol_re = re.compile(rf"x ({SOL_OP_RE}) (-?\d+)")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             sm = sol_re.search(solution)
             sol_op, sol_c = sm.group(1), int(sm.group(2))
 
@@ -208,7 +208,7 @@ class MultiStepInequalityTests(TestCase):
         sol_re = re.compile(rf"x ({SOL_OP_RE}) (-?\d+)")
         prob_re = re.compile(rf"(-?\d+)x ([+-]) (\d+) ({OP_RE}) (-?\d+)")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             sm = sol_re.search(solution)
             sol_op, sol_c = sm.group(1), int(sm.group(2))
             pm = prob_re.search(problem)
@@ -234,7 +234,7 @@ class ScientificNotationTests(TestCase):
         )
         sol_re = re.compile(r"\$([\d.]+)\*10\^(-?\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = prob_re.search(problem)
             m1 = Fraction(pm.group(1))
             e1 = int(pm.group(2))
@@ -262,7 +262,7 @@ class IntegerExponentRulesTests(TestCase):
         gen = LOCAL_GENERATORS["pre_integer_exponent_rules"]
         sol_re = re.compile(r"\$(\d+)\^(-?\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             sm = sol_re.search(solution)
             base, r = int(sm.group(1)), int(sm.group(2))
             mult = re.search(r"(\d+)\^\{(-?\d+)\} \\times (\d+)\^\{(-?\d+)\}", problem)
@@ -284,7 +284,7 @@ class ConstantOfProportionalityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_constant_of_proportionality"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"When \$x = (-?\d+)\$, \$y = (-?\d+)\$", problem)
             x, y = int(m.group(1)), int(m.group(2))
             k = int(re.search(r"\$(-?\d+)\$", solution).group(1))
@@ -297,7 +297,7 @@ class EvaluateFunctionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_evaluate_function"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"f\(x\)=(.+?)\$, evaluate \$f\((-?\d+)\)", problem)
             terms = parse_poly(m.group(1))
             v = int(m.group(2))
@@ -312,7 +312,7 @@ class SlopeFromTwoPointsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_slope_from_two_points"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"\$\((-?\d+), (-?\d+)\)\$ and \$\((-?\d+), (-?\d+)\)\$", problem
             )
@@ -328,7 +328,7 @@ class LinearFunctionValueTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_linear_function_value"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"slope \$m = (-?\d+)\$ and y-intercept \$b = (-?\d+)\$\. "
                 r"Find \$y\$ when \$x = (-?\d+)\$",
@@ -345,7 +345,7 @@ class MeanAbsoluteDeviationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_mean_absolute_deviation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"data set: \$([\d, ]+)\$", problem)
             data = [int(v) for v in m.group(1).split(", ")]
             mean = sum(data) / len(data)
@@ -360,7 +360,7 @@ class InterquartileRangeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_interquartile_range"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"data set: \$([\d, ]+)\$", problem)
             data = sorted(int(v) for v in m.group(1).split(", "))
             self.assertEqual(len(data), 7)
@@ -375,7 +375,7 @@ class ApproximateIrrationalTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_approximate_irrational"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             n = int(re.search(r"\\sqrt\{(\d+)\}", problem).group(1))
             root = math.sqrt(n)
             self.assertNotEqual(root, int(root))  # not a perfect square
@@ -393,7 +393,7 @@ class RangeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_range"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             data = [int(v) for v in m.group("data").split(",")]
@@ -412,7 +412,7 @@ class ModeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_mode"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             data = [int(v) for v in m.group("data").split(",")]
@@ -441,7 +441,7 @@ class ConvertFdpTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_convert_fdp"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             # Recover the source value independently of its notation.
             mf = re.search(r"the fraction \$(-?\d+)/(\d+)\$", problem)
             md = re.search(r"the decimal \$(-?[\d.]+)\$", problem)
@@ -469,7 +469,7 @@ class EvaluateExpressionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_evaluate_expression"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"Evaluate \$(.+?)\$ when \$x = (-?\d+)\$", problem)
             terms = parse_poly(m.group(1))
             v = int(m.group(2))
@@ -484,7 +484,7 @@ class DistributivePropertyTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_distributive_property"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"Expand \$(-?\d+)\((.+?)\)\$", problem)
             a = int(m.group(1))
             inner = parse_poly(m.group(2))
@@ -502,7 +502,7 @@ class OrderRationalTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_order_rational"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             prob = re.search(
                 r"least to greatest: \$(.+?)\$\. Separate", problem
             ).group(1)
@@ -520,7 +520,7 @@ class CoordinateDistanceTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_coordinate_distance"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"\$\((-?\d+), (-?\d+)\)\$ and \$\((-?\d+), (-?\d+)\)\$", problem
             )
@@ -538,7 +538,7 @@ class TwoStepEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_two_step_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"Solve \$(-?\d+)x ([+-]) (\d+) = (-?\d+)\$", problem)
             a = int(m.group(1))
             b = int(m.group(3)) * (1 if m.group(2) == "+" else -1)
@@ -553,7 +553,7 @@ class MultiStepEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_multi_step_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"Solve \$(-?\d+)\(x ([+-]) (\d+)\) = (-?\d+)\$", problem
             )
@@ -570,7 +570,7 @@ class PercentChangeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_percent_change"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(r"changes from \$(-?\d+)\$ to \$(-?\d+)\$", problem)
             a, b = int(m.group(1)), int(m.group(2))
             expected = Fraction(b - a, a) * 100
@@ -584,7 +584,7 @@ class DiscountTaxTipTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_discount_tax_tip"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             price = int(re.search(r"\$(\d+)\$ dollars", problem).group(1))
             pct = int(re.search(r"\$(\d+)\\%\$", problem).group(1))
             if "discounted" in problem:
@@ -602,7 +602,7 @@ class ScaleLengthTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_scale_length"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             k = int(re.search(r"represents \$(\d+)\$ km", problem).group(1))
             stated = int(re.search(r"\$(-?\d+)\$", solution).group(1))
             if "measures" in problem:
@@ -619,7 +619,7 @@ class CompoundProbabilityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_compound_probability"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"Bag A has \$(\d+)\$ marbles, \$(\d+)\$ red\. "
                 r"Bag B has \$(\d+)\$ marbles, \$(\d+)\$ blue",
@@ -636,7 +636,7 @@ class VariablesBothSidesTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_variables_both_sides"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"Solve \$(-?\d+)x ([+-]) (\d+) = (-?\d+)x ([+-]) (\d+)\$",
                 problem,
@@ -679,7 +679,7 @@ class SlopeInterceptFormTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_slope_intercept_form"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"Rewrite \$(-?\d+)x ([+-]) (\d+)y = (-?\d+)\$", problem
             )
@@ -697,7 +697,7 @@ class LineFromSlopePointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_line_from_slope_point"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = re.search(
                 r"slope \$(-?\d+(?:/\d+)?)\$ and passes through the point "
                 r"\$\((-?\d+), (-?\d+)\)\$",
@@ -717,7 +717,7 @@ class CompareFunctionsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_compare_functions"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             slope_a, _ = parse_line(problem)  # A's equation is the only $y=...$
             pts = re.search(
                 r"points \$\((-?\d+), (-?\d+)\)\$ and \$\((-?\d+), (-?\d+)\)\$",
@@ -738,7 +738,7 @@ class SystemSolutionCountTests(TestCase):
         gen = LOCAL_GENERATORS["pre_system_solution_count"]
         eq_re = re.compile(r"(-?\d+)x ([+-]) (\d+)y = (-?\d+)")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             eqs = eq_re.findall(problem)
             self.assertEqual(len(eqs), 2)
             (a1, s1, b1, c1), (a2, s2, b2, c2) = eqs
@@ -767,7 +767,7 @@ class AreaOfTrapezoidTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["pre_area_of_trapezoid"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             b1, b2, h = int(m.group("b1")), int(m.group("b2")), int(m.group("h"))

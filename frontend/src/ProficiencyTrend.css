@@ -19,6 +19,20 @@
   color: #111827;
 }
 
+.ptrend-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+.ptrend-range select {
+  font: inherit;
+  padding: 0.15rem 0.35rem;
+}
+
 .ptrend-desc {
   font-size: 0.85rem;
   color: #6b7280;
@@ -88,10 +102,28 @@
   text-anchor: middle;
 }
 
-.ptrend-crosshair {
-  stroke: #cbd5e1;
-  stroke-width: 1;
-  stroke-dasharray: 3 3;
+.ptrend-axis-title {
+  text-anchor: start;
+  fill: #6b7280;
+}
+
+.ptrend-bar {
+  transition: opacity 120ms ease;
+}
+
+/* While one bar is hovered, the others step back. */
+.ptrend-bar.is-dimmed {
+  opacity: 0.45;
+}
+
+.ptrend-hit {
+  fill: transparent;
+}
+
+.ptrend-tooltip-total {
+  margin-top: 0.2rem;
+  padding-top: 0.2rem;
+  border-top: 1px solid rgba(249, 250, 251, 0.2);
 }
 
 .ptrend-tooltip {

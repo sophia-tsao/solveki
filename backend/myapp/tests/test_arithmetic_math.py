@@ -5,6 +5,7 @@ recomputes the expected answer, and asserts the generator's stated solution
 matches. Run over many random samples so the check covers the whole input
 space, not a single lucky draw.
 """
+import math
 import random
 import re
 from decimal import Decimal
@@ -30,7 +31,7 @@ class PlaceValueTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_place_value"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             digit = m.group("digit")
@@ -53,7 +54,7 @@ class RoundingTests(TestCase):
         gen = LOCAL_GENERATORS["arith_rounding"]
         places = {"ten": 10, "hundred": 100, "thousand": 1000}
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group("n"))
@@ -73,7 +74,7 @@ class AddFractionsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_add_fractions"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = (
@@ -94,7 +95,7 @@ class SubtractFractionsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_subtract_fractions"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = (
@@ -116,7 +117,7 @@ class CompareDecimalsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_compare_decimals"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             x = Decimal(m.group("x"))
@@ -135,7 +136,7 @@ class AddDecimalsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_add_decimals"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = Decimal(m.group("x")) + Decimal(m.group("y"))
@@ -152,7 +153,7 @@ class SubtractDecimalsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_subtract_decimals"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = Decimal(m.group("x")) - Decimal(m.group("y"))
@@ -170,7 +171,7 @@ class MultiplyDecimalsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_multiply_decimals"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = Decimal(m.group("x")) * Decimal(m.group("y"))
@@ -187,7 +188,7 @@ class OrderOfOperationsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_order_of_operations"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expr = m.group("expr").replace("\\times", "*")
@@ -206,7 +207,7 @@ class NthMultipleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_nth_multiple"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = int(m.group("n")) * int(m.group("base"))
@@ -224,7 +225,7 @@ class PowersOfTenTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_powers_of_ten"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = Decimal(m.group("n"))
@@ -249,7 +250,7 @@ class LengthConversionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_length_conversion"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             value = int(m.group("v"))
@@ -272,7 +273,7 @@ class ElapsedTimeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_elapsed_time"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             total = (int(m.group("h")) * 60 + int(m.group("m"))
@@ -293,7 +294,7 @@ class MoneyTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_money"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = Decimal(m.group("a"))
@@ -315,7 +316,7 @@ class AreaOfRectangleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_area_of_rectangle"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = int(m.group("l")) * int(m.group("w"))
@@ -331,7 +332,7 @@ class MinutesToHoursTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_minutes_to_hours"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             total = int(m.group("total"))
@@ -351,7 +352,7 @@ class ElapsedTimeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_elapsed_time"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             h, mm, dur = int(m.group("h")), int(m.group("m")), int(m.group("dur"))
@@ -374,7 +375,7 @@ class CompareNumbersTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_compare_numbers"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group("a")), int(m.group("b"))
@@ -389,7 +390,7 @@ class MissingNumberSequenceTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_missing_number_sequence"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             body = problem.split(":", 1)[1].strip().rstrip(".")
             tokens = [t.strip() for t in body.split(",")]
             idx = tokens.index("?")
@@ -409,7 +410,7 @@ class EvenOrOddTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_even_or_odd"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = "even" if int(m.group("n")) % 2 == 0 else "odd"
@@ -430,7 +431,7 @@ class OrdinalNumberTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_ordinal_number"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = self._ordinal(int(m.group("n")))
@@ -446,7 +447,7 @@ class WordProblemWithin20Tests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_word_problem_within_20"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             add = self.ADD.search(problem)
             sub = self.SUB.search(problem)
             self.assertTrue(add or sub, f"could not parse: {problem!r}")
@@ -467,7 +468,7 @@ class AddSubtractWithin1000Tests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_add_subtract_within_1000"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group("a")), int(m.group("b"))
@@ -485,7 +486,7 @@ class TellTimeFiveMinTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_tell_time_five_min"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             h, mins = int(m.group("h")), int(m.group("m"))
@@ -506,7 +507,7 @@ class CountMoneyValueTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_count_money_value"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             cents = (int(m.group("q")) * 25 + int(m.group("d")) * 10
@@ -514,6 +515,15 @@ class CountMoneyValueTests(TestCase):
             s = self.SOLUTION.search(solution)
             stated = int(s.group("d")) * 100 + int(s.group("c"))
             self.assertEqual(stated, cents, f"{problem!r} -> {solution!r}")
+
+    def test_solution_is_balanced_math(self):
+        # The solution used to be "$0.89" with no closing "$", which renders
+        # as an unterminated math span wherever it's shown as LaTeX.
+        random.seed(0)
+        gen = LOCAL_GENERATORS["arith_count_money_value"]
+        for _ in range(200):
+            solution = gen()[1]
+            self.assertRegex(solution, r"^\$\d+\.\d{2}\$$")
 
 
 class ArrayRepeatedAdditionTests(TestCase):
@@ -526,7 +536,7 @@ class ArrayRepeatedAdditionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_array_repeated_addition"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = int(m.group("r")) * int(m.group("c"))
@@ -543,7 +553,7 @@ class CompareThreeDigitTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_compare_three_digit"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group("a")), int(m.group("b"))
@@ -562,7 +572,7 @@ class EquivalentFractionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_equivalent_fraction"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b, d = int(m.group("a")), int(m.group("b")), int(m.group("d"))
@@ -582,7 +592,7 @@ class MissingFactorTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_missing_factor"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, c = int(m.group("a")), int(m.group("c"))
@@ -603,7 +613,7 @@ class FractionOnNumberLineTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_fraction_on_number_line"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = Fraction(int(m.group("a")), int(m.group("b")))
@@ -622,7 +632,7 @@ class TwoStepWordProblemTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_two_step_word_problem"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = (int(m.group("start"))
@@ -641,7 +651,7 @@ class FractionTimesWholeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_fraction_times_whole"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = (int(m.group("k"))
@@ -660,11 +670,13 @@ class MixedToImproperTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_mixed_to_improper"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b, c = int(m.group("a")), int(m.group("b")), int(m.group("c"))
             self.assertTrue(0 < b < c, f"bad fraction part: {problem!r}")
+            # A reducible part (2 2/4) would make the key 10/4, not 5/2.
+            self.assertEqual(math.gcd(b, c), 1, f"fraction part not in lowest terms: {problem!r}")
             expected_p = a * c + b
             s = self.SOLUTION.search(solution)
             self.assertEqual((int(s.group("p")), int(s.group("q"))),
@@ -679,7 +691,7 @@ class LongDivisionRemainderTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_long_division_remainder"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group("a")), int(m.group("b"))
@@ -700,7 +712,7 @@ class AngleAdditionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_angle_addition"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = int(m.group("total")) - int(m.group("known"))
@@ -717,7 +729,7 @@ class FactorPairsCountTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_factor_pairs_count"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group("n"))
@@ -738,7 +750,7 @@ class AddUnlikeFractionsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_add_unlike_fractions"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             b, d = int(m.group("b")), int(m.group("d"))
@@ -762,7 +774,7 @@ class RoundDecimalTests(TestCase):
         gen = LOCAL_GENERATORS["arith_round_decimal"]
         quants = {"tenth": Decimal("0.1"), "hundredth": Decimal("0.01")}
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             from decimal import ROUND_HALF_UP
@@ -788,7 +800,7 @@ class MetricUnitConversionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_metric_unit_conversion"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             mult = self.MULTIPLIERS[(m.group("from"), m.group("to"))]
@@ -805,7 +817,7 @@ class DivideDecimalsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["arith_divide_decimals"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             expected = Decimal(m.group("a")) / Decimal(m.group("b"))

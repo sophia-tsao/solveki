@@ -2,7 +2,7 @@ import datetime
 import logging
 
 from django.contrib.auth import get_user_model
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -10,17 +10,26 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
     Classroom, ClassEnrollment, Topic, TopicReview, Settings,
-    ProficiencySnapshot, AssignmentClass,
+    AssignmentClass, AssignmentTopic, StudentAssignment, AnswerRecord,
+    DailyTopicGrade, UserTopicSelection,
 )
 from .common import _require_teacher
-from .deck import _client_today, _effective_due_dates, _ordered_topics
+from .deck import _client_today, _effective_due_dates, _interval_band, _ordered_topics
 from .dashboard import _topic_stats
-from .assignments import _progress_by_assignment
+from .assignments import _NO_PROGRESS, _progress_by_assignment
 from .insights import STRUGGLE_DAYS, practice_activity, struggled_topics
 
 logger = logging.getLogger(__name__)
 
 _BANDS = ("new", "learning", "familiar", "proficient")
+
+# Overview focus columns: how far back an assignment counts as newly taught,
+# how far back weak spots look (and how far back their "missed it" count
+# looks), and how many topics each column lists.
+NEW_DAYS = 14
+WEAK_DAYS = 30
+MISSED_DAYS = 14
+FOCUS_LIMIT = 5
 
 
 @csrf_exempt
@@ -51,6 +60,212 @@ def teacher_overview(request):
     return JsonResponse({
         "classes": classes_out,
         "total_students": total_students,
+    })
+
+
+def _focus_assignments(teacher, student_ids, class_id):
+    """These students' started `StudentAssignment` rows for the teacher's assignments.
+
+    `class_id` narrows to assignments reaching them through that class.
+    """
+    rows = StudentAssignment.objects.filter(
+        student_id__in=student_ids, assignment__teacher=teacher,
+        started_at__isnull=False,
+    )
+    if class_id is not None:
+        rows = rows.filter(classroom_id=class_id)
+    return rows
+
+
+def _first_assigned(teacher, student_ids, class_id, topic_ids):
+    """Map topic id -> the local date the teacher's assignments first brought
+    it to any of these students. Topics never assigned to them are absent.
+    """
+    started = {}  # assignment id -> earliest start among these students
+    for aid, at in _focus_assignments(teacher, student_ids, class_id).values_list(
+        "assignment_id", "started_at"
+    ):
+        day = timezone.localdate(at)
+        started[aid] = min(day, started.get(aid, day))
+    first = {}
+    for aid, tid in AssignmentTopic.objects.filter(
+        assignment_id__in=started, topic_id__in=topic_ids
+    ).values_list("assignment_id", "topic_id"):
+        first[tid] = min(started[aid], first.get(tid, started[aid]))
+    return first
+
+
+def _mean_rate(rates):
+    """The mean of per-student first-try rates (0-1) as a 0-100 percentage."""
+    return round(sum(rates) / len(rates) * 100) if rates else None
+
+
+def _student_rates(student_ids, topic_ids=None, since=None):
+    """Per topic, each student's first-try accuracy rate on it (0-1).
+
+    Returns topic id -> {"topic_name", "rates": [one per student who
+    answered], "missed": whether any answer wasn't right first try}, over
+    answers on or after `since` (all time when None).
+    """
+    records = AnswerRecord.objects.filter(user_id__in=student_ids)
+    if topic_ids is not None:
+        records = records.filter(topic_id__in=topic_ids)
+    if since is not None:
+        records = records.filter(date__gte=since)
+    out = {}
+    for row in (
+        records.values("topic_id", "topic__topic_name", "user_id")
+        .annotate(answers=Count("id"), right=Count("id", filter=Q(outcome="correct_first")))
+    ):
+        topic = out.setdefault(row["topic_id"], {
+            "topic_name": row["topic__topic_name"], "rates": [], "missed": False,
+        })
+        topic["rates"].append(row["right"] / row["answers"])
+        topic["missed"] |= row["right"] < row["answers"]
+    return out
+
+
+def _newly_taught(teacher, student_ids, class_id, today):
+    """Topics the teacher's assignments added to these students' decks lately.
+
+    A topic is newly taught for a student when an assignment of this teacher
+    carrying it reached them (`StudentAssignment.started_at`) in the last
+    `NEW_DAYS` days; `class_id` narrows to assignments reaching them through
+    that class. Per topic, newest first assignment first and then lowest
+    accuracy: when it was first assigned to these students, their average first-try accuracy since it
+    reached them (each student counts once; None until someone practices),
+    and the current band mix across those students.
+    """
+    since = timezone.now() - datetime.timedelta(days=NEW_DAYS)
+    rows = _focus_assignments(teacher, student_ids, class_id).filter(started_at__gte=since)
+    # assignment id -> {student id: local date it reached them}
+    started = {}
+    for sid, aid, at in rows.values_list("student_id", "assignment_id", "started_at"):
+        started.setdefault(aid, {})[sid] = timezone.localdate(at)
+    if not started:
+        return []
+
+    # topic id -> {student id: earliest date the topic reached them}
+    reached = {}
+    names = {}
+    for aid, tid, name in AssignmentTopic.objects.filter(
+        assignment_id__in=started
+    ).values_list("assignment_id", "topic_id", "topic__topic_name"):
+        names[tid] = name
+        per = reached.setdefault(tid, {})
+        for sid, day in started[aid].items():
+            per[sid] = min(day, per.get(sid, day))
+    if not reached:
+        return []
+
+    sids = {sid for per in reached.values() for sid in per}
+    intervals = {
+        (uid, tid): interval
+        for uid, tid, interval in TopicReview.objects.filter(
+            user_id__in=sids, topic_id__in=reached
+        ).values_list("user_id", "topic_id", "interval")
+    }
+    # Each student's (answers, right first try) per topic since it reached them.
+    tallies = {}
+    for uid, tid, day, outcome in AnswerRecord.objects.filter(
+        user_id__in=sids, topic_id__in=reached
+    ).values_list("user_id", "topic_id", "date", "outcome"):
+        if uid in reached[tid] and day >= reached[tid][uid]:
+            n, right = tallies.get((uid, tid), (0, 0))
+            tallies[(uid, tid)] = (n + 1, right + (outcome == "correct_first"))
+    first = _first_assigned(teacher, student_ids, class_id, reached)
+
+    out = []
+    for tid in reached:
+        bands = {b: 0 for b in _BANDS}
+        rates = []
+        for sid in reached[tid]:
+            bands[_interval_band(intervals.get((sid, tid), 0))] += 1
+            if (sid, tid) in tallies:
+                n, right = tallies[(sid, tid)]
+                rates.append(right / n)
+        out.append({
+            "topic_id": tid,
+            "topic_name": names[tid],
+            "first_assigned": first[tid].isoformat(),
+            "accuracy": _mean_rate(rates),
+            "proficiency": bands,
+        })
+    # Most recently first assigned first; on the same day, lowest accuracy
+    # first, with topics nobody has practiced yet after those.
+    out.sort(key=lambda t: (
+        -datetime.date.fromisoformat(t["first_assigned"]).toordinal(),
+        t["accuracy"] is None, t["accuracy"] or 0, t["topic_id"],
+    ))
+    return out[:FOCUS_LIMIT]
+
+
+def _weak_spots(student_ids, since, today):
+    """Topics with the lowest average first-try accuracy per student, worst first.
+
+    Each student's first-try accuracy on a topic (answers on or after `since`)
+    counts once, so a student who answered a topic many times doesn't outweigh
+    classmates who answered it a few times; `accuracy` is the mean of those.
+    Ties go to the topic more students answered. `missed_recent` counts the
+    students who got one of the topic's cards wrong first try in the last
+    `MISSED_DAYS` days; topics nobody got wrong in that time aren't weak spots
+    and are left out.
+    """
+    missed = dict(
+        AnswerRecord.objects.filter(
+            user_id__in=student_ids,
+            date__gte=today - datetime.timedelta(days=MISSED_DAYS - 1),
+        )
+        .exclude(outcome="correct_first")
+        .values("topic_id")
+        .annotate(n=Count("user_id", distinct=True))
+        .values_list("topic_id", "n")
+    )
+    rates = _student_rates(student_ids, topic_ids=missed, since=since)
+    worst = sorted(
+        rates, key=lambda tid: (_mean_rate(rates[tid]["rates"]), -len(rates[tid]["rates"]), tid),
+    )[:FOCUS_LIMIT]
+    return [
+        {
+            "topic_id": tid,
+            "topic_name": rates[tid]["topic_name"],
+            "accuracy": _mean_rate(rates[tid]["rates"]),
+            "missed_recent": missed[tid],
+        }
+        for tid in worst
+    ]
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def overview_focus(request):
+    """The overview's two focus columns for a group of students.
+
+    Scoped like `proficiency_history` (``scope=all``, or ``scope=class`` with
+    ``class_id``):
+
+    - ``newly_taught``: topics recent assignments added to their decks, with
+      how well the students are doing on them (see `_newly_taught`);
+    - ``weak_spots``: the topics with the lowest average first-try accuracy
+      per student over the last `WEAK_DAYS` days, i.e. what to reteach (see
+      `_weak_spots`).
+    """
+    guard = _require_teacher(request)
+    if guard:
+        return guard
+    student_ids, err = _resolve_history_students(request)
+    if err:
+        return err
+    today = _client_today(request)
+    class_id = (
+        int(request.GET["class_id"]) if request.GET.get("scope") == "class" else None
+    )
+    return JsonResponse({
+        "newly_taught": _newly_taught(request.user, student_ids, class_id, today),
+        "weak_spots": _weak_spots(
+            student_ids, since=today - datetime.timedelta(days=WEAK_DAYS - 1), today=today,
+        ),
+        "windows": {"new_days": NEW_DAYS, "missed_days": MISSED_DAYS},
     })
 
 
@@ -91,16 +306,102 @@ def _resolve_history_students(request):
     return ids, None
 
 
+def _topic_band_history(student_ids, start, end):
+    """Per day from `start` to `end`: how many of the group's topics sit in each band.
+
+    The group's topics are the usable topics its students have selected. A
+    topic joins the count on the first day it reached any of them: the
+    earliest of an assignment bringing it to them and their first graded day
+    on it (a topic selected but never assigned or practiced counts from
+    `end`). Each day, a topic's band is that of its *average* SM-2 interval
+    across the students who had it by then (0 until a student practices it),
+    so for one student it's simply their own band.
+
+    Past intervals are rebuilt from `DailyTopicGrade`, which snapshots a
+    topic's state before each graded day: the interval at the end of day `d`
+    is the snapshot of the first graded day after `d`, or the current
+    `TopicReview.interval` when there is none. Days with no topics are left
+    out. Deselected topics drop out entirely (selections keep no history).
+    """
+    pairs = set(
+        UserTopicSelection.objects.filter(
+            user_id__in=student_ids, topic__generator_name__isnull=False
+        ).values_list("user_id", "topic_id")
+    )
+    if not pairs:
+        return []
+    topic_ids = {tid for _, tid in pairs}
+    current = {
+        (uid, tid): interval
+        for uid, tid, interval in TopicReview.objects.filter(
+            user_id__in=student_ids, topic_id__in=topic_ids
+        ).values_list("user_id", "topic_id", "interval")
+    }
+    grades = {}  # (user, topic) -> [(date, interval before that day's grade)], oldest first
+    for uid, tid, day, interval in (
+        DailyTopicGrade.objects.filter(user_id__in=student_ids, topic_id__in=topic_ids)
+        .order_by("date")
+        .values_list("user_id", "topic_id", "date", "snapshot_interval")
+    ):
+        if (uid, tid) in pairs:
+            grades.setdefault((uid, tid), []).append((day, interval))
+    added = {}  # (user, topic) -> first day the topic reached the student
+    for uid, tid, at in StudentAssignment.objects.filter(
+        student_id__in=student_ids, started_at__isnull=False
+    ).values_list("student_id", "assignment__assignment_topics__topic_id", "started_at"):
+        if (uid, tid) in pairs:
+            day = timezone.localdate(at)
+            added[(uid, tid)] = min(day, added.get((uid, tid), day))
+
+    # Sweep events: on its added day a pair joins its topic with the interval
+    # it ended that day on; each later graded day shifts the topic's sum.
+    events = {}  # date -> [(topic, interval delta, student delta)]
+    for pair in pairs:
+        gs = grades.get(pair, [])
+        first = min(filter(None, [added.get(pair), gs[0][0] if gs else None]), default=end)
+
+        def after(i):
+            return gs[i + 1][1] if i + 1 < len(gs) else current.get(pair, 0)
+
+        later = [i for i, (day, _) in enumerate(gs) if day > first]
+        value = gs[later[0]][1] if later else current.get(pair, 0)
+        events.setdefault(first, []).append((pair[1], value, 1))
+        for i in later:
+            events.setdefault(gs[i][0], []).append((pair[1], after(i) - value, 0))
+            value = after(i)
+
+    sums, counts = {}, {}
+
+    def apply(day):
+        for tid, d_sum, d_count in events.get(day, ()):
+            sums[tid] = sums.get(tid, 0) + d_sum
+            counts[tid] = counts.get(tid, 0) + d_count
+
+    for day in sorted(d for d in events if d < start):
+        apply(day)
+    series = []
+    day = start
+    while day <= end:
+        apply(day)
+        point = {b: 0 for b in _BANDS}
+        for tid, n in counts.items():
+            if n:
+                point[_interval_band(sums[tid] / n)] += 1
+        if any(point.values()):
+            series.append({"date": day.isoformat(), **point})
+        day += datetime.timedelta(days=1)
+    return series
+
+
 @csrf_exempt
 @require_http_methods(["GET"])
 def proficiency_history(request):
-    """Familiarity-over-time series: % of topics in each proficiency band per day.
+    """Familiarity-over-time series: number of topics in each proficiency band per day.
 
-    Averages each student's per-band percentage across the resolved student set,
-    for each day in the window. Each student's mix is forward-filled from their
-    most recent `ProficiencySnapshot` on or before the day (snapshots are written
-    only on active days), and students with no topics selected yet don't
-    contribute to that day's average. Values are percentages (0-100).
+    For a group, each topic is banded by the students' average familiarity
+    with it, so the bars count topics, not students (see
+    `_topic_band_history`). The count grows as topics are added through the
+    year.
     """
     guard = _require_teacher(request)
     if guard:
@@ -115,46 +416,9 @@ def proficiency_history(request):
         days = 90
     end = _client_today(request)
     start = end - datetime.timedelta(days=days - 1)
-
     if not student_ids:
-        return JsonResponse({"series": [], "student_count": 0})
-
-    # Per-student ascending list of (date, band-percentages). Includes snapshots
-    # before the window so the first in-window day forward-fills correctly.
-    per_student = {sid: [] for sid in student_ids}
-    for snap in (
-        ProficiencySnapshot.objects.filter(user_id__in=student_ids, date__lte=end)
-        .order_by("user_id", "date")
-    ):
-        if snap.total <= 0:
-            per_student[snap.user_id].append((snap.date, None))
-            continue
-        pct = {b: getattr(snap, b) / snap.total * 100 for b in _BANDS}
-        per_student[snap.user_id].append((snap.date, pct))
-
-    pointers = {sid: 0 for sid in student_ids}
-    latest = {sid: None for sid in student_ids}  # last-known pct dict (or None)
-    series = []
-    day = start
-    while day <= end:
-        # Advance each student's pointer to the latest snapshot on/before `day`.
-        for sid in student_ids:
-            snaps = per_student[sid]
-            i = pointers[sid]
-            while i < len(snaps) and snaps[i][0] <= day:
-                latest[sid] = snaps[i][1]
-                i += 1
-            pointers[sid] = i
-        contributors = [latest[sid] for sid in student_ids if latest[sid] is not None]
-        if contributors:
-            point = {"date": day.isoformat()}
-            for b in _BANDS:
-                point[b] = round(sum(c[b] for c in contributors) / len(contributors), 1)
-            point["students"] = len(contributors)
-            series.append(point)
-        day += datetime.timedelta(days=1)
-
-    return JsonResponse({"series": series, "student_count": len(student_ids)})
+        return JsonResponse({"series": []})
+    return JsonResponse({"series": _topic_band_history(student_ids, start, end)})
 
 
 def _teacher_can_view_student(teacher, student_id):
@@ -231,14 +495,13 @@ def student_detail(request, student_id):
         if a.id in seen:
             continue
         seen.add(a.id)
-        status, answered = progress.get(a.id, ("not_started", 0))
-        done = status == "done"
+        row = progress.get(a.id, _NO_PROGRESS)
+        done = row["status"] == "done"
         assignments_out.append({
             "assignment_id": a.id,
             "title": a.title,
             "class_name": link.classroom.name,
-            "status": status,
-            "cards_answered": answered,
+            **row,
             "deck_size": a.deck_size,
             "due_at": link.due_at.isoformat() if link.due_at else None,
             "overdue": bool(link.due_at and link.due_at < now and not done),

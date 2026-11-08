@@ -9,7 +9,7 @@ is done once the student has answered its card count (any topic) since it
 reached them; the teacher report adds familiarity on the assignment's topics
 from the student's SM-2 state.
 
-The `addition` generator the test topics use is mocked so deck generation is
+The `gcd` generator the test topics use is mocked so deck generation is
 deterministic, mirroring test_deck.py.
 """
 import json
@@ -227,7 +227,7 @@ class AssignmentAuthoringTests(TestCase):
         self.client = Client()
         self.teacher = make_teacher()
         self.course = make_course()
-        self.topic = make_topic(self.course, generator_name="addition")
+        self.topic = make_topic(self.course, generator_name="gcd")
         self.client.force_login(self.teacher)
         # Two classes to assign the same assignment to.
         self.class_a = self.client.post(
@@ -258,6 +258,21 @@ class AssignmentAuthoringTests(TestCase):
     def test_deck_size_defaults(self):
         a = self._create_assignment()
         self.assertEqual(a["deck_size"], 10)
+
+    def test_late_work_allowed_by_default_and_editable(self):
+        a = self._create_assignment()
+        self.assertTrue(a["allow_late"])
+        res = self.client.patch(
+            f"/assignments/{a['id']}/", data=json.dumps({"allow_late": False}),
+            content_type="application/json",
+        )
+        self.assertFalse(res.json()["allow_late"])
+        self.assertFalse(Assignment.objects.get(id=a["id"]).allow_late)
+        bad = self.client.patch(
+            f"/assignments/{a['id']}/", data=json.dumps({"allow_late": "no"}),
+            content_type="application/json",
+        )
+        self.assertEqual(bad.status_code, 400)
 
     def test_title_required(self):
         res = self.client.post(
@@ -304,7 +319,7 @@ class AssignmentAuthoringTests(TestCase):
         self.assertFalse(Assignment.objects.filter(id=a["id"]).exists())
 
     def test_edit_topics_replaces_set(self):
-        other = make_topic(self.course, topic_name="Other", generator_name="addition")
+        other = make_topic(self.course, topic_name="Other", generator_name="gcd")
         a = self._create_assignment()
         res = self.client.patch(
             f"/assignments/{a['id']}/",
@@ -329,7 +344,7 @@ class AssignmentAuthoringTests(TestCase):
         self.assertEqual(res.status_code, 403)
 
 
-@mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
+@mock.patch("myapp.views.mathgenerator.gcd", return_value=("Q", "4"))
 class StartAssignmentTests(TestCase):
     """Assigning adds topics and starts the count; opening grows the deck and routes."""
 
@@ -338,9 +353,9 @@ class StartAssignmentTests(TestCase):
         self.teacher = make_teacher()
         self.student = make_user()
         self.course = make_course()
-        self.picked = make_topic(self.course, topic_name="Picked", generator_name="addition")
+        self.picked = make_topic(self.course, topic_name="Picked", generator_name="gcd")
 
-    def _setup_assignment(self, deck_size=6, topics=None):
+    def _setup_assignment(self, deck_size=6, topics=None, due_at=None, allow_late=True):
         self.client.force_login(self.teacher)
         cls = self.client.post(
             "/classes/", data=json.dumps({"name": "A"}), content_type="application/json"
@@ -348,14 +363,17 @@ class StartAssignmentTests(TestCase):
         a = self.client.post(
             "/assignments/",
             data=json.dumps({
-                "title": "HW", "deck_size": deck_size,
+                "title": "HW", "deck_size": deck_size, "allow_late": allow_late,
                 "topics": [{"topic_id": t.id} for t in (topics or [self.picked])],
             }),
             content_type="application/json",
         ).json()
+        spec = {"class_id": cls["id"]}
+        if due_at is not None:
+            spec["due_at"] = due_at.isoformat()
         self.client.post(
             f"/assignments/{a['id']}/assign/",
-            data=json.dumps({"classes": [{"class_id": cls["id"]}]}),
+            data=json.dumps({"classes": [spec]}),
             content_type="application/json",
         )
         self.client.force_login(self.student)
@@ -365,14 +383,27 @@ class StartAssignmentTests(TestCase):
         )
         return a, cls
 
+    def _due_today(self):
+        return timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
+
+    def _advance(self, outcome="correct_first"):
+        return self.client.post(
+            "/deck/advance/", data=json.dumps({"outcome": outcome}),
+            content_type="application/json",
+        ).json()
+
+    def _row(self, a):
+        return StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
+
     def test_start_selects_topics_grows_deck_and_routes(self, _gen):
-        # Pin the student's daily size below the assignment's card count so the
-        # grow (never shrink) is actually exercised.
+        # Pin the student's daily size below the assignment's card count, and
+        # make it due today, so the whole count lands in today's deck on top
+        # of the setting.
         settings = Settings.load(self.student)
         settings.questions_per_day = 5
         settings.save(update_fields=["questions_per_day"])
 
-        a, _ = self._setup_assignment(deck_size=8)
+        a, _ = self._setup_assignment(deck_size=8, due_at=self._due_today())
         res = self.client.post(f"/assignments/{a['id']}/play/")
         self.assertEqual(res.status_code, 200)
         data = res.json()
@@ -392,29 +423,90 @@ class StartAssignmentTests(TestCase):
         self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
         self.assertEqual(sa.cards_answered, 0)
 
-    def test_answering_card_count_completes_assignment(self, _gen):
+    def test_answering_card_count_right_completes_assignment(self, _gen):
         settings = Settings.load(self.student)
         settings.questions_per_day = 2
         settings.save(update_fields=["questions_per_day"])
 
-        a, _ = self._setup_assignment(deck_size=3)
+        a, _ = self._setup_assignment(deck_size=3, due_at=self._due_today())
         self.client.post(f"/assignments/{a['id']}/play/")
-        sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
         for n in range(1, 3):
-            data = self.client.post("/deck/advance/").json()
-            self.assertEqual(data["total"], 3)
-            sa.refresh_from_db()
-            self.assertEqual(sa.cards_answered, n)
-            self.assertEqual(sa.status, StudentAssignment.IN_PROGRESS)
+            data = self._advance()
+            # A sitting is at least 4 cards, so a single slip can't sink it.
+            self.assertEqual(data["total"], 4)
+            sa = self._row(a)
+            self.assertEqual((sa.cards_answered, sa.status), (n, StudentAssignment.IN_PROGRESS))
+            self.assertEqual(sa.completion_pct, 100 * n // 3)
 
-        data = self.client.post("/deck/advance/").json()
-        self.assertEqual(data, {"completed": True, "total": 3})
-        sa.refresh_from_db()
+        self._advance()
+        sa = self._row(a)
         self.assertEqual(sa.cards_answered, 3)
         self.assertEqual(sa.status, StudentAssignment.COMPLETED)
+        self.assertEqual(sa.completion_pct, 100)
+        self.assertFalse(sa.max_reached)
         self.assertIsNotNone(sa.completed_at)
         mine = self.client.get("/assignments/mine/").json()
         self.assertEqual([r["status"] for r in mine["completed"]], ["done"])
+        # Getting it all right lifts the topic to "familiar", not back tomorrow.
+        review = TopicReview.objects.get(user=self.student, topic=self.picked)
+        self.assertGreaterEqual(review.interval, 6)
+
+    def test_struggling_student_gets_more_cards_up_to_the_maximum(self, _gen):
+        # A daily setting of 1 so every card past the first 4 is extra practice.
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 1
+        settings.save(update_fields=["questions_per_day"])
+        a, _ = self._setup_assignment(deck_size=4, due_at=self._due_today())
+        self.client.post(f"/assignments/{a['id']}/play/")
+        last_pct = 0
+        for _ in range(6):  # 1.5 x 4
+            self._advance("incorrect")
+            sa = self._row(a)
+            # The percentage pauses rather than dropping as cards needed grow.
+            self.assertGreaterEqual(sa.completion_pct, last_pct)
+            last_pct = sa.completion_pct
+        sa = self._row(a)
+        self.assertEqual(sa.cards_answered, 6)
+        self.assertEqual(sa.status, StudentAssignment.COMPLETED)
+        self.assertTrue(sa.max_reached)
+        # The deck kept going past the teacher's 4 to give the extra practice.
+        self.assertGreaterEqual(DailyDeck.objects.get(user=self.student).current_index, 6)
+
+    def test_student_who_recovers_finishes_before_the_maximum(self, _gen):
+        a, _ = self._setup_assignment(deck_size=4, due_at=self._due_today())
+        self.client.post(f"/assignments/{a['id']}/play/")
+        for outcome in ("incorrect", "correct_first", "correct_first", "correct_first"):
+            self._advance(outcome)
+        sa = self._row(a)
+        # 3 of the last 4 right after the 4 cards: done, at exactly the count.
+        self.assertEqual((sa.cards_answered, sa.status), (4, StudentAssignment.COMPLETED))
+        self.assertFalse(sa.max_reached)
+
+    def test_only_cards_on_the_assignments_topics_count(self, _gen):
+        own = make_topic(self.course, topic_name="Own", generator_name="gcd")
+        select(self.student, own)
+        a, _ = self._setup_assignment(deck_size=4)
+        from myapp.views.deck import _count_assignment_card
+        log_answers(self.student, own, "correct_first")
+        _count_assignment_card(self.student, own.id, timezone.localdate())
+        self.assertEqual(self._row(a).cards_answered, 0)
+        log_answers(self.student, self.picked, "correct_first")
+        _count_assignment_card(self.student, self.picked.id, timezone.localdate())
+        self.assertEqual(self._row(a).cards_answered, 1)
+
+    def test_late_work_counts_only_when_allowed(self, _gen):
+        from myapp.views.deck import _count_assignment_card
+        past = timezone.now() - timezone.timedelta(days=1)
+        strict, _ = self._setup_assignment(deck_size=1, due_at=past, allow_late=False)
+        lenient, _ = self._setup_assignment(deck_size=1, due_at=past, allow_late=True)
+        log_answers(self.student, self.picked, "correct_first")
+        _count_assignment_card(self.student, self.picked.id, timezone.localdate())
+        # Past due without late work: frozen.
+        self.assertEqual(self._row(strict).cards_answered, 0)
+        self.assertEqual(self._row(strict).status, StudentAssignment.IN_PROGRESS)
+        # Late work allowed: it counts, and the completion is marked late.
+        sa = self._row(lenient)
+        self.assertEqual((sa.cards_answered, sa.status, sa.late), (1, StudentAssignment.COMPLETED, True))
 
     def _class_with_student(self):
         """A teacher's class the student has joined, with nothing assigned yet."""
@@ -474,7 +566,7 @@ class StartAssignmentTests(TestCase):
 
     def test_assigning_flags_existing_deck_for_rebuild(self, _gen):
         cls = self._class_with_student()
-        own = make_topic(self.course, topic_name="Own", generator_name="addition")
+        own = make_topic(self.course, topic_name="Own", generator_name="gcd")
         select(self.student, own)
         self.client.get("/deck/")
         self._create_and_assign(cls)
@@ -486,7 +578,7 @@ class StartAssignmentTests(TestCase):
     def test_editing_topics_reaches_assigned_students(self, _gen):
         cls = self._class_with_student()
         a = self._create_and_assign(cls)
-        extra = make_topic(self.course, topic_name="Extra", generator_name="addition")
+        extra = make_topic(self.course, topic_name="Extra", generator_name="gcd")
         self.client.force_login(self.teacher)
         self.client.patch(
             f"/assignments/{a['id']}/",
@@ -501,7 +593,7 @@ class StartAssignmentTests(TestCase):
         cls = self._class_with_student()
         a = self._create_and_assign(cls)
         self.client.get("/deck/")
-        self.client.post("/deck/advance/")
+        self._advance()
         self._assign(a, cls)
         sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
         self.assertEqual((sa.status, sa.cards_answered), (StudentAssignment.IN_PROGRESS, 1))
@@ -521,9 +613,10 @@ class StartAssignmentTests(TestCase):
         a = self._create_and_assign(cls, deck_size=3)
         sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
         self.assertEqual(sa.cards_answered, 0)
-        # The deck stretches past the daily 3 so all 3 assignment cards fit.
+        # The deck is rebuilt after the 2 answered cards with today's sitting
+        # of the assignment (at least 4 cards), past the daily 3.
         data = self.client.get("/deck/").json()
-        self.assertEqual((data["current_number"], data["total"]), (3, 5))
+        self.assertEqual((data["current_number"], data["total"]), (3, 6))
 
     def test_open_assignments_count_the_same_cards(self, _gen):
         settings = Settings.load(self.student)
@@ -534,10 +627,10 @@ class StartAssignmentTests(TestCase):
         big, _ = self._setup_assignment(deck_size=4)
         self.client.post(f"/assignments/{small['id']}/play/")
         self.client.post(f"/assignments/{big['id']}/play/")
-        # One deck covers both: the largest remainder, not the sum.
+        # One deck covers both: the larger share of the shared topic, not the sum.
         self.assertEqual(self.client.get("/deck/").json()["total"], 4)
         for _ in range(2):
-            self.client.post("/deck/advance/")
+            self._advance()
         statuses = dict(
             StudentAssignment.objects.filter(student=self.student)
             .values_list("assignment_id", "status")
@@ -562,8 +655,8 @@ class AssignmentResultsTests(TestCase):
         self.client = Client()
         self.teacher = make_teacher()
         self.course = make_course()
-        self.easy = make_topic(self.course, topic_name="Easy", generator_name="addition")
-        self.hard = make_topic(self.course, topic_name="Hard", generator_name="addition")
+        self.easy = make_topic(self.course, topic_name="Easy", generator_name="gcd")
+        self.hard = make_topic(self.course, topic_name="Hard", generator_name="gcd")
 
     def _assign_to_student(self, student, due_at=None):
         self.client.force_login(self.teacher)
@@ -610,6 +703,21 @@ class AssignmentResultsTests(TestCase):
         self.assertEqual((row["status"], row["cards_answered"]), ("done", 10))
         self.assertEqual(row["proficiency"]["familiar"], 1)
         self.assertEqual(row["proficiency"]["new"], 1)
+
+    def test_report_shows_completion_and_needs_help(self):
+        helped = make_user()
+        a = self._assign_to_student(helped)
+        StudentAssignment.objects.filter(assignment_id=a["id"], student=helped).update(
+            status=StudentAssignment.COMPLETED, completion_pct=100, max_reached=True,
+        )
+
+        self.client.force_login(self.teacher)
+        res = self.client.get(f"/assignments/{a['id']}/results/").json()
+        row = res["students"][0]
+        self.assertEqual(
+            (row["completion_pct"], row["max_reached"], row["late"]), (100, True, False)
+        )
+        self.assertEqual(res["assignment"]["max_cards"], 15)  # 1.5 x the default 10
 
     def test_overdue_when_unfinished_past_due(self):
         student = make_user()
@@ -746,7 +854,7 @@ class TeacherInsightTests(TestCase):
         self.assertEqual(detail["struggled"], [])
 
 
-@mock.patch("myapp.views.mathgenerator.addition", return_value=("Q", "4"))
+@mock.patch("myapp.views.mathgenerator.gcd", return_value=("Q", "4"))
 class MyAssignmentsTests(TestCase):
     """A student's to-do / done split, driven by cards answered since assigning."""
 
@@ -755,7 +863,7 @@ class MyAssignmentsTests(TestCase):
         self.teacher = make_teacher()
         self.student = make_user()
         self.course = make_course()
-        self.topic = make_topic(self.course, generator_name="addition")
+        self.topic = make_topic(self.course, generator_name="gcd")
 
     def _assign(self):
         self.client.force_login(self.teacher)
@@ -791,12 +899,219 @@ class MyAssignmentsTests(TestCase):
         self.assertEqual((row["status"], row["cards_answered"], row["deck_size"]), ("in_progress", 0, 2))
 
         self.client.post(f"/assignments/{a['id']}/play/")
-        self.client.post("/deck/advance/")
+        advance = lambda: self.client.post(  # noqa: E731
+            "/deck/advance/", data=json.dumps({"outcome": "correct_first"}),
+            content_type="application/json",
+        )
+        advance()
         row = self.client.get("/assignments/mine/").json()["upcoming"][0]
-        self.assertEqual((row["status"], row["cards_answered"]), ("in_progress", 1))
+        self.assertEqual(
+            (row["status"], row["cards_answered"], row["completion_pct"]), ("in_progress", 1, 50)
+        )
+        self.assertNotIn("max_reached", row)  # extra practice isn't flagged to students
 
-        # The second card reaches the count and moves it to done.
-        self.client.post("/deck/advance/")
+        # The second card right reaches the count and moves it to done.
+        advance()
         data = self.client.get("/assignments/mine/").json()
         self.assertEqual(len(data["upcoming"]), 0)
         self.assertEqual(len(data["completed"]), 1)
+
+
+class OverviewFocusTests(TestCase):
+    """The overview's newly taught / weak spots columns."""
+
+    def setUp(self):
+        self.client = Client()
+        self.teacher = make_teacher()
+        self.course = make_course()
+        self.taught = make_topic(self.course, topic_name="Taught")
+        self.older = make_topic(self.course, topic_name="Older")
+        self.p1 = Classroom.objects.create(teacher=self.teacher, name="P1", join_code="FOC001")
+        self.p2 = Classroom.objects.create(teacher=self.teacher, name="P2", join_code="FOC002")
+        self.a, self.b = make_user(), make_user()
+        ClassEnrollment.objects.create(classroom=self.p1, student=self.a)
+        ClassEnrollment.objects.create(classroom=self.p2, student=self.b)
+        self.client.force_login(self.teacher)
+
+    def _assign(self, classroom, topic, students, days_ago=0):
+        """Hand `topic` to `students` through an assignment started `days_ago` days back."""
+        a = Assignment.objects.create(teacher=self.teacher, title=f"HW {topic.topic_name}")
+        AssignmentTopic.objects.create(assignment=a, topic=topic)
+        AssignmentClass.objects.create(assignment=a, classroom=classroom)
+        started = timezone.now() - timezone.timedelta(days=days_ago)
+        for s in students:
+            select(s, topic)
+            StudentAssignment.objects.create(
+                assignment=a, classroom=classroom, student=s,
+                status=StudentAssignment.IN_PROGRESS, started_at=started,
+            )
+
+    def _focus(self, **params):
+        return self.client.get("/teacher/overview/focus/", params).json()
+
+    def test_newly_taught_has_first_assigned_accuracy_and_bands(self):
+        self._assign(self.p1, self.taught, [self.a], days_ago=3)
+        self._assign(self.p2, self.taught, [self.b])
+        mark_practiced(self.a, self.taught, interval=3)
+        # a: 1 of 3 right first try; b: 1 of 1. Each student counts once: 67%.
+        log_answers(self.a, self.taught, "incorrect", "correct_second", "correct_first")
+        log_answers(self.b, self.taught, "correct_first")
+
+        row, = self._focus()["newly_taught"]
+        self.assertEqual(row, {
+            "topic_id": self.taught.id, "topic_name": "Taught",
+            "first_assigned": (timezone.localdate() - timezone.timedelta(days=3)).isoformat(),
+            "accuracy": 67,
+            "proficiency": {"new": 1, "learning": 1, "familiar": 0, "proficient": 0},
+        })
+
+    def test_newly_taught_ignores_old_assignments_and_answers_before_it(self):
+        self._assign(self.p1, self.older, [self.a], days_ago=30)
+        # Answers from before the assignment reached the student don't count.
+        log_answers(
+            self.b, self.taught, "incorrect",
+            date=timezone.localdate() - timezone.timedelta(days=3),
+        )
+        self._assign(self.p2, self.taught, [self.b])
+
+        row, = self._focus()["newly_taught"]
+        self.assertEqual(row["topic_name"], "Taught")
+        self.assertIsNone(row["accuracy"])
+
+    def test_class_scope_narrows_every_column(self):
+        self._assign(self.p1, self.taught, [self.a])
+        self._assign(self.p2, self.older, [self.b])
+        log_answers(self.a, self.taught, "incorrect")
+        log_answers(self.b, self.older, "incorrect")
+
+        data = self._focus(scope="class", class_id=self.p1.id)
+        self.assertEqual([t["topic_name"] for t in data["newly_taught"]], ["Taught"])
+        self.assertEqual([t["topic_name"] for t in data["weak_spots"]], ["Taught"])
+
+    def test_weak_spots_average_accuracy_per_student(self):
+        # a: 0% on one answer; b: 90% on ten. Pooled would be 9/11 = 82%, but
+        # each student counts once, so the topic averages 45%.
+        log_answers(self.a, self.taught, "incorrect")
+        log_answers(self.b, self.taught, *["correct_first"] * 9, "incorrect")
+        log_answers(self.a, self.older, "correct_first", "correct_second")
+
+        data = self._focus()
+        self.assertEqual(
+            data["weak_spots"],
+            [
+                {"topic_id": self.taught.id, "topic_name": "Taught", "accuracy": 45, "missed_recent": 2},
+                {"topic_id": self.older.id, "topic_name": "Older", "accuracy": 50, "missed_recent": 1},
+            ],
+        )
+
+    def test_weak_spots_count_students_missing_in_the_last_two_weeks(self):
+        old = timezone.localdate() - timezone.timedelta(days=20)
+        log_answers(self.a, self.taught, "incorrect", date=old)
+        log_answers(self.b, self.taught, "incorrect")
+        # Only missed before the last two weeks: not a weak spot any more.
+        log_answers(self.a, self.older, "incorrect", date=old)
+        log_answers(self.b, self.older, "correct_first")
+
+        spot, = self._focus()["weak_spots"]
+        self.assertEqual((spot["topic_name"], spot["missed_recent"]), ("Taught", 1))
+
+    def test_weak_spots_leave_out_topics_nobody_got_wrong(self):
+        log_answers(self.a, self.taught, "correct_first", "correct_first")
+        self.assertEqual(self._focus()["weak_spots"], [])
+
+    def test_newly_taught_sorts_newest_then_lowest_accuracy(self):
+        third = make_topic(self.course, topic_name="Third")
+        self._assign(self.p1, self.older, [self.a], days_ago=5)
+        self._assign(self.p1, self.taught, [self.a])
+        self._assign(self.p1, third, [self.a])
+        log_answers(self.a, self.taught, "correct_first")
+        log_answers(self.a, third, "incorrect")
+        log_answers(self.a, self.older, "incorrect")
+
+        names = [t["topic_name"] for t in self._focus()["newly_taught"]]
+        self.assertEqual(names, ["Third", "Taught", "Older"])
+
+    def test_students_and_other_teachers_are_refused(self):
+        self.client.force_login(self.a)
+        self.assertEqual(self.client.get("/teacher/overview/focus/").status_code, 403)
+        self.client.force_login(make_teacher())
+        res = self.client.get("/teacher/overview/focus/", {"scope": "class", "class_id": self.p1.id})
+        self.assertEqual(res.status_code, 403)
+
+
+class ProficiencyHistoryTests(TestCase):
+    """Familiarity over time: topics per band, banded by average familiarity."""
+
+    def setUp(self):
+        self.client = Client()
+        self.teacher = make_teacher()
+        self.course = make_course()
+        self.classroom = Classroom.objects.create(teacher=self.teacher, name="P1", join_code="HIS001")
+        self.a, self.b = make_user(), make_user()
+        for s in (self.a, self.b):
+            ClassEnrollment.objects.create(classroom=self.classroom, student=s)
+        self.today = timezone.localdate()
+        self.client.force_login(self.teacher)
+
+    def _ago(self, days):
+        return self.today - timezone.timedelta(days=days)
+
+    def _grade(self, user, topic, days_ago, before):
+        """A graded day for `user` on `topic`, with the interval it had before."""
+        DailyTopicGrade.objects.create(
+            user=user, topic=topic, date=self._ago(days_ago), applied_quality=5,
+            snapshot_ease=2.5, snapshot_interval=before, snapshot_repetitions=0,
+        )
+
+    def _review(self, user, topic, interval):
+        TopicReview.objects.create(user=user, topic=topic, interval=interval, repetitions=1, ease=2.5)
+
+    def _series(self, **params):
+        params = {"days": 7, "today": self.today.isoformat(), **params}
+        res = self.client.get("/teacher/proficiency-history/", params).json()["series"]
+        return {p["date"]: (p["new"], p["learning"], p["familiar"], p["proficient"]) for p in res}
+
+    def test_topics_are_banded_by_average_interval_across_students(self):
+        fractions = make_topic(self.course, topic_name="Fractions")
+        select(self.a, fractions)
+        select(self.b, fractions)
+        # a: 0 -> 1 (graded 3 days ago) -> 30 (graded yesterday); b: 0 -> 4 (graded 3 days ago).
+        self._grade(self.a, fractions, 3, before=0)
+        self._grade(self.a, fractions, 1, before=1)
+        self._review(self.a, fractions, 30)
+        self._grade(self.b, fractions, 3, before=0)
+        self._review(self.b, fractions, 4)
+
+        series = self._series()
+        # Average 2.5 (learning) after the first grades, then 17 (familiar).
+        self.assertEqual(series[self._ago(3).isoformat()], (0, 1, 0, 0))
+        self.assertEqual(series[self._ago(2).isoformat()], (0, 1, 0, 0))
+        self.assertEqual(series[self._ago(1).isoformat()], (0, 0, 1, 0))
+        self.assertEqual(series[self.today.isoformat()], (0, 0, 1, 0))
+        self.assertNotIn(self._ago(4).isoformat(), series)
+
+    def test_topic_count_grows_as_topics_are_added(self):
+        early = make_topic(self.course, topic_name="Early")
+        late = make_topic(self.course, topic_name="Late")
+        select(self.a, early)
+        select(self.a, late)
+        self._grade(self.a, early, 5, before=0)
+        self._review(self.a, early, 25)
+        # Late reached the student through an assignment two days ago, unpracticed.
+        assignment = Assignment.objects.create(teacher=self.teacher, title="HW")
+        AssignmentTopic.objects.create(assignment=assignment, topic=late)
+        StudentAssignment.objects.create(
+            assignment=assignment, classroom=self.classroom, student=self.a,
+            status=StudentAssignment.IN_PROGRESS,
+            started_at=timezone.now() - timezone.timedelta(days=2),
+        )
+
+        series = self._series()
+        self.assertEqual(series[self._ago(5).isoformat()], (0, 0, 0, 1))
+        self.assertEqual(series[self._ago(3).isoformat()], (0, 0, 0, 1))
+        self.assertEqual(series[self._ago(2).isoformat()], (1, 0, 0, 1))
+        self.assertEqual(series[self.today.isoformat()], (1, 0, 0, 1))
+
+    def test_selected_but_untouched_topic_counts_from_today(self):
+        select(self.a, make_topic(self.course, topic_name="Fresh"))
+        self.assertEqual(self._series(), {self.today.isoformat(): (1, 0, 0, 0)})

@@ -1,38 +1,55 @@
 import datetime
 import json
 import logging
+import math
+from collections import Counter, defaultdict
 
-from django.db.models import F
-from django.http import JsonResponse
+from django.conf import settings as django_settings
+from django.http import Http404, JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 
 from ..models import (
     Topic, Settings, DailyDeck, TopicReview, DailyTopicGrade, DailyPractice,
-    ProficiencySnapshot, StudentAssignment, AnswerRecord,
+    ProficiencySnapshot, StudentAssignment, AssignmentTopic, AssignmentClass,
+    AnswerRecord, ProblemReport,
 )
 from .common import _require_auth
 from .problems import _make_problem_for_topic
-from .. import srs
+from .. import practice, srs
 
 logger = logging.getLogger(__name__)
 
-# Map an answer outcome to an SM-2 quality grade (0-5). The client reports which
-# of these happened when it advances past a card.
-#   correct_first  -> 5  (recalled cleanly)
-#   correct_second -> 3  (correct, but only on the second attempt: hard)
-#   incorrect      -> 1  (failed both attempts: a lapse)
-_OUTCOME_QUALITY = {
-    "correct_first": 5,
-    "correct_second": 3,
-    "incorrect": 1,
-}
+# The answer outcomes the client reports when it advances past a card; each
+# earns credit toward the topic's day grade (see `srs.CREDIT`).
+_OUTCOMES = frozenset(srs.CREDIT)
+
+# Every stored card has a kind (see `_visible_total`):
+#   required - assignment work and due assignment-topic or lapsed reviews,
+#              planned at the start of the day (`_required_plan`)
+#   pool     - the student's own practice, filling up to `questions_per_day`
+#   extra    - added during the day: a topic still being learned, or an
+#              assignment that needs more on its last day (`_add_practice`)
+# Cards stored before kinds existed read as pool.
+_REQUIRED, _POOL, _EXTRA = "required", "pool", "extra"
 
 # Longest time one card can count toward a student's review time. The client
 # times each card from when it appears, so a tab left open on a card would
 # otherwise log hours of "review"; a generous cap keeps genuine slow work.
 _MAX_CARD_SECONDS = 10 * 60
+
+# Wrong answers allowed per card before its solution is revealed. Mirrors the
+# client's MAX_ATTEMPTS (MathProblem.jsx).
+_MAX_ATTEMPTS = 2
+
+# Cap on a submitted answer's length; nothing typeable is longer than this.
+_MAX_ANSWER = 500
+
+# Caps on a problem report's free text, so a client can't store arbitrarily
+# large blobs. Generous next to any genuine description or typed answer.
+_MAX_REPORT_DETAILS = 2000
+_MAX_REPORT_ANSWER = 500
 
 
 def _client_today(request):
@@ -66,53 +83,160 @@ def _has_topics(user):
     ).exists()
 
 
-def _assignment_cards_owed(user):
-    """The most cards any of the user's in-progress assignments still needs.
+def _kind(problem):
+    return problem.get("kind", _POOL)
 
-    Assignment cards are answered concurrently (every card counts toward every
-    open assignment), so the deck only needs to cover the largest remainder.
+
+def _deck_size_target(deck, per_day):
+    """How many cards the deck should show at `per_day` (before capping to what's stored).
+
+    Everything up to the last required or extra card, and at least `per_day`
+    cards plus one per extra card (extras come on top of the student's
+    setting). Pool cards are always stored after the required ones they were
+    built with, so only unanswered pool cards at the end fall outside this.
     """
-    rows = StudentAssignment.objects.filter(
-        student=user, status=StudentAssignment.IN_PROGRESS
-    ).values_list("assignment__deck_size", "cards_answered")
-    return max((max(0, size - answered) for size, answered in rows), default=0)
+    extra = 0
+    last = 0
+    for i, problem in enumerate(deck.problems):
+        kind = _kind(problem)
+        if kind != _POOL:
+            last = i + 1
+        if kind == _EXTRA:
+            extra += 1
+    return max(per_day + extra, last)
 
 
-def _deck_target(user, answered):
-    """How many cards today's deck should hold, given `answered` so far today.
+def _visible_total(user, deck):
+    """How many of the deck's stored cards today's practice shows.
 
-    At least the user's `questions_per_day`, stretched so an open assignment's
-    remaining cards fit after the ones already answered. Answering a card
-    bumps both `answered` and every open assignment's count, so the target
-    holds steady through the day, and an assignment finished today keeps the
-    deck at the size it was stretched to. With no assignment in play it's just
-    `questions_per_day`, so lowering the setting below what's already answered
-    reads as finished at the new size rather than holding at `answered`.
+    All required and extra cards, plus pool cards up to `questions_per_day`
+    (see `_deck_size_target`). Lowering the setting mid-day hides only
+    unanswered pool cards at the end, and reads as finished if the student has
+    already answered that many. Hiding is display-only; raising the setting
+    again shows the stored cards without regenerating them.
     """
     per_day = Settings.load(user).questions_per_day
-    owed = _assignment_cards_owed(user)
-    if owed == 0 and not StudentAssignment.objects.filter(
-        student=user,
-        status=StudentAssignment.COMPLETED,
-        completed_at__date=timezone.localdate(),
-    ).exists():
-        return per_day
-    return max(per_day, answered + owed)
+    return min(len(deck.problems), _deck_size_target(deck, per_day))
 
 
-def _count_assignment_card(user):
-    """Count one answered card toward each of the user's in-progress assignments.
+def _open_assignments(user, now=None):
+    """The user's in-progress assignments that still take cards, with their topics.
 
-    Any card counts, whatever its topic. An assignment whose count reaches its
-    `deck_size` is marked completed.
+    Returns `[(student_assignment, topic_ids, due_at)]`: the assignment's topics
+    that have a generator, in the order the teacher added them, and its due date
+    for the student's class (or None). An assignment past its due date that
+    doesn't allow late work is left out: its progress is frozen.
     """
-    open_rows = StudentAssignment.objects.filter(
-        student=user, status=StudentAssignment.IN_PROGRESS
+    now = now or timezone.now()
+    rows = list(
+        StudentAssignment.objects.filter(student=user, status=StudentAssignment.IN_PROGRESS)
+        .select_related("assignment")
     )
-    open_rows.update(cards_answered=F("cards_answered") + 1)
-    open_rows.filter(cards_answered__gte=F("assignment__deck_size")).update(
-        status=StudentAssignment.COMPLETED, completed_at=timezone.now()
-    )
+    if not rows:
+        return []
+    ids = [r.assignment_id for r in rows]
+    topics = defaultdict(list)
+    for aid, tid in (
+        AssignmentTopic.objects.filter(assignment_id__in=ids, topic__generator_name__isnull=False)
+        .order_by("id").values_list("assignment_id", "topic_id")
+    ):
+        topics[aid].append(tid)
+    dues = {
+        (aid, cid): due
+        for aid, cid, due in AssignmentClass.objects.filter(assignment_id__in=ids)
+        .values_list("assignment_id", "classroom_id", "due_at")
+    }
+    out = []
+    for row in rows:
+        due_at = dues.get((row.assignment_id, row.classroom_id))
+        if due_at and due_at < now and not row.assignment.allow_late:
+            continue
+        out.append((row, topics[row.assignment_id], due_at))
+    return out
+
+
+def _outcomes_since(user, topic_ids, since):
+    """Map each of `topic_ids` to the user's answer outcomes on it since `since`, oldest first."""
+    out = {tid: [] for tid in topic_ids}
+    rows = AnswerRecord.objects.filter(user=user, topic_id__in=topic_ids)
+    if since is not None:
+        rows = rows.filter(created_at__gte=since)
+    for tid, outcome in rows.order_by("created_at", "id").values_list("topic_id", "outcome"):
+        out[tid].append(outcome)
+    return out
+
+
+def _days_left(row, due_at, today):
+    """Days the assignment's remaining cards are spread over, counting today (at least 1)."""
+    if due_at is not None:
+        return max(1, (timezone.localdate(due_at) - today).days + 1)
+    started = timezone.localdate(row.started_at) if row.started_at else today
+    return max(1, practice.DEFAULT_ASSIGNMENT_DAYS - (today - started).days)
+
+
+def _count_assignment_card(user, topic_id, today):
+    """Count an answered card on `topic_id` toward the user's open assignments that include it.
+
+    Called after the card's `AnswerRecord` is written. Updates each matching
+    assignment's cards needed and completion percentage, and completes it once
+    the student is solid after its card count, or at its maximum (see
+    `practice.is_complete`). Completing it lifts each topic answered well
+    enough to "familiar" (`_graduate_topic`).
+    """
+    now = timezone.now()
+    for row, topic_ids, due_at in _open_assignments(user, now):
+        if topic_id not in topic_ids:
+            continue
+        outcomes = _outcomes_since(user, topic_ids, row.started_at)
+        size = row.assignment.deck_size
+        row.cards_answered += 1
+        row.cards_needed = practice.cards_needed(size, row.cards_answered, outcomes)
+        done, max_reached = practice.is_complete(size, row.cards_answered, outcomes)
+        if done:
+            row.status = StudentAssignment.COMPLETED
+            row.completed_at = now
+            row.completion_pct = 100
+            row.max_reached = max_reached
+            row.late = bool(due_at and due_at < now)
+        else:
+            row.completion_pct = practice.completion_pct(
+                row.cards_answered, row.cards_needed, row.completion_pct
+            )
+        row.save(update_fields=[
+            "cards_answered", "cards_needed", "completion_pct", "status",
+            "completed_at", "max_reached", "late",
+        ])
+        if done:
+            for tid, topic_outcomes in outcomes.items():
+                if topic_outcomes and srs.accuracy(topic_outcomes) >= practice.GRADUATION_ACCURACY:
+                    _graduate_topic(user, tid, today)
+            logger.info(
+                "User %s completed assignment %s after %d cards%s",
+                user.id, row.assignment_id, row.cards_answered,
+                " (max reached)" if max_reached else "",
+            )
+
+
+def _graduate_topic(user, topic_id, today):
+    """Lift a topic to at least `practice.GRADUATION_INTERVAL` days after a good assignment.
+
+    If the topic was answered today, the lift is stored on today's grade so
+    regrading from later answers keeps it; otherwise it's applied to the
+    schedule directly.
+    """
+    grade = DailyTopicGrade.objects.filter(user=user, topic_id=topic_id, date=today).first()
+    if grade is not None:
+        grade.floor_interval = practice.GRADUATION_INTERVAL
+        grade.save(update_fields=["floor_interval"])
+        _grade_topic(user, topic_id, today)
+        return
+    review = TopicReview.objects.filter(user=user, topic_id=topic_id).first()
+    if review is None or review.interval >= practice.GRADUATION_INTERVAL:
+        return
+    review.interval = practice.GRADUATION_INTERVAL
+    review.repetitions = max(review.repetitions, 2)
+    review.due_date = today + datetime.timedelta(days=practice.GRADUATION_INTERVAL)
+    review.save(update_fields=["interval", "repetitions", "due_date"])
 
 
 # Proficiency bands, keyed off a topic's SM-2 `interval` (days until next review).
@@ -239,7 +363,11 @@ def _deck_topic_ids(deck):
     a top-up. The result is used only to prefer fresh topics when topping up, so
     a missing id degrades to "might repeat this topic", never an error.
     """
-    return [p["topic_id"] for p in deck.problems if "topic_id" in p]
+    return _deck_topic_ids_of(deck.problems)
+
+
+def _deck_topic_ids_of(problems):
+    return [p["topic_id"] for p in problems if "topic_id" in p]
 
 
 def _due_weight(due_date, today):
@@ -363,6 +491,123 @@ def _generate_problems(user, count, today, existing=()):
     return problems
 
 
+def _required_plan(user, today):
+    """Cards each topic still needs today for assignments, reviews and lapses.
+
+    Gathers the inputs for `practice.plan_required`:
+
+    - each open assignment's share of today (`practice.assignment_cards`), its
+      topics ordered shakiest first (not solid, then lowest ease);
+    - due reviews of the student's assignment topics, from any assignment;
+    - selected topics that lapsed yesterday.
+
+    Cards already answered on a topic today are subtracted, so rebuilding the
+    deck mid-day doesn't ask for them again. Returns `{topic_id: cards}` in
+    priority order: assignment topics first, then lapses, then reviews. Topics
+    outside assignments otherwise come only from the pool (`questions_per_day`).
+    """
+    answered_today = Counter(
+        AnswerRecord.objects.filter(user=user, date=today).values_list("topic_id", flat=True)
+    )
+    open_rows = _open_assignments(user)
+    all_topic_ids = {tid for _, tids, _ in open_rows for tid in tids}
+    eases = dict(
+        TopicReview.objects.filter(user=user, topic_id__in=all_topic_ids).values_list("topic_id", "ease")
+    )
+    assignment_plans = Counter()
+    for row, topic_ids, due_at in open_rows:
+        if not topic_ids:
+            continue
+        outcomes = _outcomes_since(user, topic_ids, row.started_at)
+        needed = row.cards_needed or row.assignment.deck_size
+        today_rows = AnswerRecord.objects.filter(user=user, date=today, topic_id__in=topic_ids)
+        if row.started_at is not None:
+            today_rows = today_rows.filter(created_at__gte=row.started_at)
+        remaining = max(0, needed - row.cards_answered) + today_rows.count()
+        ordered = sorted(
+            topic_ids,
+            key=lambda t: (practice.is_solid(outcomes[t]), eases.get(t, srs.INITIAL_EASE), t),
+        )
+        # A card counts toward every open assignment on its topic, so two
+        # assignments sharing a topic need the larger share, not both.
+        for tid, cards in practice.assignment_cards(remaining, _days_left(row, due_at, today), ordered).items():
+            assignment_plans[tid] = max(assignment_plans[tid], cards)
+
+    selected = set(
+        Topic.objects.filter(selections__user=user, generator_name__isnull=False)
+        .values_list("id", flat=True)
+    )
+    assigned = set(
+        AssignmentTopic.objects.filter(assignment__student_assignments__student=user)
+        .values_list("topic_id", flat=True)
+    )
+    due = {
+        tid: (ease, reps)
+        for tid, ease, reps in TopicReview.objects.filter(
+            user=user, topic_id__in=selected | set(assignment_plans), due_date__lte=today
+        ).values_list("topic_id", "ease", "repetitions")
+    }
+    failed_yesterday = set(
+        DailyTopicGrade.objects.filter(
+            user=user, date=today - datetime.timedelta(days=1),
+            applied_quality__lt=srs.PASSING_GRADE,
+        ).values_list("topic_id", flat=True)
+    )
+    lapsed = {
+        tid: ease for tid, (ease, reps) in due.items()
+        if tid in failed_yesterday and tid in selected and reps == 0
+    }
+    due_reviews = {tid: ease for tid, (ease, _) in due.items() if tid in assigned}
+    due_reviews.update(lapsed)
+    plan = practice.plan_required(dict(assignment_plans), due_reviews, lapsed)
+    return {
+        tid: cards - answered_today[tid]
+        for tid, cards in plan.items() if cards > answered_today[tid]
+    }
+
+
+def _required_problems(plan):
+    """Generate the cards for a `_required_plan`, one topic per pass so repeats spread out.
+
+    A topic whose generator is broken is skipped rather than replaced: these
+    cards are tied to specific topics.
+    """
+    topics = {
+        t.id: t for t in Topic.objects.filter(id__in=plan, generator_name__isnull=False)
+    }
+    left = {tid: cards for tid, cards in plan.items() if tid in topics}
+    problems = []
+    while any(left.values()):
+        for tid in list(left):
+            if left[tid] <= 0:
+                continue
+            left[tid] -= 1
+            problem = _make_problem_for_topic(topics[tid])
+            if problem is None:
+                left[tid] = 0
+                continue
+            problem["kind"] = _REQUIRED
+            problems.append(problem)
+    return problems
+
+
+def _build_cards(user, today, kept):
+    """The cards that follow `kept` (already answered) in today's deck.
+
+    The required work comes first, then pool practice filling the deck up to
+    `questions_per_day`, preferring topics not already in it.
+    """
+    required = _required_problems(_required_plan(user, today))
+    # Extra cards come on top of the setting (see `_deck_size_target`).
+    kept_extra = sum(1 for p in kept if _kind(p) == _EXTRA)
+    pool_count = Settings.load(user).questions_per_day + kept_extra - len(kept) - len(required)
+    existing = _deck_topic_ids_of(kept + required)
+    pool = _generate_problems(user, pool_count, today, existing=existing)
+    for problem in pool:
+        problem["kind"] = _POOL
+    return required + pool
+
+
 def _record_practice(user, deck, today):
     """Update the durable per-day practice record after a deck advance.
 
@@ -372,7 +617,7 @@ def _record_practice(user, deck, today):
     after the `DailyDeck` itself is pruned. A row is created on the first advance
     of the day, so a day with no row means the student never practiced.
     """
-    total = min(len(deck.problems), _deck_target(user, deck.current_index))
+    total = _visible_total(user, deck)
     answered = min(deck.current_index, total)
     DailyPractice.objects.update_or_create(
         user=user, date=today,
@@ -380,69 +625,110 @@ def _record_practice(user, deck, today):
     )
 
 
-def _grade_topic(user, topic_id, outcome, today):
-    """Apply an answer outcome to a topic's SM-2 schedule (once-per-day rule).
+def _grade_topic(user, topic_id, today):
+    """Regrade a topic's SM-2 schedule from all of today's answers on it.
 
-    `outcome` is one of the keys in `_OUTCOME_QUALITY`; anything else is ignored
-    (defensive against a malformed client report). Implements the grading rule:
-    the first answer for a topic each day sets the schedule, later repeats may
-    only pull it down.
-
-    The rule is applied by recomputing from a fixed base. On the first grade of
-    the day we snapshot the topic's SM-2 state and remember the quality applied.
-    On a repeat we take min(previously-applied quality, this quality): if it's
-    not lower, nothing changes (a passing repeat can't raise the schedule); if it
-    is lower, we recompute the TopicReview from the *snapshot* with the worse
-    quality. Recomputing from the snapshot (rather than the current state) means
-    repeated misses don't compound — the day's net effect is always one SM-2
-    update from a single base.
+    Called after each answer's `AnswerRecord` is written. The first answer of
+    the day snapshots the topic's state (and whether it was early, i.e. not due
+    yet); every answer then recomputes the schedule from that snapshot and the
+    day's answers so far with `srs.grade_day`, so the day counts as exactly one
+    review however many cards the topic had. An early pass leaves the schedule,
+    due date included, as it was that morning. A lift from finishing an
+    assignment (`floor_interval`) is kept.
     """
-    quality = _OUTCOME_QUALITY.get(outcome)
-    if quality is None:
+    outcomes = list(
+        AnswerRecord.objects.filter(user=user, topic_id=topic_id, date=today)
+        .order_by("created_at", "id").values_list("outcome", flat=True)
+    )
+    if not outcomes:
         return
-    _apply_quality(user, topic_id, quality, today)
-
-
-def _apply_quality(user, topic_id, quality, today):
-    """Apply an SM-2 `quality` (0-5) to a topic's schedule under the once-per-day rule.
-
-    The scheduling write shared by the deck's outcome path (`_grade_topic`) and
-    the assignment SM-2 path (one accuracy-derived quality per topic). The
-    once-per-day rule is the same in both: the first grade of the day snapshots
-    the pre-grade state and applies; later grades may only pull the schedule
-    *down*, recomputed from the fixed snapshot so repeats never compound.
-    """
     review, _ = TopicReview.objects.get_or_create(user=user, topic_id=topic_id)
-    grade = DailyTopicGrade.objects.filter(
-        user=user, topic_id=topic_id, date=today
-    ).first()
-
+    grade = DailyTopicGrade.objects.filter(user=user, topic_id=topic_id, date=today).first()
     if grade is None:
-        # First occurrence today: snapshot the pre-grade state, then apply.
-        base = (review.ease, review.interval, review.repetitions)
-        DailyTopicGrade.objects.create(
-            user=user, topic_id=topic_id, date=today,
-            applied_quality=quality,
-            snapshot_ease=base[0], snapshot_interval=base[1], snapshot_repetitions=base[2],
+        grade = DailyTopicGrade.objects.create(
+            user=user, topic_id=topic_id, date=today, applied_quality=0,
+            snapshot_ease=review.ease, snapshot_interval=review.interval,
+            snapshot_repetitions=review.repetitions, snapshot_due_date=review.due_date,
+            early=review.due_date is not None and review.due_date > today,
         )
+    ease, interval, repetitions, quality = srs.grade_day(
+        grade.snapshot_ease, grade.snapshot_interval, grade.snapshot_repetitions,
+        outcomes, early=grade.early,
+    )
+    if grade.early and quality >= srs.PASSING_GRADE:
+        due_date = grade.snapshot_due_date
     else:
-        # Repeat today: only a strictly worse grade changes anything.
-        if quality >= grade.applied_quality:
-            return
-        base = (grade.snapshot_ease, grade.snapshot_interval, grade.snapshot_repetitions)
+        due_date = today + datetime.timedelta(days=interval)
+    if grade.floor_interval and interval < grade.floor_interval:
+        interval = grade.floor_interval
+        repetitions = max(repetitions, 2)
+        due_date = today + datetime.timedelta(days=interval)
+    if grade.applied_quality != quality:
         grade.applied_quality = quality
         grade.save(update_fields=["applied_quality"])
-
-    ease, interval, repetitions = srs.update(base[0], base[1], base[2], quality)
     review.ease = ease
     review.interval = interval
     review.repetitions = repetitions
-    review.due_date = today + datetime.timedelta(days=interval)
+    review.due_date = due_date
     review.save(update_fields=["ease", "interval", "repetitions", "due_date"])
     logger.info(
-        "Graded topic %s for user %s: q=%d -> interval=%d, due %s",
-        topic_id, user.id, quality, interval, review.due_date,
+        "Graded topic %s for user %s: %d answers, q=%d -> interval=%d, due %s",
+        topic_id, user.id, len(outcomes), quality, interval, review.due_date,
     )
+
+
+def _add_practice(user, deck, topic_id, today):
+    """Add one more card on `topic_id` after an answer, if today's practice on it isn't enough.
+
+    Three cases call for one:
+
+    - the topic started today new or lapsed and hasn't had enough practice yet
+      (`practice.is_enough_today`: 3 of its last 4 answers today right), with
+      fewer than `MAX_TOPIC_CARDS_PER_DAY` cards on it today;
+    - today's answers on a known topic grade below a normal pass (a lapse or a
+      hard pass) on fewer than `practice.MIN_SESSION` cards: one slip on a
+      lone card shouldn't reset a topic or cost it ease, so the student gets
+      more cards to show it was a slip (more misses still count);
+    - it's in an open assignment due today that still needs more cards than the
+      student has answered.
+
+    Only when no unanswered card on the topic is left, and the deck is under
+    `practice.DAILY_CAP`. The card goes one place after the next card, so the
+    student doesn't see the topic twice in a row unless nothing else is left.
+    """
+    if any(p.get("topic_id") == topic_id for p in deck.problems[deck.current_index:]):
+        return
+    if _visible_total(user, deck) >= practice.DAILY_CAP:
+        return
+    outcomes = list(
+        AnswerRecord.objects.filter(user=user, topic_id=topic_id, date=today)
+        .order_by("created_at", "id").values_list("outcome", flat=True)
+    )
+    grade = DailyTopicGrade.objects.filter(user=user, topic_id=topic_id, date=today).first()
+    learning = (
+        grade is not None and grade.snapshot_repetitions == 0
+        and not practice.is_enough_today(outcomes)
+        and len(outcomes) < practice.MAX_TOPIC_CARDS_PER_DAY
+    )
+    confirming = (
+        grade is not None and grade.snapshot_repetitions > 0
+        and grade.applied_quality <= srs.HARD_QUALITY
+        and len(outcomes) < practice.MIN_SESSION
+    )
+    finishing = any(
+        topic_id in topic_ids and _days_left(row, due_at, today) == 1
+        and row.cards_needed > row.cards_answered
+        for row, topic_ids, due_at in _open_assignments(user)
+    )
+    if not (learning or confirming or finishing):
+        return
+    topic = Topic.objects.filter(id=topic_id, generator_name__isnull=False).first()
+    problem = _make_problem_for_topic(topic) if topic else None
+    if problem is None:
+        return
+    problem["kind"] = _EXTRA
+    deck.problems.insert(min(len(deck.problems), deck.current_index + 1), problem)
+    deck.save(update_fields=["problems"])
 
 
 def _get_or_create_today_deck(user, today):
@@ -452,72 +738,68 @@ def _get_or_create_today_deck(user, today):
     deck resets at the user's midnight rather than the server's UTC midnight.
 
     Any deck from a previous day (for this user) is discarded so a new day
-    yields new problems. An existing deck that is shorter than the target
-    (`_deck_target`: `questions_per_day`, or more for an open assignment) is
-    topped up (appending only, so progress is
-    preserved). This heals a deck that was built before any topics were
-    selected (empty) as well as one left short by a topic change earlier in
-    the day — the latter is why the deck must never be reported as "finished"
-    at a smaller size than the user's setting.
+    yields new problems: the day's required work (`_required_plan`) followed by
+    pool practice up to `questions_per_day` (`_build_cards`). An existing deck
+    whose pool falls short of the setting is topped up with pool cards
+    (appending only, so progress is preserved). This heals a deck that was built
+    before any topics were selected (empty) as well as one left short by a topic
+    change earlier in the day — the latter is why the deck must never be
+    reported as "finished" at a smaller size than the user's setting.
     """
     deck = DailyDeck.objects.filter(user=user, date=today).first()
     if deck is None:
         # A new day: clear out this user's stale decks and build a fresh one.
         DailyDeck.objects.filter(user=user).exclude(date=today).delete()
-        target = _deck_target(user, 0)
-        problems = _generate_problems(user, target, today)
-        logger.info(
-            "Built new deck for user %s with %d/%d problems",
-            user.id, len(problems), target,
-        )
+        problems = _build_cards(user, today, [])
+        logger.info("Built new deck for user %s with %d problems", user.id, len(problems))
         return DailyDeck.objects.create(
             user=user, date=today, problems=problems, current_index=0
         )
-    # A topic toggle since this deck was last loaded only flagged it stale (see
-    # _mark_deck_stale); reconcile the unanswered tail to the current selection
-    # now, on the practice-page load, rather than on every toggle. Refetch to
-    # pick up the regenerated problems and the cleared flag.
+    # A topic toggle or a new assignment since this deck was last loaded only
+    # flagged it stale (see _mark_deck_stale); reconcile the unanswered tail now,
+    # on the practice-page load, rather than on every toggle. Refetch to pick up
+    # the regenerated problems and the cleared flag.
     if deck.needs_regen:
         _regenerate_deck_tail(user, today)
         deck.refresh_from_db()
-    missing = _deck_target(user, deck.current_index) - len(deck.problems)
-    if missing > 0:
-        existing = _deck_topic_ids(deck)
-        extra = _generate_problems(user, missing, today, existing=existing)
-        if extra:
-            deck.problems = deck.problems + extra
-            deck.save(update_fields=["problems"])
-            logger.info(
-                "Topped up deck for user %s by %d problems (now %d)",
-                user.id, len(extra), len(deck.problems),
-            )
+    _top_up_pool(user, deck, Settings.load(user).questions_per_day, today)
     return deck
 
 
-def _grow_today_deck(user, count, today):
-    """Grow today's deck to `count` problems if it's currently smaller.
+def _top_up_pool(user, deck, per_day, today):
+    """Append pool cards until the deck can show what `per_day` calls for.
 
-    Appends freshly generated problems to the end so the student's progress
-    (already-answered problems and `current_index`) is preserved. Never shrinks
-    the deck: a smaller `count` is left to take effect when the next day's deck
-    is built. Does nothing if there's no deck for today yet — that deck will be
-    built at the new count on first access.
+    Missing cards are the `_deck_size_target` beyond what's stored, i.e. the
+    pool's shortfall; required and extra cards never need topping up here.
+    """
+    missing = _deck_size_target(deck, per_day) - len(deck.problems)
+    if missing <= 0:
+        return
+    extra = _generate_problems(user, missing, today, existing=_deck_topic_ids(deck))
+    if extra:
+        for problem in extra:
+            problem["kind"] = _POOL
+        deck.problems = deck.problems + extra
+        deck.save(update_fields=["problems"])
+        logger.info(
+            "Topped up deck for user %s by %d problems (now %d)",
+            user.id, len(extra), len(deck.problems),
+        )
+
+
+def _grow_today_deck(user, count, today):
+    """Grow today's deck so it shows `count` pool-filled cards, if it's currently smaller.
+
+    Appends freshly generated pool problems to the end so the student's
+    progress (already-answered problems and `current_index`) is preserved.
+    Never shrinks the stored deck: a smaller `count` only hides unanswered pool
+    cards (see `_visible_total`). Does nothing if there's no deck for today yet
+    — that deck will be built at the new count on first access.
     """
     deck = DailyDeck.objects.filter(user=user, date=today).first()
     if deck is None:
         return
-    missing = count - len(deck.problems)
-    if missing <= 0:
-        return
-    existing = _deck_topic_ids(deck)
-    extra = _generate_problems(user, missing, today, existing=existing)
-    if extra:
-        deck.problems = deck.problems + extra
-        deck.save(update_fields=["problems"])
-        logger.info(
-            "Grew deck for user %s to %d problems (target %d)",
-            user.id, len(deck.problems), count,
-        )
+    _top_up_pool(user, deck, count, today)
 
 
 def _mark_deck_stale(user, today):
@@ -546,48 +828,34 @@ def _clear_needs_regen(deck):
 
 
 def _regenerate_deck_tail(user, today):
-    """Rebuild today's not-yet-answered problems from the current topic set.
+    """Rebuild today's not-yet-answered problems from the current topics and assignments.
 
     Problems the student has already worked through (everything before
-    `current_index`) are kept; the remaining cards are regenerated from the
-    topics currently selected, refilling the deck back up to the target count
-    (`_deck_target`) and preserving the student's position. Stored problems
-    only carry their text/solution, not the topic they came from, so an
-    individual topic's cards can't be surgically removed; we regenerate the tail
-    instead. Clears the `needs_regen` flag once the deck has been reconciled to
-    the current selection (this is the lazy handler for `_mark_deck_stale`).
+    `current_index`) are kept; the rest are rebuilt by `_build_cards` — the
+    day's remaining required work (less what's already answered today) and pool
+    practice back up to `questions_per_day` — preserving the student's position.
+    Clears the `needs_regen` flag once the deck has been reconciled (this is the
+    lazy handler for `_mark_deck_stale`, and for a new assignment).
 
-    The tail size is derived from the target count rather than the current
-    deck length, so refilling always aims for the day's target.
-
-    Does nothing if there's no deck for today yet (it'll be built from the
-    current topics on first access), if the student has already answered at
-    least the target number of problems today, or if no topics are currently
-    selected. That last case matters: swapping topic sets is two steps
-    (deselect the old, select the new), and in between nothing is selected.
-    Regenerating then would produce an empty tail; writing it back would
-    truncate the deck down to just the answered cards and strand the student
-    on an already-"finished" deck. Leaving the deck untouched lets the
-    following selection rebuild the tail properly.
+    Does nothing if there's no deck for today yet (it'll be built on first
+    access), or if no topics are currently selected. That last case matters:
+    swapping topic sets is two steps (deselect the old, select the new), and in
+    between nothing is selected. Regenerating then would produce an empty tail;
+    writing it back would truncate the deck down to just the answered cards and
+    strand the student on an already-"finished" deck. Leaving the deck untouched
+    lets the following selection rebuild the tail properly.
     """
     deck = DailyDeck.objects.filter(user=user, date=today).first()
     if deck is None:
         return
     answered = deck.current_index
-    target = _deck_target(user, answered)
-    remaining = target - answered
-    if remaining <= 0:
-        # Nothing left to regenerate (the student already finished today's
-        # target), so the selection change can't affect this deck. Still clear
-        # the flag so a stale deck isn't reconsidered on every load.
-        _clear_needs_regen(deck)
-        return
-    new_tail = _generate_problems(user, remaining, today)
-    if not new_tail:
-        # No topics currently selected — can't regenerate. Preserve the deck
-        # rather than truncating away its unanswered tail. Clear the flag so
-        # the transient empty state (mid topic-swap) isn't retried forever; the
-        # following selection marks the deck stale again.
+    kept = deck.problems[:answered]
+    new_tail = _build_cards(user, today, kept) if _has_topics(user) else []
+    if not new_tail and len(deck.problems) > answered:
+        # Nothing to rebuild from (no topics selected mid topic-swap, or the
+        # day's practice is already answered). Preserve the deck rather than
+        # truncating away its unanswered tail. Clear the flag so the state
+        # isn't retried forever; the next selection marks the deck stale again.
         logger.debug(
             "Skipped deck tail regeneration for user %s: no problems generated",
             user.id,
@@ -596,7 +864,9 @@ def _regenerate_deck_tail(user, today):
         return
     deck.problems = deck.problems[:answered] + new_tail
     deck.needs_regen = False
-    deck.save(update_fields=["problems", "needs_regen"])
+    # The current card was replaced, so its attempts start over.
+    deck.attempts = 0
+    deck.save(update_fields=["problems", "needs_regen", "attempts"])
     logger.info(
         "Regenerated deck tail for user %s: kept %d answered, %d new",
         user.id, answered, len(new_tail),
@@ -609,29 +879,34 @@ def _deck_payload(user, deck):
     # if the deck still holds problems from before the change.
     if not _has_topics(user):
         return {"no_topics": True}
-    # Present the deck capped to the day's target (the setting, stretched for
-    # an open assignment). Growing the count is handled when the deck is loaded
-    # (extra cards are appended); shrinking it is applied here at display time,
-    # so a smaller `questions_per_day` takes effect immediately rather than next
-    # day. We only cap the view — the extra cards stay stored, so raising the
-    # count back up restores them. Without this cap, reducing the count after
-    # answering more than the new total would keep showing the old (larger)
-    # deck instead of "finished".
-    target = _deck_target(user, deck.current_index)
-    total = min(len(deck.problems), target)
+    # Present the deck capped to what today's practice shows (`_visible_total`):
+    # all required and extra cards, and pool cards up to the setting. Growing
+    # the count is handled when the deck is loaded (pool cards are appended);
+    # shrinking it is applied here at display time, so a smaller
+    # `questions_per_day` takes effect immediately rather than next day. We
+    # only cap the view — the pool cards stay stored, so raising the count back
+    # up restores them. Without this cap, reducing the count after answering
+    # more than the new total would keep showing the old (larger) deck instead
+    # of "finished".
+    total = _visible_total(user, deck)
     if total == 0:
         return {"no_topics": True}
     if deck.current_index >= total:
         return {"completed": True, "total": total}
     current = deck.problems[deck.current_index]
     topic = _topic_meta(current.get("topic_id"))
+    # The solution is deliberately left out: anything here is readable in the
+    # browser's dev tools. Answers are graded by `check_answer` instead, which
+    # reveals the solution only once the card's attempts are used up.
     return {
         "problem": current["problem"],
-        "solution": current["solution"],
         "topic_name": topic["topic_name"] if topic else None,
         "learn_more_url": (topic["learn_more_url"] or None) if topic else None,
         "current_number": deck.current_index + 1,
         "total": total,
+        # 1-based attempt the student is on, so a reload resumes it rather than
+        # handing out fresh attempts.
+        "attempt": min(deck.attempts + 1, _MAX_ATTEMPTS),
     }
 
 
@@ -680,11 +955,18 @@ def advance_deck(request):
     advance lands the student on card 1.
 
     The optional JSON body `{"outcome": "correct_first"|"correct_second"|
-    "incorrect"}` reports how the card being left was answered; it updates that
-    card's topic's SM-2 schedule (see `_grade_topic`) and is logged as an
-    `AnswerRecord`, along with the optional `seconds` the student spent on the
-    card. It's optional so a stray advance with no answer (the
-    midnight-rollover case) simply doesn't grade.
+    "incorrect"}` reports how the card being left was answered. It's logged as
+    an `AnswerRecord` (with the optional `seconds` the student spent on the
+    card), regrades the card's topic from today's answers (`_grade_topic`),
+    counts toward any open assignment on that topic (`_count_assignment_card`),
+    and may add another card on the topic (`_add_practice`). It's optional so a
+    stray advance with no answer (the midnight-rollover case) simply doesn't
+    grade or count.
+
+    An optional `report` (`{"reason", "details", "user_answer"}`) files a
+    `ProblemReport` against the card being left (see `_record_report`). The
+    client sends it alongside `outcome: "correct_first"`, so reporting a faulty
+    card grades it as correct rather than as a miss.
     """
     auth = _require_auth(request)
     if auth:
@@ -713,15 +995,23 @@ def advance_deck(request):
         outcome = _advance_outcome(request)
         card = deck.problems[deck.current_index]
         topic_id = card.get("topic_id")
-        if outcome in _OUTCOME_QUALITY and topic_id is not None:
-            _grade_topic(request.user, topic_id, outcome, today)
+        graded = (
+            outcome in _OUTCOMES and topic_id is not None
+            and Topic.objects.filter(id=topic_id).exists()
+        )
+        if graded:
             AnswerRecord.objects.create(
                 user=request.user, topic_id=topic_id, date=today, outcome=outcome,
                 seconds=_advance_seconds(request),
             )
+            _grade_topic(request.user, topic_id, today)
+        _record_report(request, card, today)
         deck.current_index += 1
-        deck.save(update_fields=["current_index"])
-        _count_assignment_card(request.user)
+        deck.attempts = 0
+        deck.save(update_fields=["current_index", "attempts"])
+        if graded:
+            _count_assignment_card(request.user, topic_id, today)
+            _add_practice(request.user, deck, topic_id, today)
         _record_practice(request.user, deck, today)
         # Grading may have moved a topic between bands; recapture today's mix.
         _snapshot_proficiency(request.user, today)
@@ -735,6 +1025,96 @@ def advance_deck(request):
             request.user.id, from_number, deck.current_index + 1,
         )
     return JsonResponse(_deck_payload(request.user, deck))
+
+
+def _normalize_solution(solution):
+    """A stored solution as the student is expected to type it (no LaTeX '$')."""
+    return str(solution).replace("$", "").strip()
+
+
+def _answer_matches(answer, solution):
+    """True if `answer` is the same as `solution`, as text or as a number.
+
+    "42.0" matches "42". Numbers must parse in full: "1/2" isn't read as 1
+    (JavaScript's parseFloat would read it that way).
+    """
+    if answer == solution:
+        return True
+    try:
+        a, s = float(answer), float(solution)
+    except ValueError:
+        return False
+    return math.isfinite(a) and a == s
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def check_answer(request):
+    """Grade an answer to the current card of today's deck.
+
+    Body: `{"answer": str, "from_number": int}`, where `from_number` is the
+    1-based card the client is answering. Responds with `{"correct",
+    "attempts_left"}`. Once a wrong answer uses up the card's last attempt, the
+    response also carries `solution` and `steps` (the step-by-step explanation,
+    possibly empty), for the incorrect face. Grading happens
+    here, not in the client, so the deck payload never has to carry the
+    solution (see `_deck_payload`).
+
+    This only checks the answer. Stepping past the card and grading its topic
+    is still `advance_deck`'s job. A card with no attempts left can't be
+    re-checked: it reports incorrect with the solution, so there's no guessing
+    after the reveal. Returns 409 if `from_number` isn't the card the server is
+    showing (e.g. another tab moved on); the client then reloads the deck.
+    """
+    auth = _require_auth(request)
+    if auth:
+        return auth
+    today = _client_today(request)
+    deck = DailyDeck.objects.filter(user=request.user, date=today).first()
+    body = _advance_body(request)
+    answer = body.get("answer")
+    if not isinstance(answer, str) or not answer.strip():
+        return JsonResponse({"error": "answer is required"}, status=400)
+    total = _visible_total(request.user, deck) if deck else 0
+    if deck is None or deck.current_index >= total or body.get("from_number") != deck.current_index + 1:
+        return JsonResponse({"error": "stale card"}, status=409)
+
+    card = deck.problems[deck.current_index]
+    solution = _normalize_solution(card["solution"])
+    # Decks built before explanations existed have no "steps" key.
+    reveal = {"solution": solution, "steps": card.get("steps", [])}
+    if deck.attempts >= _MAX_ATTEMPTS:
+        return JsonResponse({"correct": False, "attempts_left": 0, **reveal})
+    if _answer_matches(answer.strip()[:_MAX_ANSWER], solution):
+        return JsonResponse({"correct": True, "attempts_left": _MAX_ATTEMPTS - deck.attempts})
+
+    deck.attempts += 1
+    deck.save(update_fields=["attempts"])
+    left = _MAX_ATTEMPTS - deck.attempts
+    payload = {"correct": False, "attempts_left": left}
+    if left == 0:
+        payload.update(reveal)
+    return JsonResponse(payload)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def test_solution(request):
+    """The current card's solution, for the E2E suite only.
+
+    The deck payload no longer carries solutions, so Playwright has no other way
+    to type a correct answer. Guarded by ENABLE_TEST_LOGIN like `test_login`:
+    it's a 404 everywhere else, including production.
+    """
+    if not getattr(django_settings, "ENABLE_TEST_LOGIN", False):
+        raise Http404()
+    auth = _require_auth(request)
+    if auth:
+        return auth
+    deck = DailyDeck.objects.filter(user=request.user, date=_client_today(request)).first()
+    if deck is None or deck.current_index >= len(deck.problems):
+        raise Http404()
+    return JsonResponse({"solution": _normalize_solution(deck.problems[deck.current_index]["solution"])})
 
 
 def _advance_body(request):
@@ -753,11 +1133,43 @@ def _advance_body(request):
         return {}
 
 
+def _record_report(request, card, today):
+    """File a `ProblemReport` for `card` from the advance body's `report`, if any.
+
+    The problem, solution, and steps come from the server's stored card, not the
+    client, so the report shows exactly what was served. An unknown reason, or
+    "other" with no description, is dropped with a warning rather than failing
+    the advance — the client validates before sending, so this only guards
+    against malformed callers.
+    """
+    report = _advance_body(request).get("report")
+    if not isinstance(report, dict):
+        return
+    reason = report.get("reason")
+    details = report.get("details")
+    details = details.strip()[:_MAX_REPORT_DETAILS] if isinstance(details, str) else ""
+    answer = report.get("user_answer")
+    answer = answer.strip()[:_MAX_REPORT_ANSWER] if isinstance(answer, str) else ""
+    valid_reasons = {key for key, _ in ProblemReport.REASON_CHOICES}
+    if reason not in valid_reasons or (reason == ProblemReport.OTHER and not details):
+        logger.warning("Ignoring invalid problem report from user %s: %r", request.user.id, reason)
+        return
+    topic_id = card.get("topic_id")
+    if topic_id is not None and not Topic.objects.filter(id=topic_id).exists():
+        topic_id = None
+    ProblemReport.objects.create(
+        user=request.user, topic_id=topic_id, reason=reason, details=details,
+        problem=card.get("problem", ""), solution=card.get("solution", ""),
+        steps=card.get("steps", []), user_answer=answer, date=today,
+    )
+    logger.info("User %s reported a problem on topic %s: %s", request.user.id, topic_id, reason)
+
+
 def _advance_outcome(request):
     """The reported answer outcome from an advance request body, or None.
 
     A missing/empty/malformed body (or missing key) yields None so the advance
-    still proceeds ungraded. Validation of the value happens in `_grade_topic`.
+    still proceeds ungraded. `advance_deck` ignores values outside `_OUTCOMES`.
     """
     return _advance_body(request).get("outcome")
 

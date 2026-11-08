@@ -1,16 +1,34 @@
 """Solveki-local generators for Georgia "Geometry: Concepts & Connections".
 
 Every generator here takes no required arguments, is decorated with
-``@register``, and returns a ``(problem, solution)`` pair of LaTeX strings.
+``@register``, and returns ``(problem, solution, steps)``: LaTeX strings plus
+a worked explanation built with ``_steps.Steps``.
 Answers are kept clean: integers, values rounded to at most three decimal
 places, or reduced ``"a/b"`` fractions. Never seed ``random`` inside a
 generator.
 """
 import random
-from math import atan2, cos, gcd, pi, sin, sqrt, tan
+from fractions import Fraction
+from math import atan2, cos, gcd, isqrt, pi, sin, sqrt, tan
 
 from ._registry import register
 from ._format import num as _num, frac as _frac
+from ._steps import Steps, paren, tex_frac
+
+_ROUNDED = "Rounded to the nearest thousandth, the answer is"
+
+
+def _rel(exact):
+    r"""``=`` before an exact value, ``\approx`` before a rounded one."""
+    return "=" if exact else r"\approx"
+
+
+def _pi_times(coefficient):
+    r"""LaTeX for ``coefficient * pi``, e.g. ``12\pi`` or ``\frac{16}{3}\pi``."""
+    c = Fraction(coefficient)
+    if c.denominator == 1:
+        return rf"{c.numerator}\pi"
+    return rf"{tex_frac(c.numerator, c.denominator)}\pi"
 
 
 # Integer-sided right triangles, used where an exact answer is required.
@@ -30,6 +48,12 @@ def _signed_factor(var, val):
     if val >= 0:
         return f"({var} - {val})"
     return f"({var} + {-val})"
+
+
+def _maps_to(point, applied, image):
+    r"""``(x, y) \to applied = image``, dropping ``applied`` when it adds nothing."""
+    work = "" if applied == image else f"{applied} = "
+    return rf"({point[0]}, {point[1]}) \to {work}{image}"
 
 
 def _reduce(num, den):
@@ -66,7 +90,38 @@ def geo_right_triangle_side(min_angle=15, max_angle=75, min_len=5, max_len=30):
         f"The {given} measures ${length}$. "
         f"Find the {target}, rounded to the nearest thousandth."
     )
-    return problem, f"${_num(answer)}$"
+    solution = f"${_num(answer)}$"
+
+    # The ratio linking the two sides, written top / bottom.
+    pair = {given, target}
+    if pair == {"opposite side", "hypotenuse"}:
+        func, top, bottom = "sin", "opposite side", "hypotenuse"
+    elif pair == {"adjacent side", "hypotenuse"}:
+        func, top, bottom = "cos", "adjacent side", "hypotenuse"
+    else:
+        func, top, bottom = "tan", "opposite side", "adjacent side"
+    word = {"opposite side": "opposite", "adjacent side": "adjacent",
+            "hypotenuse": "hypotenuse"}
+    side_value = {given: str(length), target: "x"}
+
+    s = Steps()
+    ratio_name = {"sin": "Sine", "cos": "Cosine", "tan": "Tangent"}[func]
+    s.step(
+        f"{ratio_name} is the ratio that connects the {top} and the {bottom}:",
+        rf"\{func} \theta = \frac{{\text{{{word[top]}}}}}{{\text{{{word[bottom]}}}}}",
+    )
+    s.substitute(
+        rf"\{func} {theta}^\circ = \frac{{{side_value[top]}}}{{{side_value[bottom]}}}",
+        text=f"Let $x$ be the {target}, and substitute the angle and the {given}.",
+    )
+    if target == top:
+        s.step(f"Multiply both sides by ${length}$.",
+               rf"x = {length} \{func} {theta}^\circ \approx {_num(answer)}")
+    else:
+        s.step(rf"Multiply both sides by $x$, then divide by $\{func} {theta}^\circ$.",
+               rf"x = \frac{{{length}}}{{\{func} {theta}^\circ}} \approx {_num(answer)}")
+    s.answer(solution, lead=_ROUNDED)
+    return problem, solution, s.done()
 
 
 @register
@@ -80,18 +135,33 @@ def geo_solve_right_triangle_pythag(max_scale=5):
     scale = random.randint(1, max_scale)
     a, b, c = a * scale, b * scale, c * scale
 
+    s = Steps()
+    s.formula("The Pythagorean theorem, with legs $a$ and $b$ and hypotenuse $c$,",
+              r"a^2 + b^2 = c^2")
+
     if random.random() < 0.5:
         problem = (
             f"A right triangle has legs of length ${a}$ and ${b}$. "
             f"Find the length of the hypotenuse."
         )
-        return problem, f"${c}$"
+        solution = f"${c}$"
+        s.substitute(rf"{a}^2 + {b}^2 = c^2", text="Substitute the two legs.")
+        s.step("Square the legs and add.", rf"c^2 = {a * a} + {b * b} = {c * c}")
+        s.step("Take the square root of both sides.", rf"c = \sqrt{{{c * c}}} = {c}")
+        s.answer(solution)
+        return problem, solution, s.done()
 
     problem = (
         f"A right triangle has a leg of length ${a}$ and a hypotenuse of "
         f"length ${c}$. Find the length of the other leg."
     )
-    return problem, f"${b}$"
+    solution = f"${b}$"
+    s.substitute(rf"{a}^2 + b^2 = {c}^2", text="Substitute the known leg and the hypotenuse.")
+    s.step(f"Square, then subtract ${a * a}$ from both sides.",
+           rf"b^2 = {c * c} - {a * a} = {b * b}")
+    s.step("Take the square root of both sides.", rf"b = \sqrt{{{b * b}}} = {b}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -112,7 +182,19 @@ def geo_circle_equation_from_center_radius(max_center=9, max_radius=12):
     solution = (
         f"${_signed_factor('x', h)}^2 + {_signed_factor('y', k)}^2 = {r * r}$"
     )
-    return problem, solution
+
+    s = Steps()
+    s.formula("The standard form of a circle with center $(h, k)$ and radius $r$",
+              r"(x - h)^2 + (y - k)^2 = r^2")
+    s.substitute(rf"(x - {paren(h)})^2 + (y - {paren(k)})^2 = {r}^2",
+                 text=f"Substitute $h = {h}$, $k = {k}$, and $r = {r}$.")
+    s.step(
+        "Simplify: subtracting a negative number is the same as adding, and "
+        f"${r}^2 = {r * r}$.",
+        f"{_signed_factor('x', h)}^2 + {_signed_factor('y', k)}^2 = {r * r}",
+    )
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -131,7 +213,22 @@ def geo_circle_center_radius_from_equation(max_center=9, max_radius=12):
         f"${_signed_factor('x', h)}^2 + {_signed_factor('y', k)}^2 = {r * r}$. "
         f"Format your answer as such: center (1, 2), r=3."
     )
-    return problem, f"center ({h}, {k}), r={r}"
+    solution = f"center ({h}, {k}), r={r}"
+
+    s = Steps()
+    s.formula("The standard form of a circle with center $(h, k)$ and radius $r$",
+              r"(x - h)^2 + (y - k)^2 = r^2")
+    for var, val, letter in (("x", h, "h"), ("y", k, "k")):
+        factor = _signed_factor(var, val)
+        if val > 0:
+            s.step(f"${factor}$ matches $({var} - {letter})$, so ${letter} = {val}$.")
+        else:
+            s.step(f"Rewrite ${factor}$ as $({var} - ({val}))$ to match $({var} - {letter})$, "
+                   f"so ${letter} = {val}$. The sign is the opposite of the one you see.")
+    s.step(f"The right side is $r^2 = {r * r}$, so take the square root.",
+           rf"r = \sqrt{{{r * r}}} = {r}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -146,7 +243,16 @@ def geo_translate_point(max_coord=10):
         f"Translate the point $({x}, {y})$ by the vector "
         f"$\\langle {a}, {b} \\rangle$. Give the image point as (x, y)."
     )
-    return problem, f"({x + a}, {y + b})"
+    solution = f"({x + a}, {y + b})"
+
+    s = Steps()
+    s.step(rf"To translate by $\langle {a}, {b} \rangle$, add ${a}$ to the "
+           f"$x$-coordinate and ${b}$ to the $y$-coordinate.",
+           r"(x, y) \to (x + a, y + b)")
+    s.substitute(rf"({x} + {paren(a)}, {y} + {paren(b)}) = {solution}",
+                 text="Apply it to the point.")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -159,15 +265,28 @@ def geo_reflect_point(max_coord=10):
     line = random.choice(["x-axis", "y-axis", "line $y=x$"])
     if line == "x-axis":
         image = (x, -y)
+        rule = ("Reflecting over the $x$-axis keeps $x$ and changes the sign of $y$.",
+                r"(x, y) \to (x, -y)", f"({x}, -{paren(y)})")
     elif line == "y-axis":
         image = (-x, y)
+        rule = ("Reflecting over the $y$-axis changes the sign of $x$ and keeps $y$.",
+                r"(x, y) \to (-x, y)", f"(-{paren(x)}, {y})")
     else:
         image = (y, x)
+        rule = ("Reflecting over the line $y=x$ swaps the two coordinates.",
+                r"(x, y) \to (y, x)", f"({y}, {x})")
     problem = (
         f"Reflect the point $({x}, {y})$ over the {line}. "
         f"Give the image point as (x, y)."
     )
-    return problem, f"({image[0]}, {image[1]})"
+    solution = f"({image[0]}, {image[1]})"
+
+    text, rule_math, applied = rule
+    s = Steps()
+    s.step(text, rule_math)
+    s.step("Apply the rule to the point.", _maps_to((x, y), applied, solution))
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -180,15 +299,25 @@ def geo_rotate_point(max_coord=10):
     angle = random.choice([90, 180, 270])
     if angle == 90:
         image = (-y, x)
+        rule, applied = r"(x, y) \to (-y, x)", f"(-{paren(y)}, {x})"
     elif angle == 180:
         image = (-x, -y)
+        rule, applied = r"(x, y) \to (-x, -y)", f"(-{paren(x)}, -{paren(y)})"
     else:  # 270 CCW
         image = (y, -x)
+        rule, applied = r"(x, y) \to (y, -x)", f"({y}, -{paren(x)})"
     problem = (
         f"Rotate the point $({x}, {y})$ by ${angle}^\\circ$ counterclockwise "
         f"about the origin. Give the image point as (x, y)."
     )
-    return problem, f"({image[0]}, {image[1]})"
+    solution = f"({image[0]}, {image[1]})"
+
+    s = Steps()
+    s.step(rf"The rule for a ${angle}^\circ$ counterclockwise rotation about the "
+           "origin is:", rule)
+    s.step(f"Substitute $x = {x}$ and $y = {y}$.", _maps_to((x, y), applied, solution))
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -211,7 +340,16 @@ def geo_dilate_point(max_coord=6):
         f"Dilate the point $({x}, {y})$ from the origin by a scale factor of "
         f"${factor}$. Give the image point as (x, y)."
     )
-    return problem, f"({nx}, {ny})"
+    solution = f"({nx}, {ny})"
+
+    k = tex_frac(num, den) if den != 1 else str(num)
+    s = Steps()
+    s.step(f"Dilating from the origin by a scale factor of ${k}$ multiplies "
+           "both coordinates by it.", rf"(x, y) \to ({k}x, {k}y)")
+    s.step("Multiply each coordinate.",
+           rf"\left({k} \cdot {paren(x)}, {k} \cdot {paren(y)}\right) = {solution}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -228,7 +366,14 @@ def geo_inscribed_angle(min_half=10, max_half=89):
             f"same arc. The central angle measures ${central}^\\circ$. Find the "
             f"measure of the inscribed angle in degrees."
         )
-        return problem, f"${central // 2}$"
+        solution = f"${central // 2}$"
+        s = Steps()
+        s.step("By the inscribed angle theorem, an inscribed angle is half of the "
+               "central angle that intercepts the same arc.",
+               r"\text{inscribed} = \frac{1}{2} \times \text{central}")
+        s.substitute(rf"\text{{inscribed}} = \frac{{1}}{{2}} \times {central}^\circ = {central // 2}^\circ")
+        s.answer(solution)
+        return problem, solution, s.done()
 
     inscribed = random.randint(min_half, min(80, max_half))
     problem = (
@@ -236,7 +381,14 @@ def geo_inscribed_angle(min_half=10, max_half=89):
         f"same arc. The inscribed angle measures ${inscribed}^\\circ$. Find the "
         f"measure of the central angle in degrees."
     )
-    return problem, f"${2 * inscribed}$"
+    solution = f"${2 * inscribed}$"
+    s = Steps()
+    s.step("By the inscribed angle theorem, a central angle is twice the "
+           "inscribed angle that intercepts the same arc.",
+           r"\text{central} = 2 \times \text{inscribed}")
+    s.substitute(rf"\text{{central}} = 2 \times {inscribed}^\circ = {2 * inscribed}^\circ")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -275,7 +427,33 @@ def geo_conditional_probability_table(max_count=40):
         f"A&Y: {n_ay}, B&X: {n_bx}, B&Y: {n_by}. "
         f"Find $P({target} \\mid {condition})$ as a reduced fraction."
     )
-    return problem, f"${num}/{den}$"
+    solution = f"${num}/{den}$"
+
+    if condition in ("A", "B"):
+        cells = [(condition, "X"), (condition, "Y")]
+        hit = (condition, target)
+    else:
+        cells = [("A", condition), ("B", condition)]
+        hit = (target, condition)
+    s = Steps()
+    s.step(
+        rf"$P({target} \mid {condition})$ means: out of the outcomes that are "
+        f"{condition}, what fraction are also {target}?",
+        rf"P({target} \mid {condition}) = \frac{{\text{{count of {hit[0]}\&{hit[1]}}}}}"
+        rf"{{\text{{total count of {condition}}}}}",
+    )
+    s.step(
+        f"Add the counts that are {condition}: "
+        + " and ".join(f"{r}&{c}" for r, c in cells) + ".",
+        f"{counts[cells[0]]} + {counts[cells[1]]} = {denom}",
+    )
+    s.step(f"Of those, {hit[0]}&{hit[1]} has a count of ${numer}$.",
+           rf"P({target} \mid {condition}) = {tex_frac(numer, denom)}")
+    if (num, den) != (numer, denom):
+        s.step(f"Simplify by dividing the top and bottom by ${numer // num}$.",
+               tex_frac(num, den))
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -304,7 +482,32 @@ def geo_compound_probability():
         f"$P(B) = {c}/{d}$. Find $P(A \\text{{ {connector} }} B)$ as a reduced "
         f"fraction."
     )
-    return problem, f"${num}/{den}$"
+    solution = f"${num}/{den}$"
+
+    pa, pb = tex_frac(a, b), tex_frac(c, d)
+    s = Steps()
+    if connector == "and":
+        raw = (a * c, b * d)
+        s.formula("For independent events, the probability that both happen",
+                  r"P(A \text{ and } B) = P(A) \times P(B)")
+        s.substitute(rf"P(A \text{{ and }} B) = {pa} \times {pb} = {tex_frac(*raw)}",
+                     text="Multiply the numerators and multiply the denominators.")
+    else:
+        raw = (a * d + c * b - a * c, b * d)
+        s.formula("For independent events, the probability that at least one happens",
+                  r"P(A \text{ or } B) = P(A) + P(B) - P(A)P(B)")
+        s.substitute(rf"P(A \text{{ or }} B) = {pa} + {pb} - {pa} \times {pb}")
+        s.step(
+            f"Multiply $P(A)P(B) = {tex_frac(a * c, b * d)}$, and rewrite every "
+            f"fraction over the common denominator ${b * d}$.",
+            rf"{tex_frac(a * d, b * d)} + {tex_frac(c * b, b * d)} - {tex_frac(a * c, b * d)}"
+            rf" = {tex_frac(*raw)}",
+        )
+    if (num, den) != raw:
+        s.step(f"Simplify by dividing the top and bottom by ${raw[1] // den}$.",
+               tex_frac(num, den))
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -329,7 +532,26 @@ def geo_expected_value():
         f"A discrete random variable X has the distribution: {parts}. "
         f"Find the expected value E(X), rounded to the nearest thousandth."
     )
-    return problem, f"${_num(ev)}$"
+    solution = f"${_num(ev)}$"
+
+    total = sum(v * n for v, n in zip(values, nums))
+    exact = total * 1000 % den == 0
+    s = Steps()
+    s.step("The expected value is the sum of each value times its probability:",
+           r"E(X) = \sum x \cdot P(X = x)")
+    s.substitute(
+        "E(X) = " + " + ".join(rf"({v})\left({tex_frac(n, den)}\right)"
+                               for v, n in zip(values, nums)),
+    )
+    s.step(
+        f"Every probability has denominator ${den}$, so multiply each value by its "
+        "numerator and add.",
+        rf"E(X) = \frac{{{' + '.join(f'({v})({n})' for v, n in zip(values, nums))}}}{{{den}}}"
+        rf" = {tex_frac(total, den)}",
+    )
+    s.step("Divide.", rf"E(X) {_rel(exact)} {_num(ev)}")
+    s.answer(solution, lead="The answer is" if exact else _ROUNDED)
+    return problem, solution, s.done()
 
 
 @register
@@ -359,7 +581,35 @@ def geo_special_right_triangle(min_len=2, max_len=20):
         f"the length of the {target}, rounded to the nearest thousandth if the "
         f"value is irrational."
     )
-    return problem, f"${_num(answer)}$"
+    solution = f"${_num(answer)}$"
+
+    # Each side as a multiple of the shortest side.
+    if kind == "45-45-90":
+        tex = {"leg": "1", "hypotenuse": r"\sqrt{2}"}
+        ratio = r"\text{leg} : \text{leg} : \text{hypotenuse} = 1 : 1 : \sqrt{2}"
+    else:
+        tex = {"shorter leg": "1", "longer leg": r"\sqrt{3}", "hypotenuse": "2"}
+        ratio = (r"\text{shorter leg} : \text{longer leg} : \text{hypotenuse}"
+                 r" = 1 : \sqrt{3} : 2")
+    t_given, t_target = tex[given], tex[target]
+    exact = ("sqrt" in t_given) == ("sqrt" in t_target)
+    if t_target == "1":
+        top = str(length)
+    elif t_target == "2":
+        top = rf"2 \cdot {length}"
+    else:
+        top = f"{length}{t_target}"
+    expr = top if t_given == "1" else rf"\frac{{{top}}}{{{t_given}}}"
+
+    s = Steps()
+    s.step(f"In a {kind} triangle, the sides are always in this ratio:", ratio)
+    s.step(
+        f"Set up a proportion comparing the {target} to the {given}.",
+        rf"\frac{{x}}{{{length}}} = \frac{{{t_target}}}{{{t_given}}}",
+    )
+    s.step(f"Multiply both sides by ${length}$.", rf"x = {expr} {_rel(exact)} {_num(answer)}")
+    s.answer(solution, lead="The answer is" if exact else _ROUNDED)
+    return problem, solution, s.done()
 
 
 @register
@@ -391,7 +641,17 @@ def geo_similar_triangle_side(min_scale=2, max_scale=5, min_base=2, max_base=8):
         f"triangle DEF, the corresponding side DE = ${t1}$. Find the length of "
         f"side EF. Round to the nearest thousandth if necessary."
     )
-    return problem, f"${_num(answer)}$"
+    solution = f"${_num(answer)}$"
+
+    s = Steps()
+    s.step("In similar triangles, corresponding sides are proportional. EF "
+           "corresponds to BC, and DE corresponds to AB.",
+           r"\frac{EF}{BC} = \frac{DE}{AB}")
+    s.substitute(rf"\frac{{EF}}{{{s2}}} = \frac{{{t1}}}{{{s1}}}")
+    s.step(f"Multiply both sides by ${s2}$.",
+           rf"EF = \frac{{{s2} \cdot {t1}}}{{{s1}}} = \frac{{{s2 * t1}}}{{{s1}}} = {_num(answer)}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -424,7 +684,23 @@ def geo_scale_factor_ratio(min_part=1, max_part=6):
         f"corresponding lengths). Find the ratio of their {kind}. Express your "
         f"answer as a reduced fraction a/b or an integer."
     )
-    return problem, f"${answer}$"
+    solution = f"${answer}$"
+
+    power, word = (2, "squared") if kind == "areas" else (3, "cubed")
+    s = Steps()
+    s.step(f"When lengths are scaled by a factor $k$, {kind} are scaled by $k$ {word}.",
+           rf"\text{{ratio of {kind}}} = k^{power}")
+    if q == 1:
+        s.substitute(f"{p}^{power} = {p ** power}", text=f"Substitute $k = {p}$.")
+    else:
+        s.substitute(
+            rf"\left({tex_frac(p, q)}\right)^{power} = \frac{{{p}^{power}}}{{{q}^{power}}}"
+            rf" = {tex_frac(p ** power, q ** power)}",
+            text=f"Substitute $k = {tex_frac(p, q)}$ and raise the top and bottom to "
+                 f"the power ${power}$.",
+        )
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -451,11 +727,21 @@ def geo_circle_segments():
             f"into segments of length ${c}$ and x. Find x. Round to the nearest "
             f"thousandth if necessary."
         )
-        return problem, f"${_num(d)}$"
+        solution = f"${_num(d)}$"
+        s = Steps()
+        s.step("When two chords intersect, the product of one chord's segments equals "
+               "the product of the other chord's segments.",
+               r"\text{segment} \cdot \text{segment} = \text{segment} \cdot \text{segment}")
+        s.substitute(rf"{a} \cdot {b} = {c} \cdot x")
+        s.step(f"Multiply, then divide both sides by ${c}$.",
+               rf"{product} = {c}x \quad\Rightarrow\quad x = \frac{{{product}}}{{{c}}} = {d}")
+        s.answer(solution)
+        return problem, solution, s.done()
 
     external = random.randint(2, 10)
     total = external + random.randint(2, 12)
     tangent = sqrt(external * total)
+    exact = isqrt(external * total) ** 2 == external * total
     problem = (
         f"From an external point, a tangent segment and a secant are drawn to a "
         f"circle. The secant has external segment ${external}$ and total length "
@@ -463,7 +749,16 @@ def geo_circle_segments():
         f"length of the tangent segment. Round to the nearest thousandth if "
         f"necessary."
     )
-    return problem, f"${_num(tangent)}$"
+    solution = f"${_num(tangent)}$"
+    s = Steps()
+    s.step("For a tangent and a secant from the same point, the tangent squared "
+           "equals the secant's external segment times its total length.",
+           r"t^2 = (\text{external segment})(\text{total length})")
+    s.substitute(rf"t^2 = {external} \cdot {total} = {external * total}")
+    s.step("Take the square root of both sides.",
+           rf"t = \sqrt{{{external * total}}} {_rel(exact)} {_num(tangent)}")
+    s.answer(solution, lead="The answer is" if exact else _ROUNDED)
+    return problem, solution, s.done()
 
 
 @register
@@ -485,7 +780,20 @@ def geo_regular_polygon_area(min_side=2, max_side=15):
         f"A regular polygon has ${n}$ sides, each of length ${s}$. Find its "
         f"area. Round to the nearest thousandth."
     )
-    return problem, f"${_num(area)}$"
+    solution = f"${_num(area)}$"
+
+    exact = n == 4  # tan 45 degrees = 1
+    st = Steps()
+    st.formula("The area of a regular polygon with $n$ sides of length $s$",
+               r"A = \frac{n s^2}{4 \tan\left(\frac{180^\circ}{n}\right)}")
+    st.substitute(
+        rf"A = \frac{{{n} \cdot {s}^2}}{{4 \tan\left(\frac{{180^\circ}}{{{n}}}\right)}}"
+        rf" = \frac{{{n * s * s}}}{{4 \tan {_num(180 / n)}^\circ}}"
+    )
+    st.step("Evaluate the tangent with your calculator, then divide.",
+            rf"A {_rel(exact)} {_num(area)}")
+    st.answer(solution, lead="The answer is" if exact else _ROUNDED)
+    return problem, solution, st.done()
 
 
 @register
@@ -510,7 +818,21 @@ def geo_composite_solid():
             f"${h_cone}$. Find the total volume, using your calculator's full "
             f"value of pi. Round to the nearest thousandth if necessary."
         )
-        return problem, f"${_num(volume)}$"
+        solution = f"${_num(volume)}$"
+        base = r * r
+        cone = Fraction(base * h_cone, 3)
+        s = Steps()
+        s.step("The total volume is the volume of the cylinder plus the volume of the cone.",
+               r"V = \pi r^2 h_{\text{cylinder}} + \frac{1}{3}\pi r^2 h_{\text{cone}}")
+        s.step("Find the volume of the cylinder.",
+               rf"\pi ({r})^2 ({h_cyl}) = {_pi_times(base * h_cyl)}")
+        s.step("Find the volume of the cone.",
+               rf"\frac{{1}}{{3}}\pi ({r})^2 ({h_cone}) = {_pi_times(cone)}")
+        s.step("Add them, then multiply using your calculator's value of $\\pi$.",
+               rf"V = {_pi_times(base * h_cyl)} + {_pi_times(cone)} = "
+               rf"{_pi_times(base * h_cyl + cone)} \approx {_num(volume)}")
+        s.answer(solution, lead=_ROUNDED)
+        return problem, solution, s.done()
 
     a, b, c = (random.randint(1, 8) for _ in range(3))
     d, e, f = (random.randint(1, 8) for _ in range(3))
@@ -521,7 +843,16 @@ def geo_composite_solid():
         f"${e}$ by ${f}$. Find the total volume. Round to the nearest "
         f"thousandth if necessary."
     )
-    return problem, f"${_num(volume)}$"
+    solution = f"${_num(volume)}$"
+    s = Steps()
+    s.step("The total volume is the sum of the two prisms' volumes, and each "
+           "prism's volume is length times width times height.",
+           r"V = l_1 w_1 h_1 + l_2 w_2 h_2")
+    s.step("Find the volume of each prism.",
+           rf"{a} \cdot {b} \cdot {c} = {a * b * c}, \quad {d} \cdot {e} \cdot {f} = {d * e * f}")
+    s.step("Add them.", rf"V = {a * b * c} + {d * e * f} = {volume}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -560,7 +891,28 @@ def geo_polygon_area_vertices(coord=6):
         f"Find the area of the {shape} with vertices {coords} (given in order "
         f"around the figure). Give your answer as a number (it may end in .5)."
     )
-    return problem, f"${_num(area)}$"
+    solution = f"${_num(area)}$"
+
+    terms = []
+    for i in range(n):
+        x1, y1 = pts[i]
+        x2, y2 = pts[(i + 1) % n]
+        terms.append((rf"({x1})({y2}) - ({x2})({y1})", x1 * y2 - x2 * y1))
+    s = Steps()
+    s.formula(
+        "The shoelace formula, going around the vertices in order and back to the first,",
+        r"A = \frac{1}{2}\left|\sum (x_i y_{i+1} - x_{i+1} y_i)\right|",
+    )
+    s.step(
+        "For each pair of consecutive vertices, multiply diagonally and subtract.",
+        r", \quad ".join(f"{work} = {value}" for work, value in terms),
+    )
+    s.step("Add the results.",
+           " + ".join(paren(value) for _, value in terms) + f" = {cross}")
+    s.step("Take half of the absolute value.",
+           rf"A = \frac{{1}}{{2}}\left|{cross}\right| = {_num(area)}")
+    s.answer(solution)
+    return problem, solution, s.done()
 
 
 @register
@@ -579,4 +931,18 @@ def geo_frustum_volume(min_r=1, max_r=8, min_h=3, max_h=15):
         f"and upper base radius ${r}$. Find its volume. "
         f"Round your answer to the nearest thousandth."
     )
-    return problem, f"${_num(volume)}$"
+    solution = f"${_num(volume)}$"
+
+    inner = big_r ** 2 + big_r * r + r ** 2
+    s = Steps()
+    s.formula("The volume of a frustum with height $h$ and base radii $R$ and $r$",
+              r"V = \frac{1}{3}\pi h \left(R^2 + Rr + r^2\right)")
+    s.substitute(rf"V = \frac{{1}}{{3}}\pi ({h})\left({big_r}^2 + ({big_r})({r}) + {r}^2\right)",
+                 text=f"Substitute $h = {h}$, $R = {big_r}$, and $r = {r}$.")
+    s.step("Simplify inside the parentheses.",
+           rf"{big_r ** 2} + {big_r * r} + {r ** 2} = {inner}")
+    s.step(f"Multiply by $h = {h}$ and divide by $3$.",
+           rf"V = \frac{{{h} \cdot {inner}}}{{3}}\pi = {_pi_times(Fraction(h * inner, 3))}")
+    s.step("Multiply, using your calculator's value of $\\pi$.", rf"V \approx {_num(volume)}")
+    s.answer(solution, lead=_ROUNDED)
+    return problem, solution, s.done()

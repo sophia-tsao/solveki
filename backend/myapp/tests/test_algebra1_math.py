@@ -14,6 +14,12 @@ from django.test import TestCase
 from myapp.generators import algebra1  # noqa: F401 - registers the generators
 from myapp.generators import LOCAL_GENERATORS
 
+
+def _coef(text):
+    """A parsed coefficient, where "" means 1 and "-" means -1 (as in "x", "-x")."""
+    return {"": 1, "-": -1}.get(text, None) or int(text)
+
+
 SAMPLES = 2000
 
 
@@ -27,17 +33,17 @@ def _frac(text):
 
 
 class AbsoluteValueEquationTests(TestCase):
-    PROBLEM = re.compile(r"\|(?P<a>\d+)x(?P<b>[+-]\d+)?\|=(?P<c>-?\d+)")
+    PROBLEM = re.compile(r"\|(?P<a>\d*)x(?P<b>[+-]\d+)?\|=(?P<c>-?\d+)")
     ROOT = re.compile(r"x = (-?\d+(?:/\d+)?)")
 
     def test_roots_match(self):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_absolute_value_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
-            a = int(m.group("a"))
+            a = _coef(m.group("a"))
             b = int(m.group("b")) if m.group("b") else 0
             c = int(m.group("c"))
 
@@ -65,7 +71,7 @@ class ExponentialGrowthDecayTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_exponential_growth_decay"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             principal = int(m.group("p"))
@@ -92,10 +98,10 @@ class EvaluateExponentialTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_evaluate_exponential"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
-            a = int(m.group("a"))
+            a = _coef(m.group("a"))
             b = int(m.group("b"))
             x = int(m.group("x"))
             expected = Fraction(a) * Fraction(b) ** x
@@ -116,7 +122,7 @@ class DomainOfFunctionTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_domain_of_function"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             sqrt = self.SQRT.search(problem)
             rational = self.RATIONAL.search(problem)
             if sqrt is not None:
@@ -140,7 +146,7 @@ class DiscriminantTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_discriminant"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             quad = self.PROBLEM.search(problem).group("quad")
             a, b, c = _parse_quad(quad)
             expected_d = b * b - 4 * a * c
@@ -159,7 +165,7 @@ class AxisOfSymmetryTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_axis_of_symmetry"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             quad = self.PROBLEM.search(problem).group("quad")
             a, b, c = _parse_quad(quad)
             expected = Fraction(-b, 2 * a)
@@ -180,7 +186,7 @@ class SumProductRootsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_sum_product_roots"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             quad = self.PROBLEM.search(problem).group("quad")
             a, b, c = _parse_quad(quad)
             expected_sum = Fraction(-b, a)
@@ -193,7 +199,7 @@ class SumProductRootsTests(TestCase):
 
 class LinearInequalityTests(TestCase):
     PROBLEM = re.compile(
-        r"\$(?P<a>-?\d+)x(?P<b>[+-]\d+)? (?P<op>\S+) (?P<c>-?\d+)\$"
+        r"\$(?P<a>-?\d*)x(?P<b>[+-]\d+)? (?P<op>\S+) (?P<c>-?\d+)\$"
     )
     # Solutions render relations in typeable ASCII; problems keep LaTeX.
     SOLUTION = re.compile(r"x (?P<op><=|>=|<|>) (?P<v>-?\d+(?:/\d+)?)")
@@ -204,10 +210,10 @@ class LinearInequalityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_linear_inequality_solve"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
-            a = int(m.group("a"))
+            a = _coef(m.group("a"))
             b = int(m.group("b")) if m.group("b") else 0
             c = int(m.group("c"))
             op = m.group("op")
@@ -261,7 +267,7 @@ class FactoringTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["factoring"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             self.assertIsNotNone(pm, f"could not parse problem: {problem!r}")
             a, b, c = _parse_quad(pm.group("quad"))
@@ -287,7 +293,7 @@ class ProductOfPowersTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_product_of_powers"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, mm, nn = int(m.group("a")), int(m.group("m")), int(m.group("n"))
@@ -304,7 +310,7 @@ class PowerOfProductTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_power_of_product"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n = int(m.group("n"))
@@ -320,7 +326,7 @@ class NegativeExponentTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_negative_exponent"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, n = int(m.group("a")), int(m.group("n"))
@@ -336,7 +342,7 @@ class CompleteTheSquareTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_complete_the_square"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")
             a, b, c = _parse_quad(pm.group("quad"))
@@ -378,7 +384,7 @@ class LiteralEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_literal_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")
             eq = pm.group("eq")
@@ -412,7 +418,7 @@ class PointSlopeFormTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_point_slope_form"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")
             x1 = int(pm.group("x1"))
@@ -450,7 +456,7 @@ class MultiplyBinomialsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_multiply_binomials"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             factors = self.QUAD.search(problem).group("factors")
             pairs = self.FACTOR.findall(factors)
             self.assertEqual(len(pairs), 2, f"could not parse: {problem!r}")
@@ -486,7 +492,7 @@ class SolveSystemTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_solve_system"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             lines = self.LINE.findall(problem)
             self.assertEqual(len(lines), 2, f"could not parse: {problem!r}")
 
@@ -519,7 +525,7 @@ class VariationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_variation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.POINT.search(problem)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")
             kind = pm.group("kind")
@@ -557,7 +563,7 @@ class SimplifyRationalTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_simplify_rational"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")
             num = self._poly(*_parse_quad(pm.group("num")))
@@ -595,7 +601,7 @@ class AbsValueInequalityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_abs_value_inequality"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a = self._coef(m.group("a"))
@@ -630,7 +636,7 @@ class SimplifyRadicalTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["alg1_simplify_radical"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
             sm = self.SOLUTION.search(solution)
             self.assertIsNotNone(pm, f"could not parse: {problem!r}")

@@ -30,9 +30,9 @@ function Assignments({ onStarted }) {
     setStartingId(assignmentId);
     try {
       // The assignment's topics are already in the student's deck (added when it
-      // was assigned); this grows today's deck to fit the teacher's card count
-      // and sends the student to the normal practice page, where every card
-      // they answer counts.
+      // was assigned); this rebuilds today's deck with its share of the
+      // assignment's cards and sends the student to the normal practice page,
+      // where every card on the assignment's topics counts.
       const res = await apiFetch(`/assignments/${assignmentId}/play/`, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
       // The deck now includes the assigned topics — drop the cached deck so the
@@ -68,7 +68,7 @@ function Assignments({ onStarted }) {
                       <span className="assignments-item-title">{a.title}</span>
                       <span className="assignments-item-meta">
                         {a.class_name} · {formatDue(a.due_at)}
-                        {` · ${a.cards_answered}/${a.deck_size} cards`}
+                        {` · ${a.completion_pct ?? 0}% done`}
                         {a.overdue && ' · overdue'}
                       </span>
                     </div>

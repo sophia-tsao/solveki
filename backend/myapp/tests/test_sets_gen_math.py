@@ -42,7 +42,7 @@ class SetOperationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["set_operation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
 

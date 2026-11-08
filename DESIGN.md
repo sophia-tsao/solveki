@@ -71,8 +71,10 @@ the same way every view calls `_require_auth`.
   when it's selected again. A null `due_date` means "never practiced → due now".
 - **DailyTopicGrade** — per (user, topic, date), supports the once-per-day
   grading rule (see below). Stores a snapshot of the topic's SM-2 state *before*
-  the day's first grade plus the worst quality seen so far today, so repeated
-  answers recompute from a fixed base instead of compounding.
+  the day's first answer (including its due date and whether it was early), the
+  quality today's answers last gave, and any lift from finishing an assignment
+  (`floor_interval`), so every answer recomputes from a fixed base instead of
+  compounding.
 - **DailyPractice** — one row per (user, date), tracking `answered`/`total` for a
   day's deck. `DailyDeck` rows are pruned when a new day starts and
   `DailyTopicGrade` counts topics rather than problems, so neither can say after
@@ -83,7 +85,10 @@ the same way every view calls `_require_auth`.
   the per-user config that `Settings.load(user)` provisions on demand rather than
   living on a separate profile.
 - **DailyDeck** — per user + date; `problems` (JSON list of `{problem, solution,
-  topic_id}`), `current_index`, and `needs_regen`. `topic_id` attributes each
+  topic_id, kind}`), `current_index`, `attempts`, and `needs_regen`. `kind` is
+  `required`, `pool` or `extra` (see "Deck sizing" below). `attempts` counts
+  wrong answers on the current card (reset when the card changes), so the
+  server decides when the solution is revealed. `topic_id` attributes each
   stored problem back to its source topic so an answer can be graded against that
   topic. `needs_regen` is a dirty flag: a topic/course selection change sets it
   (a tiny write) instead of rebuilding the deck inline, and the unanswered tail
@@ -95,12 +100,13 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 - **Classroom** / **ClassEnrollment** — a teacher-owned class with a unique
   `join_code`, and one enrollment row per (class, student).
 - **Assignment** / **AssignmentTopic** / **AssignmentClass** — a teacher-authored
-  task (a `title`/`description` and a `deck_size`, the number of cards a day the
-  student's deck should hold while it's active), its picked topic set, and the
-  links handing it to classes with per-class `available_at`/`due_at`.
+  task (a `title`/`description`, a `deck_size` — the fewest cards the student
+  answers on its topics — and `allow_late`), its picked topic set, and the links
+  handing it to classes with per-class `available_at`/`due_at`.
 - **StudentAssignment** — one student's progress on one assignment (`status`,
-  `started_at`, `cards_answered`, `completed_at`), created in progress as soon as
-  the assignment reaches the student. There's no per-assignment problem set: the
+  `started_at`, `cards_answered`, `cards_needed`, `completion_pct`,
+  `max_reached`, `late`, `completed_at`), created in progress as soon as the
+  assignment reaches the student. There's no per-assignment problem set: the
   assignment just feeds the student's normal practice (see below).
 - **ProficiencySnapshot** — one row per (user, date) with a count of the user's
   selected topics in each proficiency band (`new`/`learning`/`familiar`/
@@ -116,9 +122,10 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 | POST | `auth/test-login/` | `test_login` (E2E only; 404 unless `ENABLE_TEST_LOGIN`) |
 | POST | `auth/logout/` | `logout_view` |
 | DELETE | `auth/delete/` | `delete_account` |
-| GET | `problem/` | `generate_problem` |
 | GET | `deck/` | `get_deck` |
 | POST | `deck/advance/` | `advance_deck` |
+| POST | `deck/check/` | `check_answer` (grades an answer; the deck payload never carries the solution) |
+| GET | `deck/test-solution/` | `test_solution` (E2E only; 404 unless `ENABLE_TEST_LOGIN`) |
 | GET | `dashboard/` | `view_dashboard` |
 | GET | `practice-calendar/` | `view_practice_calendar` |
 | GET/PATCH | `settings/` | `settings_view` |
@@ -203,31 +210,89 @@ Solveki schedules practice with SuperMemo-2. The design splits cleanly into
   can be reasoned about and unit-tested in isolation. State is the SM-2 triple:
   `ease` (interval multiplier, starts 2.5, floored at 1.3), `interval` (days to
   the next review), and `repetitions` (consecutive successful recalls, reset on
-  a lapse). A successful recall (`quality >= 3`) grows the interval — 1 day, then
-  6, then `interval * ease` — capped at `MAX_INTERVAL` (365 days, borrowed from
-  Anki's notion of a max interval but tuned so a mastered topic still resurfaces
-  at least yearly). A lapse resets `repetitions` to 0 and `interval` to 1 day.
-- **The deck layer owns persistence, dates, and grade derivation.**
-  `_grade_topic` (in `views/deck.py`) turns an answer outcome into a quality
-  grade (`correct_first` → 5, `correct_second` → 3, `incorrect` → 1), calls
-  `srs.update`, and writes the topic's `TopicReview` (including its new
+  a lapse). A successful recall (`quality >= 3`) grows the interval — 1 day,
+  then `interval * ease` (at least a day longer) each time, Anki's ladder rather
+  than SM-2's fixed 6-day second step: 1 → 3 → 8 → 23 days at the starting ease
+  — capped at `MAX_INTERVAL` (365 days, borrowed from Anki's notion of a max
+  interval but tuned so a mastered topic still resurfaces at least yearly). A
+  lapse resets `repetitions` to 0 and `interval` to 1 day. A review before the
+  topic is due (`early`; the deck fills with not-yet-due topics) is a no-op on a
+  pass — SM-2 assumes reviews happen when due, and counting early passes would
+  climb a rung per day — while an early lapse still resets.
+- **A topic is graded once per day from all of that day's answers**
+  (`srs.grade_day`). Each answer earns credit (right first try 1, second try ½,
+  wrong 0) and the day's accuracy picks the quality, like Anki's buttons: 90%+
+  → 5 (ease up), 75%+ → 4 (a normal pass; one slip in four cards lands here),
+  60%+ → 3 (a *hard pass*: the streak continues but the interval only grows
+  1.2×), below that a lapse. On a learning day (a new or lapsed topic) only the
+  last 5 answers are judged, so misses made while first working it out don't
+  count. An ease gain is scaled by the day's first-try-correct volume (÷4, up to
+  3×), so a struggling student who practises more and gets it right recovers
+  ease faster; losses are never scaled.
+- **The deck layer owns persistence and dates.** `_grade_topic` (in
+  `views/deck.py`) reads today's `AnswerRecord`s for the topic, calls
+  `srs.grade_day`, and writes the topic's `TopicReview` (including its new
   `due_date = today + interval`). `_ordered_topics` reads those `due_date`s to
   order the deck but never computes them.
 
-### Filling the deck: due-weighted dose
+### Deck sizing
 
-SM-2 schedules one review per item on its due date, but Solveki always fills the
-day to `questions_per_day` so a student with few selected topics still gets a
-full practice session. Rather than repeat topics evenly, `_generate_problems`
-weights how much of the deck each topic gets by *how overdue* it is
-(`_due_weight`): a topic due today or overdue takes a larger share than one whose
-next review is days out. Every selected topic keeps at least one slot (a variety
-floor), and the remaining slots are split by weight using the largest-remainder
-method so the counts stay deterministic and sum to exactly `questions_per_day`.
-This carries SM-2's core signal — practice the due thing more — into the *within-
-day dose*, not just the ordering: after a lapse, that topic both leads the deck
-and occupies more of it the next day, while a mastered topic recedes to its floor
-slot. Equal-priority topics reduce to an even split.
+`backend/myapp/practice.py` holds the pure rules for how much practice a day
+asks for (no database, like `srs.py`); `views/deck.py` gathers the state and
+builds the cards. The rules were tuned with a day-by-day simulation of two weeks
+of practice — five teacher patterns (a new 50-card topic every day due the next
+day, 20 cards every three days, 10 cards a week, and variants that reassign an
+old topic) against six kinds of student (perfect, one mistake a day, strong,
+average, a struggler who needs ~100 answers to grasp a topic, and one who gets
+everything wrong on day one) — against four constraints: no day over 100 cards;
+a student who gets an assignment all right is "familiar" (6+ days) when they
+finish it and isn't due back the next day; a topic answered mostly wrong is due
+the next day with at least 5 cards; and a single mistake in a day is never
+punished. `tests/test_deck_simulation.py` re-runs that simulation on the real
+functions and asserts the constraints.
+
+Each stored card has a `kind`:
+
+- **required** — planned at the start of the day by `_required_plan` /
+  `practice.plan_required`, and placed first:
+  - *assignment cards*: each open assignment spreads its remaining cards over
+    the days until it's due (`practice.assignment_cards`), at least 4 per topic
+    practised (with one or two cards a single slip is half the evidence), its
+    shakiest topics first. Two assignments sharing a topic take the larger
+    share, since a card counts toward both;
+  - *assignment-topic reviews*: a due topic from any of the student's
+    assignments gets `20 / ease` cards (8 at the starting ease, 15 at the
+    floor), so a topic the student struggles with gets more practice;
+  - *lapses*: a selected topic that lapsed yesterday gets its review ahead of
+    the rest.
+
+  The required total is capped at 80 cards: assignment cards always fit;
+  yesterday's lapses get their full review if it fits, else 5 cards, never past
+  a hard ceiling of 100; other reviews share what's left, lowest ease first,
+  and any that don't fit stay due until tomorrow.
+- **pool** — the student's own practice, filling the deck up to
+  `questions_per_day` after the required cards. `_generate_problems` weights how
+  much of the pool each selected topic gets by *how overdue* it is
+  (`_due_weight`): every topic keeps at least one slot (a variety floor) and the
+  rest are split by weight with the largest-remainder method, preferring topics
+  not already in the deck. So a self-directed student's deck size is still their
+  setting; assignments add to it.
+- **extra** — added one at a time during the day by `_add_practice`, right
+  after the next card, when an answer shows the topic needs more today:
+  - a topic that started the day new or lapsed keeps coming back until 3 of its
+    last 4 answers today are right (`practice.is_enough_today`), up to 15
+    cards — one right answer isn't enough practice on a new topic;
+  - a known topic graded below a normal pass on fewer than 4 cards gets more
+    (a *confirming* card), so one slip on a lone card can't reset it;
+  - an assignment due today that still needs cards keeps adding them.
+
+  Extras stop when the deck shows 80 cards.
+
+The deck shows (`_visible_total`) everything up to the last required or extra
+card, and at least `questions_per_day` plus one per extra. Pool cards come after
+the required ones they were built with, so lowering the setting mid-day hides
+only unanswered pool cards at the end — display-only, so raising it again shows
+them without regenerating.
 
 ### Regenerating on selection changes: the dirty flag
 
@@ -246,23 +311,27 @@ eagerly: it's a one-shot after onboarding, not a hot path.)
 
 ### The once-per-day grading rule
 
-A topic can appear more than once in a day's deck (the deck repeats topics when
-few are selected). The rule: **the first answer for a topic each day sets its
-schedule; later repeats may only pull it down** — a second miss re-grades as a
-lapse, but a later success can't raise a schedule the student already got wrong.
+A topic usually appears several times in a day's deck. The rule: **the day
+counts as one review, graded by the accuracy of all that day's answers on the
+topic** (`srs.grade_day`, above) — so one slip among right answers isn't a lapse,
+and a day mostly wrong is, however the answers are ordered.
 
-To apply that without compounding (repeated misses must not drop ease over and
-over), `DailyTopicGrade` snapshots the topic's SM-2 state *before* the day's
-first grade and records the worst quality applied so far today. Each occurrence
-recomputes the `TopicReview` from that fixed snapshot using
-`min(applied_quality, this_quality)`, so the day's net effect is always "one
-SM-2 update from a single base", never a chain of them.
+To apply that without compounding, `DailyTopicGrade` snapshots the topic's SM-2
+state *before* the day's first answer (and whether it was early, i.e. not due
+yet). Every answer recomputes the `TopicReview` from that fixed snapshot and the
+day's answers so far, so the day's net effect is always "one SM-2 update from a
+single base", never a chain of them. An early day that ends as a pass restores
+the snapshot's schedule, due date included, even if an early miss had reset it.
+Finishing an assignment well stores a `floor_interval` on today's grade (see
+below) so later recomputes keep the lift.
 
 ### Tests
 
-`tests/test_srs.py` unit-tests the pure algorithm (including grade boundaries);
+`tests/test_srs.py` unit-tests the pure algorithm (including the accuracy tiers);
+`tests/test_practice.py` the deck-sizing and completion rules;
 `tests/test_srs_integration.py` covers the deck-layer wiring (due ordering,
-grading, the once-per-day rule) end to end.
+grading, the once-per-day rule) end to end; `tests/test_deck_simulation.py`
+checks the design constraints over simulated weeks.
 
 ## The onboarding diagnostic
 
@@ -315,10 +384,10 @@ An **Assignment** is authored once and handed to any number of classes through
 **AssignmentClass** links (each carrying that class's `available_at`/`due_at`),
 so editing or deleting the assignment affects every class it reached. The model
 is deliberately a single idea: a teacher picks a set of topics
-(`AssignmentTopic` rows) and a `deck_size` — how many cards a day the student's
-practice deck should hold while the assignment is active. There is no separate
-delivery kind or SM-2 toggle; assignments always flow through the student's
-normal practice, which SM-2 always schedules.
+(`AssignmentTopic` rows), a `deck_size` — the fewest cards each student answers
+on those topics — and whether late work counts (`allow_late`). There is no
+separate delivery kind or SM-2 toggle; assignments always flow through the
+student's normal practice, which SM-2 always schedules.
 
 ### Taking an assignment
 
@@ -332,16 +401,28 @@ each student it:
 1. adds the assignment's topics to their own selections (`_ensure_selected`);
 2. creates their **StudentAssignment** row as `IN_PROGRESS` (an existing row,
    and its progress, is left alone, so re-assigning doesn't reset anyone);
-3. flags today's deck stale (`needs_regen`) if they gained topics, so the
-   unanswered tail is rebuilt with them on the next practice-page load.
+3. flags today's deck stale (`needs_regen`), so the unanswered tail is rebuilt
+   with the assignment's cards on the next practice-page load.
 
-From then on every card the student answers, whatever its topic, bumps
-`cards_answered` on each of their in-progress assignments
-(`_count_assignment_card`). An assignment is completed when that count reaches
-its `deck_size`. While one is open, today's deck stretches past
-`questions_per_day` so the remaining cards fit (`_deck_target`). The deck covers
-the largest remainder, not the sum, since every card counts toward every open
-assignment.
+Each day's deck then carries a share of the assignment's remaining cards (see
+"Deck sizing"). Every card the student answers *on one of the assignment's
+topics* bumps `cards_answered` (`_count_assignment_card`); cards after the due
+date only count if `allow_late`. Completion is adaptive (`practice.is_complete`):
+
+- after `deck_size` cards, the student is done if every topic is *solid* — all
+  answers on it right while there are fewer than four, otherwise 3 of the last
+  4 — so a student who gets it right does exactly the teacher's count;
+- otherwise `cards_needed` grows to what the shakiest topic still needs, and
+  the deck keeps giving those topics (extra cards on the last day), up to
+  1.5 × `deck_size` (`practice.max_cards`). Finishing at that maximum without
+  being solid sets `max_reached`, shown to the teacher as "needs help";
+- finishing after the due date sets `late`.
+
+`completion_pct` (answered ÷ needed) is what teachers see; it never goes down —
+when a miss raises the cards needed, it pauses instead. Students see the same
+percentage but aren't told they've been given extra cards. Finishing a topic's
+assignment at 85%+ accuracy lifts it to at least 6 days ("familiar") so a
+student who got it right isn't sent straight back to it.
 
 Opening an assignment (`POST /assignments/<id>/play/`, `play_assignment`) checks
 the student is assigned it, re-runs the start (a no-op unless they were assigned
@@ -349,11 +430,11 @@ before topics were added on assign), builds or tops up today's deck, and
 returns `{ "goto": "practice" }` so the client routes to the normal practice
 page.
 
-From there the assigned topics are indistinguishable from the rest of the
-student's practice: the same daily deck, the same two-attempt UI, the same
-`_grade_topic` SM-2 grading and once-per-day rule. The teacher's card count sets
-the size of that day's deck, and the topics they picked are simply added to what
-the student practices and reviews.
+From there the assigned topics are practised like the rest of the student's
+topics: the same daily deck, the same two-attempt UI, the same `_grade_topic`
+SM-2 grading and once-per-day rule. What differs is dose: assignment topics get
+their share of the teacher's cards each day and `20 / ease` cards when due for
+review, where the student's own topics share their `questions_per_day`.
 
 ### Teacher analytics
 
@@ -362,11 +443,11 @@ spaced-repetition state rather than a separate attempt log. A daily
 **ProficiencySnapshot** per student (counts of their selected topics by band)
 gives the charts history to draw.
 
-- `assignment_results` is a proficiency report over the assignment's topic set:
-  per student, whether they've practiced the assigned topics (a `DailyTopicGrade`
-  or a non-zero `TopicReview`), a proficiency-band breakdown of those topics
-  (from each `TopicReview.interval`), whether they're overdue, and a class-wide
-  band summary.
+- `assignment_results` is a progress and proficiency report over the
+  assignment's topic set: per student, their `completion_pct` and status, the
+  "needs help" (`max_reached`), `late` and overdue flags, a proficiency-band
+  breakdown of those topics (from each `TopicReview.interval`), and a
+  class-wide band summary plus the topics students struggled with most.
 - `teacher_overview` returns class sizes and student counts; the
   familiarity-over-time chart is served separately by `proficiency_history`,
   which forward-fills each student's latest snapshot per day and averages the
@@ -390,7 +471,7 @@ page by editing the URL — and the backend enforces the same on every endpoint.
 
 - **Student pages.** Practice UI in `MathProblem.jsx` /
   `MathProblemDisplay.jsx` / `MathProblemResponse.jsx` (problem rendering, answer
-  box, two-attempt flow). The card's top-right "Learn more ↗" link opens the
+  box, two-attempt flow). The card's top-right "Watch Video ↗" link opens the
   backend-sent `learn_more_url` in a new tab, on both the question face and
   the wrong-answer face. Course selection is in `CourseList.jsx` / `CourseBar.jsx`;
   `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` (opening an
@@ -657,7 +738,7 @@ Generators may declare default kwargs but must be callable with zero args.
 `algebra.py` holds `vertex_form` and `aroc_over_interval`; `geometry.py` holds
 `angle_sum`.
 
-### Resolving a name to a generator (`views/problems.py`, `_make_problem`)
+### Resolving a name to a generator (`views/problems.py`, `_make_problem_for_topic`)
 
 The local registry and the library are fused here — local generators win, then
 the library is the fallback:
@@ -675,8 +756,8 @@ if generator is None:
 problem, solution = generator()
 ```
 
-`_make_problem` picks a random `generator_name` among the user's selected
-topics, resolves it, invokes it, then normalizes the solution (strips LaTeX
+`_make_problem_for_topic` resolves a topic's `generator_name`, invokes it,
+then normalizes the solution (strips LaTeX
 `$`, rounds decimals, appends a rounding instruction when rounding changes the
 value).
 
@@ -739,8 +820,8 @@ editing the link.
   - `test_names_exist` — every seeded `generator_name` is in
     `mathgenerator.get_gen_list()` ∪ `LOCAL_GENERATORS`. Guards against library
     upgrades or typos silently breaking a topic.
-  - `test_names_produce_output` — resolves each name the way `_make_problem`
-    does and calls it (retries up to 5 times under a fixed seed so a degenerate
+  - `test_names_produce_output` — resolves each name the way
+    `_make_problem_for_topic` does and calls it (retries up to 5 times under a fixed seed so a degenerate
     random draw can't flake CI).
 - **`LocalGeneratorTests`** (stronger checks for owned code)
   - `test_all_local_generators_return_well_formed_pairs` — non-empty string
@@ -753,9 +834,9 @@ editing the link.
 There is **no endpoint that lists generators**. They are exposed indirectly
 through topics: `view_courses` / `view_course_topics` return topics (including
 `generator_name`) with per-user selection state; the frontend lets the user
-select topics; `generate_problem` and the deck endpoints call `_make_problem`,
-which randomly chooses among the selected topics' generators and returns
-`{problem, solution}`. Unknown names degrade gracefully to "no problem."
+select topics; the deck builds each day's cards by calling
+`_make_problem_for_topic` for the selected topics (weighted by how due each is)
+and stores the resulting `{problem, solution, topic_id}` on the `DailyDeck`. Unknown names degrade gracefully to "no problem."
 
 ## Adding a new custom generator
 

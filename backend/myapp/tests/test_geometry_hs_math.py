@@ -37,7 +37,7 @@ class RightTriangleSideTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_right_triangle_side"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             theta = int(m.group("theta"))
@@ -66,7 +66,7 @@ class RightTrianglePythagTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_solve_right_triangle_pythag"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             ans = int(self.SOLUTION.search(solution).group("ans"))
             legs = self.LEGS.search(problem)
             leg_hyp = self.LEG_HYP.search(problem)
@@ -96,7 +96,7 @@ class CircleEquationFromCenterRadiusTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_circle_equation_from_center_radius"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -121,7 +121,7 @@ class CircleCenterRadiusFromEquationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_circle_center_radius_from_equation"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -145,7 +145,7 @@ class TranslatePointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_translate_point"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -168,7 +168,7 @@ class ReflectPointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_reflect_point"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -197,7 +197,7 @@ class RotatePointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_rotate_point"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -226,7 +226,7 @@ class DilatePointTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_dilate_point"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -258,7 +258,7 @@ class InscribedAngleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_inscribed_angle"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             ans = int(self.SOLUTION.search(solution).group("a"))
             central = self.CENTRAL_GIVEN.search(problem)
             inscribed = self.INSCRIBED_GIVEN.search(problem)
@@ -282,7 +282,7 @@ class ConditionalProbabilityTableTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_conditional_probability_table"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -317,7 +317,7 @@ class CompoundProbabilityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_compound_probability"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
             s = self.SOLUTION.search(solution)
             self.assertIsNotNone(p, f"could not parse: {problem!r}")
@@ -344,7 +344,7 @@ class ExpectedValueTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_expected_value"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             body = self.PROBLEM.search(problem)
             self.assertIsNotNone(body, f"could not parse: {problem!r}")
             terms = self.TERM.findall(body.group("body"))
@@ -379,7 +379,7 @@ class SpecialRightTriangleTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_special_right_triangle"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             ratios = self.RATIOS[m.group("kind")]
@@ -405,7 +405,7 @@ class SimilarTriangleSideTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_similar_triangle_side"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             ab, bc, de = (int(m.group(k)) for k in ("ab", "bc", "de"))
@@ -428,7 +428,7 @@ class ScaleFactorRatioTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_scale_factor_ratio"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             scale = m.group("scale")
@@ -462,7 +462,7 @@ class CircleSegmentsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_circle_segments"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             chord = self.CHORD.search(problem)
             tangent = self.TANGENT.search(problem)
             if chord:
@@ -489,7 +489,7 @@ class RegularPolygonAreaTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_regular_polygon_area"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n, s = int(m.group("n")), int(m.group("s"))
@@ -516,7 +516,7 @@ class CompositeSolidTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_composite_solid"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             cyl = self.CYL_CONE.search(problem)
             prisms = self.PRISMS.search(problem)
             if cyl:
@@ -547,7 +547,7 @@ class PolygonAreaVerticesTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_polygon_area_vertices"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             body = problem.split("Give your answer")[0]
             pts = [(int(x), int(y)) for x, y in self.VERTEX.findall(body)]
             self.assertIn(len(pts), (3, 4), f"could not parse: {problem!r}")
@@ -575,7 +575,7 @@ class FrustumVolumeTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["geo_frustum_volume"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             h, R, r = int(m.group("h")), int(m.group("R")), int(m.group("r"))

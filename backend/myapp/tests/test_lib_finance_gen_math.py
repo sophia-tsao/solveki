@@ -48,7 +48,7 @@ class PercentageTests(TestCase):
         gen = LOCAL_GENERATORS["percentage"]
         pat = re.compile(r"What is \$(\d+)\\%\$ of \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, n = int(m.group(1)), int(m.group(2))
@@ -62,7 +62,7 @@ class PercentageDifferenceTests(TestCase):
         gen = LOCAL_GENERATORS["percentage_difference"]
         pat = re.compile(r"between \$(\d+)\$ and \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             a, b = int(m.group(1)), int(m.group(2))
@@ -77,7 +77,7 @@ class PercentageErrorTests(TestCase):
         gen = LOCAL_GENERATORS["percentage_error"]
         pat = re.compile(r"observed value is \$(\d+)\$ and the exact value is \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             observed, exact = int(m.group(1)), int(m.group(2))
@@ -94,7 +94,7 @@ class SimpleInterestTests(TestCase):
             r"principal of \$(\d+)\$ dollars at a rate of \$(\d+)\\%\$ per year "
             r"for \$(\d+)\$ years")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, r, t = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -110,7 +110,7 @@ class CompoundInterestTests(TestCase):
             r"principal of \$(\d+)\$ dollars is invested at a rate of "
             r"\$(\d+)\\%\$ per year, compounded annually, for \$(\d+)\$ years")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             p, r, t = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -125,7 +125,7 @@ class ProfitLossPercentTests(TestCase):
         gen = LOCAL_GENERATORS["profit_loss_percent"]
         pat = re.compile(r"cost price of \$(\d+)\$ and a sell price of \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             cost, sell = int(m.group(1)), int(m.group(2))
@@ -143,7 +143,7 @@ class ConditionalProbabilityTests(TestCase):
         gen = LOCAL_GENERATORS["conditional_probability"]
         pat = re.compile(r"\$(\d+)\$ people said they exercise, and of those, \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             b_count, ab_count = int(m.group(1)), int(m.group(2))
@@ -163,7 +163,7 @@ class BinomialDistributionTests(TestCase):
             r"each of \$(\d+)\$ independent trials the probability of success "
             r"is \$([\d.]+)\$\. What is the probability of exactly \$(\d+)\$")
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             m = pat.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
             n, p, k = int(m.group(1)), float(m.group(2)), int(m.group(3))

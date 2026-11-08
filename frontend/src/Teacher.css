@@ -169,6 +169,11 @@
   font-weight: 600;
 }
 
+.teacher-needs-help {
+  color: #b45309;
+  font-weight: 600;
+}
+
 /* A thin stacked bar of proficiency-band counts (assignment report). */
 .ad-bandbar {
   display: flex;
@@ -181,6 +186,21 @@
 
 .ad-bandbar-seg {
   height: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* A band's share written inside its segment; sized to the 10px bar so the
+   bar doesn't grow. Dark text reads on every band color. */
+.ad-bandbar-pct {
+  font-size: 9px;
+  line-height: 10px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
 }
 
 .ad-legend {
@@ -520,4 +540,168 @@
 .activity-day.today {
   outline: 2px solid #2563eb;
   outline-offset: -2px;
+}
+
+/* Overview focus columns: newly taught / weak spots. Side by side, stacking
+   on narrow screens. */
+.focus-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1rem 0 1.5rem;
+}
+
+@media (max-width: 760px) {
+  .focus-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.focus-col h2.teacher-card-title {
+  margin: 0;
+}
+
+.focus-purpose {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+.focus-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.focus-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.6rem;
+}
+
+/* Same track as the band bar, filled to the topic's accuracy. */
+.focus-accbar {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #eee;
+}
+
+.focus-accbar-fill {
+  display: block;
+  height: 100%;
+  background: #2563eb;
+}
+
+.focus-accbar-pct {
+  position: absolute;
+  top: 0;
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.focus-accbar-pct.inside {
+  color: #fff;
+}
+
+.focus-accbar-pct.outside {
+  color: #111827;
+}
+
+/* A topic row and the detail card that opens just below it on a long hover. */
+.focus-item {
+  position: relative;
+  border-radius: 6px;
+  outline-offset: 3px;
+}
+
+.focus-pop {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 0.35rem);
+  left: -0.5rem;
+  right: -0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.12);
+  transform-origin: top center;
+  animation: focus-pop-in 180ms ease-out both;
+}
+
+/* Bridges the gap above the card so moving the pointer onto it keeps it open. */
+.focus-pop::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  height: 0.45rem;
+}
+
+.focus-pop.is-closing {
+  animation: focus-pop-out 120ms ease-in both;
+}
+
+.focus-pop-line {
+  font-size: 0.85rem;
+  color: #374151;
+}
+
+@keyframes focus-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes focus-pop-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+/* Near-instant (not none) so animationend still fires and the card unmounts. */
+@media (prefers-reduced-motion: reduce) {
+  .focus-pop,
+  .focus-pop.is-closing {
+    animation-duration: 1ms;
+  }
+}
+
+.focus-barkey {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  color: #374151;
+}
+
+.focus-accbar-swatch {
+  flex: none;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  background: #2563eb;
 }

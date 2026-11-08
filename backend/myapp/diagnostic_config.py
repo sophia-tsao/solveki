@@ -63,24 +63,23 @@ def category_of_course_name(course_name):
 
 # SM-2 seed state per band, chosen so each topic lands in its dashboard mastery
 # bucket (see ``intervalLevel`` in Dashboard.jsx): New (interval <= 1), Learning
-# (2-5), Familiar (6-20), Proficient (>= 21). "new" and "learning" are seeded with
-# explicit intervals because SM-2's interval sequence jumps 1 -> 6 and so can't
-# land in the 2-5 "Learning" range; "familiar" and "proficient" replay real grade
-# sequences through the scheduler for authentic ease/interval/repetitions.
+# (2-5), Familiar (6-20), Proficient (>= 21). "new" is seeded explicitly (unseen);
+# the others replay real grade sequences through the scheduler for authentic
+# ease/interval/repetitions (its ladder runs 1 -> 3 -> 8 -> 23 days).
 _BAND_EXPLICIT = {
     "new": (srs.INITIAL_EASE, 0, 0),       # unseen, due today (New)
-    "learning": (srs.INITIAL_EASE, 3, 1),  # coming back in a few days (Learning)
 }
 _BAND_SEQUENCES = {
-    "familiar": [5, 5],          # -> interval 6  (Familiar)
-    "proficient": [5, 5, 5, 5],  # -> interval ~49 (Proficient)
+    "learning": [5, 5],          # -> interval 3  (Learning)
+    "familiar": [5, 5, 5],       # -> interval 8  (Familiar)
+    "proficient": [5, 5, 5, 5],  # -> interval 23 (Proficient)
 }
 
 
 def seed_state_for_band(band):
     """Return the SM-2 (ease, interval, repetitions) for a seeding band.
 
-    New/Learning use explicit intervals; Familiar/Proficient are computed by
+    New uses an explicit state; the other bands are computed by
     replaying the band's quality sequence through the real scheduler, so those
     numbers are authentic algorithm output rather than hand-typed.
     """
@@ -339,22 +338,32 @@ COURSE_UNITS = {
          "topics": [
             "Coordinates on the Unit Circle", "Sine on the Unit Circle",
             "Cosine on the Unit Circle", "Tangent on the Unit Circle",
-            "Inverse Trigonometric Values", "Sinusoid Features"]},
+            "Inverse Trigonometric Values", "Sinusoid Features",
+            "Values of a Periodic Function", "Sinusoid Transformations",
+            "Sinusoidal Models in Context", "Tangent Function Features",
+            "Secant, Cosecant, and Cotangent Values"]},
         {"key": "precalc-u2", "name": "Trigonometric Identities & Equations",
          "topics": [
             "Angle Sum", "Double-Angle Values", "Half-Angle Formula Values",
             "Sum and Difference Formula Values", "Simplify Using Trig Identities",
-            "Solve a Trigonometric Equation", "Quadratic-Form Trigonometric Equation"]},
+            "Solve a Trigonometric Equation", "Quadratic-Form Trigonometric Equation",
+            "Trigonometric Inequalities"]},
         {"key": "precalc-u3", "name": "Triangle Trigonometry", "topics": [
             "Law of Sines", "Law of Cosines", "Area of an Oblique Triangle"]},
         {"key": "precalc-u4", "name": "Vectors & Complex Numbers", "topics": [
             "Vector Operations (2D)", "Angle between 2 vectors",
             "Dot product of 2 vectors", "Orthogonal Projection",
             "Euclidian norm or L2 norm of a vector", "Complex to polar form",
-            "De Moivre's Theorem"]},
+            "De Moivre's Theorem", "Vector-Valued Functions"]},
         {"key": "precalc-u5", "name": "Polar & Parametric", "topics": [
             "Polar to Rectangular Coordinates", "Rectangular to Polar Coordinates",
-            "Polar and Rectangular Equation Conversion", "Eliminate the Parameter"]},
+            "Polar and Rectangular Equation Conversion", "Polar Graph Features",
+            "Rates of Change in Polar Functions", "Eliminate the Parameter",
+            "Position of a Parametric Particle",
+            "Average Rate of Change of a Parametric Function",
+            "Parametric Circles and Line Segments",
+            "Points on an Implicitly Defined Curve", "Parametrize an Ellipse",
+            "Classify a Conic from General Form"]},
         {"key": "precalc-u6", "name": "Rational Functions", "topics": [
             "Vertical Asymptotes of a Rational Function",
             "Zeros of a Rational Function", "Holes of a Rational Function",
@@ -362,10 +371,30 @@ COURSE_UNITS = {
             "Slant Asymptote of a Rational Function",
             "Y-Intercept of a Rational Function", "Rational Inequality",
             "Partial Fraction Decomposition"]},
+        {"key": "precalc-u8", "name": "Polynomial Functions & Modeling", "topics": [
+            "Change in Tandem: Increasing and Concavity",
+            "Second Differences of a Quadratic",
+            "Polynomial Degree from Finite Differences", "Complex Conjugate Zeros",
+            "Even and Odd Functions (Symmetry)",
+            "Transform a Point on a Function's Graph",
+            "Identify a Linear, Quadratic, or Exponential Model",
+            "Predict with a Quadratic Model"]},
+        {"key": "precalc-u9", "name": "Exponential & Logarithmic Functions", "topics": [
+            "Exponential Function from Two Points", "Rewrite an Exponential Expression",
+            "Residual of a Regression Model",
+            "Evaluate the Inverse of an Exponential Function",
+            "Features of a Logarithmic Function", "Solve a Logarithmic Equation",
+            "Exponential and Logarithmic Inequalities",
+            "Logarithmic Scales in Context (pH, Decibels, Richter)",
+            "Exponential Model from a Semi-Log Plot"]},
         {"key": "precalc-u7", "name": "Sequences & Series", "topics": [
             "Finite Geometric Series Sum", "Sigma-Notation Arithmetic Sum",
             "Recursive Sequence Nth Term", "Limit of a Rational Sequence",
             "Binomial Theorem Term"]},
+        {"key": "precalc-u10", "name": "Matrices & Linear Transformations", "topics": [
+            "Entry of an Inverse Matrix", "Apply a Matrix Transformation to a Point",
+            "Composition and Inverse of Matrix Transformations",
+            "Two-State Markov Transition"]},
     ],
     "AP Calculus": [
         {"key": "calc-u1", "name": "Limits & Continuity", "topics": [

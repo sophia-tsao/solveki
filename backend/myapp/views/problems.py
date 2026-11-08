@@ -1,11 +1,5 @@
 import logging
-import random
 import re
-
-from django.http import JsonResponse
-
-from ..models import Topic
-from .common import _require_auth
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +9,7 @@ logger = logging.getLogger(__name__)
 # start — that import is the single largest slice of cold-start latency. Only
 # problem generation needs them; the URLconf load that every request (including
 # the trivial /auth/me/) pays for does not. Deferring the import moves that cost
-# off the cold-start path and onto the first /problem/ (or /deck/) request.
+# off the cold-start path and onto the first /deck/ request.
 
 # Matches an *over-precise* decimal (4+ fractional digits) anywhere in a string,
 # e.g. the ``523.5987755982989`` inside ``"523.5987755982989 m^3"``. Decimals
@@ -44,10 +38,13 @@ def _round_decimals(text):
 def _make_problem_for_topic(topic):
     """Generate a single problem for one specific topic.
 
-    Returns a dict with 'problem', 'solution', and 'topic_id', or None if the
-    topic has no usable generator. The `topic_id` ties the stored problem back
-    to the topic it came from, so an answer can be attributed to that topic for
-    spaced-repetition scheduling (see myapp.srs); it isn't sent to the client.
+    Returns a dict with 'problem', 'solution', 'steps', and 'topic_id', or None
+    if the topic has no usable generator. The `topic_id` ties the stored problem
+    back to the topic it came from, so an answer can be attributed to that topic
+    for spaced-repetition scheduling (see myapp.srs); it isn't sent to the
+    client. `steps` is the generator's step-by-step explanation (see
+    generators._steps), or [] for a generator that doesn't provide one; it's
+    only sent once the student has used up their attempts.
     """
     name = topic.generator_name
     if not name:
@@ -63,7 +60,10 @@ def _make_problem_for_topic(topic):
         # test_generators.py exists to catch this before it ships.
         logger.warning("No generator found for name %r; skipping problem", name)
         return None
-    problem, solution = generator()
+    # Library generators (and local ones not yet given explanations) return
+    # just (problem, solution); ours return (problem, solution, steps).
+    problem, solution, *rest = generator()
+    steps = rest[0] if rest else []
 
     # Strip the surrounding LaTeX '$' delimiters so every solution is returned
     # consistently, whether it's an integer, a decimal, or a symbolic answer.
@@ -84,32 +84,13 @@ def _make_problem_for_topic(topic):
     # student never sees a 16-digit decimal anywhere on the card. LaTeX in the
     # problem uses no bare decimal tokens that this would corrupt.
     problem = _round_decimals(problem)
+    # Same for the explanation, so its numbers agree with the rounded card.
+    steps = [
+        {
+            "text": _round_decimals(step["text"]),
+            "math": _round_decimals(step["math"]) if step.get("math") else None,
+        }
+        for step in steps
+    ]
 
-    return {"problem": problem, "solution": sol_str, "topic_id": topic.id}
-
-
-def _make_problem(user):
-    """Generate a single problem from a random one of the user's selected topics.
-
-    Returns a dict with 'problem', 'solution', and 'topic_id', or None if no
-    topics are selected. Topic *selection* lives here; the actual generation for
-    a chosen topic is delegated to `_make_problem_for_topic`. The deck layer will
-    replace this random choice with due-ordered selection, but generate_problem
-    and existing callers keep this uniform-random behavior.
-    """
-    topics = list(
-        Topic.objects.filter(selections__user=user).exclude(generator_name__isnull=True)
-    )
-    if not topics:
-        return None
-    return _make_problem_for_topic(random.choice(topics))
-
-
-def generate_problem(request):
-    auth = _require_auth(request)
-    if auth:
-        return auth
-    result = _make_problem(request.user)
-    if result is None:
-        return JsonResponse({"no_topics": True})
-    return JsonResponse(result)
+    return {"problem": problem, "solution": sol_str, "steps": steps, "topic_id": topic.id}

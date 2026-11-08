@@ -16,6 +16,7 @@ from ..models import (
 from .common import _require_auth, _require_teacher
 from .deck import _client_today, _get_or_create_today_deck, _interval_band
 from .insights import struggled_topics
+from .. import practice
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +26,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 #
 # An assignment is a single idea: the teacher picks topics to add to students'
-# spaced-repetition decks, and how many cards the student must answer. The
-# teacher-picked topics (stored as `AssignmentTopic` rows) are added to each
+# spaced-repetition decks, and the fewest cards the student must answer on them.
+# The teacher-picked topics (stored as `AssignmentTopic` rows) are added to each
 # assigned student's own selections as soon as the assignment reaches them —
 # when the teacher assigns it to their class, or when they join a class that
 # already has it — so the work flows through the student's normal daily
 # practice, with SM-2 always scheduling it, and those same topics drive the
-# familiarity report. Completion is a card count: every card answered after the
-# assignment reached the student (any topic) counts toward it.
+# familiarity report. Each day's deck carries a share of the remaining cards
+# until the due date. Completion is adaptive: a student who's solid on the
+# topics after the card count is done; one who isn't gets more cards, up to
+# `practice.MAX_CARDS_MULTIPLIER` times as many (see `deck._count_assignment_card`).
 
 
 def _ensure_selected(student_ids, topics):
@@ -60,16 +63,16 @@ def _start_assignment_for(assignment, classroom_id, student_ids):
     """Put `assignment` into each student's practice (idempotent).
 
     Adds its topics to the students' selections and marks it in progress, so
-    every card they answer from now on counts toward it and their deck stretches
-    to fit its cards (`_deck_target`). Progress on an already-started or
-    completed assignment is left alone. A student who gained new topics has
-    today's deck flagged stale so its unanswered tail is rebuilt with them on
-    the next practice-page load.
+    every card they answer on its topics from now on counts toward it and their
+    daily decks carry its cards. Progress on an already-started or completed
+    assignment is left alone. Each student's deck for today is flagged stale so
+    its unanswered tail is rebuilt with the assignment's cards on the next
+    practice-page load.
     """
     student_ids = list(set(student_ids))
     if not student_ids:
         return
-    gained = _ensure_selected(student_ids, _assignment_topics(assignment))
+    _ensure_selected(student_ids, _assignment_topics(assignment))
 
     rows = StudentAssignment.objects.filter(assignment=assignment, student_id__in=student_ids)
     have = set(rows.values_list("student_id", flat=True))
@@ -86,8 +89,7 @@ def _start_assignment_for(assignment, classroom_id, student_ids):
         ],
         ignore_conflicts=True,
     )
-    if gained:
-        DailyDeck.objects.filter(user_id__in=gained).update(needs_regen=True)
+    DailyDeck.objects.filter(user_id__in=student_ids).update(needs_regen=True)
 
 
 def _start_assignment_for_class_students(assignment):
@@ -115,21 +117,34 @@ _STATUS_LABEL = {
 }
 
 
-def _progress_by_assignment(student, assignment_ids=None):
-    """Map assignment id -> (status, cards_answered) for `student`.
+_NO_PROGRESS = {
+    "status": "not_started", "cards_answered": 0, "completion_pct": 0,
+    "max_reached": False, "late": False,
+}
 
-    Status is "not_started" / "in_progress" / "done"; assignments that
-    haven't reached the student are simply absent (callers default them to not started).
+
+def _progress_row(row):
+    """A `StudentAssignment`'s progress as shown to teachers and the student."""
+    return {
+        "status": _STATUS_LABEL.get(row.status, "not_started"),
+        "cards_answered": row.cards_answered,
+        "completion_pct": row.completion_pct,
+        "max_reached": row.max_reached,
+        "late": row.late,
+    }
+
+
+def _progress_by_assignment(student, assignment_ids=None):
+    """Map assignment id -> progress dict (see `_progress_row`) for `student`.
+
+    Status is "not_started" / "in_progress" / "done"; assignments that haven't
+    reached the student are simply absent (callers default them to
+    `_NO_PROGRESS`).
     """
     rows = StudentAssignment.objects.filter(student=student)
     if assignment_ids is not None:
         rows = rows.filter(assignment_id__in=assignment_ids)
-    return {
-        assignment_id: (_STATUS_LABEL.get(status, "not_started"), answered)
-        for assignment_id, status, answered in rows.values_list(
-            "assignment_id", "status", "cards_answered"
-        )
-    }
+    return {row.assignment_id: _progress_row(row) for row in rows}
 
 
 def _assignment_topics(assignment):
@@ -148,6 +163,8 @@ def _serialize_assignment(assignment, include_topics=True):
         "title": assignment.title,
         "description": assignment.description,
         "deck_size": assignment.deck_size,
+        "max_cards": practice.max_cards(assignment.deck_size),
+        "allow_late": assignment.allow_late,
         "created_at": assignment.created_at.isoformat(),
     }
     if include_topics:
@@ -179,8 +196,9 @@ def _apply_assignment_body(assignment, body):
     """Set assignment fields from a create/update body. Returns None or an error response.
 
     Delivery is fixed: every assignment is a spaced-repetition deck scoped to all
-    of each student's selected topics, with SM-2 on. Only the title, description,
-    and deck size (the teacher's card count) are teacher-editable.
+    of each student's selected topics, with SM-2 on. Only the title,
+    description, deck size (the teacher's minimum card count) and whether late
+    work counts are teacher-editable.
     """
     if "title" in body:
         title = (body.get("title") or "").strip()
@@ -194,6 +212,10 @@ def _apply_assignment_body(assignment, body):
             assignment.deck_size = max(1, int(body["deck_size"]))
         except (ValueError, TypeError):
             return JsonResponse({"error": "deck_size must be an integer"}, status=400)
+    if "allow_late" in body:
+        if not isinstance(body["allow_late"], bool):
+            return JsonResponse({"error": "allow_late must be true or false"}, status=400)
+        assignment.allow_late = body["allow_late"]
     return None
 
 
@@ -364,10 +386,12 @@ def _student_due_map(assignment):
 def assignment_results(request, assignment_id):
     """Familiarity report for one assignment, optionally filtered to a class.
 
-    Reports, per student: how many of the assignment's cards they've answered
-    and whether it's done (the completion rule), their proficiency-band mix on
-    the assignment's topics (from their SM-2 state), and whether they're overdue
-    (past due date without finishing). Assignments are practiced through the
+    Reports, per student: their completion percentage and status (the adaptive
+    completion rule), whether they finished only by reaching the most cards the
+    assignment can ask for (`max_reached`, shown as "needs help") or after the
+    due date (`late`), their proficiency-band mix on the assignment's topics
+    (from their SM-2 state), and whether they're overdue (past due date without
+    finishing). Assignments are practiced through the
     student's normal deck, so familiarity is measured by the SM-2 schedule the
     practice builds — not a one-off quiz score.
 
@@ -402,11 +426,11 @@ def assignment_results(request, assignment_id):
         user_id__in=student_ids, topic_id__in=topic_ids
     ).values_list("user_id", "topic_id", "interval"):
         intervals[(uid, tid)] = interval
-    progress = {  # student_id -> (status, cards_answered)
-        sid: (_STATUS_LABEL.get(status, "not_started"), answered)
-        for sid, status, answered in StudentAssignment.objects.filter(
+    progress = {  # student_id -> progress dict (see `_progress_row`)
+        row.student_id: _progress_row(row)
+        for row in StudentAssignment.objects.filter(
             assignment=assignment, student_id__in=student_ids
-        ).values_list("student_id", "status", "cards_answered")
+        )
     }
 
     User = get_user_model()
@@ -427,8 +451,8 @@ def assignment_results(request, assignment_id):
             band = _interval_band(intervals.get((sid, tid), 0))
             bands[band] += 1
             by_topic[tid][band] += 1
-        status, answered = progress.get(sid, ("not_started", 0))
-        done = status == "done"
+        row = progress.get(sid, _NO_PROGRESS)
+        done = row["status"] == "done"
         if done:
             num_completed += 1
         for b in _BANDS:
@@ -438,8 +462,7 @@ def assignment_results(request, assignment_id):
             "name": names.get(sid, "(unknown)"),
             "class_id": class_id,
             "due_at": due_at.isoformat() if due_at else None,
-            "status": status,
-            "cards_answered": answered,
+            **row,
             "overdue": bool(due_at and due_at < now and not done),
             "proficiency": bands,
         })
@@ -486,9 +509,11 @@ def _assignment_link_for_student(assignment, student):
 def my_assignments(request):
     """The current student's assignments: to-do and done.
 
-    An assignment is "done" once the student has answered its `deck_size` cards
-    since it reached them; otherwise it's outstanding. Progress is tracked through the
-    student's normal deck, so there's no separate assignment quiz to complete.
+    An assignment is "done" once the adaptive completion rule says so (see
+    `deck._count_assignment_card`); otherwise it's outstanding, with its
+    completion percentage. Progress is tracked through the student's normal
+    deck, so there's no separate assignment quiz to complete. Students aren't
+    told when they've been given extra cards (`max_reached` is teacher-only).
     """
     auth = _require_auth(request)
     if auth:
@@ -510,16 +535,18 @@ def my_assignments(request):
         if a.id in seen:
             continue
         seen.add(a.id)
-        status, answered = progress.get(a.id, ("not_started", 0))
-        done = status == "done"
+        progress_row = progress.get(a.id, _NO_PROGRESS)
+        done = progress_row["status"] == "done"
         row = {
             "assignment_id": a.id,
             "title": a.title,
             "class_name": link.classroom.name,
             "due_at": link.due_at.isoformat() if link.due_at else None,
-            "cards_answered": answered,
+            "cards_answered": progress_row["cards_answered"],
+            "completion_pct": progress_row["completion_pct"],
             "deck_size": a.deck_size,
-            "status": status,
+            "status": progress_row["status"],
+            "late": progress_row["late"],
             "overdue": bool(link.due_at and link.due_at < now and not done),
         }
         (completed if done else upcoming).append(row)
@@ -550,9 +577,9 @@ def play_assignment(request, assignment_id):
 
     _start_assignment_for(assignment, link.classroom_id, [request.user.id])
 
-    # Build or top up today's deck. Its target (`_deck_target`) includes this
-    # assignment's remaining cards, so the deck stretches past the student's
-    # daily setting if needed and they can finish the assignment.
+    # Build or top up today's deck. Starting the assignment flagged it stale, so
+    # it's rebuilt with today's share of the assignment's cards on top of the
+    # student's daily setting.
     _get_or_create_today_deck(request.user, _client_today(request))
 
     logger.info("Student %s started assignment %s", request.user.id, assignment_id)

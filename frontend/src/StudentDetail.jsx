@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, localDay } from './auth.js';
+import AssignmentProgress from './AssignmentProgress.jsx';
 import TopicProgress from './TopicProgress.jsx';
 import ProficiencyTrend from './ProficiencyTrend.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
@@ -90,7 +91,7 @@ function StudentDetail({ studentId }) {
 
       <ProficiencyTrend
         title="Familiarity over time"
-        description="Share of this student's topics in each proficiency band, day by day."
+        description="This student's topics in each proficiency band, day by day."
         scope="student"
         studentId={data.student.id}
       />
@@ -101,18 +102,15 @@ function StudentDetail({ studentId }) {
       ) : (
         <table className="teacher-table">
           <thead>
-            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Cards answered</th></tr>
+            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Completion</th></tr>
           </thead>
           <tbody>
             {data.assignments.map((a) => (
               <tr key={a.assignment_id}>
                 <td>{a.title}</td>
                 <td>{a.class_name}</td>
-                <td>
-                  {fmtStatus(a.status)}
-                  {a.overdue && <span className="teacher-overdue"> · overdue</span>}
-                </td>
-                <td>{a.cards_answered}/{a.deck_size}</td>
+                <td>{fmtStatus(a.status)}</td>
+                <td><AssignmentProgress row={a} /></td>
               </tr>
             ))}
           </tbody>

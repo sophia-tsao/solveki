@@ -45,7 +45,7 @@ class CommonFactorsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["common_factors"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, solution)
             m = self.PAT.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -61,7 +61,7 @@ class FactorsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["factors"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, solution)
             m = self.PAT.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -79,7 +79,7 @@ class FractionMultiplicationTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["fraction_multiplication"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, solution)
             m = self.PAT.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -100,7 +100,7 @@ class DivideFractionsTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["divide_fractions"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, solution)
             m = self.PAT.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -121,7 +121,7 @@ class GreatestCommonDivisorTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["greatest_common_divisor"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, solution)
             m = self.PAT.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")
@@ -140,7 +140,7 @@ class DiceSumProbabilityTests(TestCase):
         random.seed(0)
         gen = LOCAL_GENERATORS["dice_sum_probability"]
         for _ in range(SAMPLES):
-            problem, solution = gen()
+            problem, solution = gen()[:2]
             _assert_typeable(self, solution)
             m = self.PAT.search(problem)
             self.assertIsNotNone(m, f"could not parse: {problem!r}")

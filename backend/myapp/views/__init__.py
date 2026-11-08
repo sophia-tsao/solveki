@@ -28,9 +28,8 @@ from .courses import (
     toggle_topic,
     set_course_topics_selected,
 )
-from .problems import generate_problem, _make_problem
 from .settings import settings_view, set_role
-from .deck import get_deck, advance_deck
+from .deck import get_deck, advance_deck, check_answer, test_solution
 from .dashboard import view_dashboard, view_practice_calendar
 from .diagnostic import diagnostic_config, diagnostic_start, diagnostic_submit
 from .classes import (
@@ -49,7 +48,7 @@ from .assignments import (
     my_assignments,
     play_assignment,
 )
-from .teacher import teacher_overview, student_detail, proficiency_history
+from .teacher import teacher_overview, overview_focus, student_detail, proficiency_history
 
 def __getattr__(name):
     """Lazily expose ``mathgenerator`` as ``myapp.views.mathgenerator``.
@@ -58,7 +57,7 @@ def __getattr__(name):
     single vCPU during a cold start, is the largest slice of cold-start latency
     — yet only problem generation needs it, not the URLconf load that every
     request (including the trivial /auth/me/) pays for. Keeping it out of module
-    top level defers the cost to the first /problem/ (or /deck/) request. The
+    top level defers the cost to the first /deck/ request. The
     attribute still resolves on access, so the test suite's
     ``mock.patch("myapp.views.mathgenerator.addition")`` keeps working.
     """
@@ -79,11 +78,12 @@ __all__ = [
     "view_course_topics",
     "toggle_topic",
     "set_course_topics_selected",
-    "generate_problem",
     "settings_view",
     "set_role",
     "get_deck",
     "advance_deck",
+    "check_answer",
+    "test_solution",
     "view_dashboard",
     "view_practice_calendar",
     "diagnostic_config",
@@ -102,6 +102,7 @@ __all__ = [
     "my_assignments",
     "play_assignment",
     "teacher_overview",
+    "overview_focus",
     "student_detail",
     "proficiency_history",
 ]
