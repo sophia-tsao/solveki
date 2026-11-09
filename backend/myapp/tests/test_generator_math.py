@@ -17,6 +17,7 @@ import re
 from django.test import TestCase
 
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -31,7 +32,7 @@ class VertexFormMathTests(TestCase):
 
     def test_vertex_matches_standard_form(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["vertex_form"]
+        gen = classic(LOCAL_GENERATORS["vertex_form"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -68,7 +69,7 @@ class AngleSumMathTests(TestCase):
 
     def test_angle_sum_fraction_matches_trig(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["angle_sum"]
+        gen = classic(LOCAL_GENERATORS["angle_sum"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pairs = self.PAIR.findall(problem)
@@ -92,7 +93,7 @@ class AngleSumMathTests(TestCase):
 
     def test_solution_fraction_is_fully_reduced(self):
         random.seed(1)
-        gen = LOCAL_GENERATORS["angle_sum"]
+        gen = classic(LOCAL_GENERATORS["angle_sum"])
         for _ in range(SAMPLES):
             _problem, solution = gen()[:2]
             fr = self.FRAC.search(solution)
@@ -133,7 +134,7 @@ class ArocMathTests(TestCase):
 
     def test_average_rate_of_change_matches_polynomial(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["aroc_over_interval"]
+        gen = classic(LOCAL_GENERATORS["aroc_over_interval"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -151,7 +152,7 @@ class ArocMathTests(TestCase):
     def test_polynomial_display_has_no_glued_terms(self):
         # Regression guard: a zero coefficient used to emit e.g. "3x^40x^3".
         random.seed(2)
-        gen = LOCAL_GENERATORS["aroc_over_interval"]
+        gen = classic(LOCAL_GENERATORS["aroc_over_interval"])
         for _ in range(SAMPLES):
             problem, _solution = gen()[:2]
             poly = self.PROBLEM.search(problem).group("poly")

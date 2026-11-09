@@ -15,6 +15,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effects.
 from myapp.generators import lib_finance_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 from myapp.generators._format import num
 
 SAMPLES = 500
@@ -45,7 +46,7 @@ def _assert_typeable(test, problem, solution):
 class PercentageTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["percentage"]
+        gen = classic(LOCAL_GENERATORS["percentage"])
         pat = re.compile(r"What is \$(\d+)\\%\$ of \$(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -59,7 +60,7 @@ class PercentageTests(TestCase):
 class PercentageDifferenceTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["percentage_difference"]
+        gen = classic(LOCAL_GENERATORS["percentage_difference"])
         pat = re.compile(r"between \$(\d+)\$ and \$(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -74,7 +75,7 @@ class PercentageDifferenceTests(TestCase):
 class PercentageErrorTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["percentage_error"]
+        gen = classic(LOCAL_GENERATORS["percentage_error"])
         pat = re.compile(r"observed value is \$(\d+)\$ and the exact value is \$(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -89,7 +90,7 @@ class PercentageErrorTests(TestCase):
 class SimpleInterestTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["simple_interest"]
+        gen = classic(LOCAL_GENERATORS["simple_interest"])
         pat = re.compile(
             r"principal of \$(\d+)\$ dollars at a rate of \$(\d+)\\%\$ per year "
             r"for \$(\d+)\$ years")
@@ -105,7 +106,7 @@ class SimpleInterestTests(TestCase):
 class CompoundInterestTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["compound_interest"]
+        gen = classic(LOCAL_GENERATORS["compound_interest"])
         pat = re.compile(
             r"principal of \$(\d+)\$ dollars is invested at a rate of "
             r"\$(\d+)\\%\$ per year, compounded annually, for \$(\d+)\$ years")
@@ -122,7 +123,7 @@ class CompoundInterestTests(TestCase):
 class ProfitLossPercentTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["profit_loss_percent"]
+        gen = classic(LOCAL_GENERATORS["profit_loss_percent"])
         pat = re.compile(r"cost price of \$(\d+)\$ and a sell price of \$(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -140,7 +141,7 @@ class ProfitLossPercentTests(TestCase):
 class ConditionalProbabilityTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["conditional_probability"]
+        gen = classic(LOCAL_GENERATORS["conditional_probability"])
         pat = re.compile(r"\$(\d+)\$ people said they exercise, and of those, \$(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -158,7 +159,7 @@ class ConditionalProbabilityTests(TestCase):
 class BinomialDistributionTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["binomial_distribution"]
+        gen = classic(LOCAL_GENERATORS["binomial_distribution"])
         pat = re.compile(
             r"each of \$(\d+)\$ independent trials the probability of success "
             r"is \$([\d.]+)\$\. What is the probability of exactly \$(\d+)\$")

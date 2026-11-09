@@ -14,6 +14,7 @@ from fractions import Fraction
 from math import gcd
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import frac_from as _fmt_frac, num, pair
 from ._steps import Steps, paren, tex_frac
 
@@ -134,6 +135,7 @@ def _elimination_steps(s, a, b, c, d, e, f, x, y):
 
 
 @register
+@with_variants
 def alg1_absolute_value_equation(max_a=6, min_b=-10, max_b=10, max_c=15):
     r"""Absolute Value Equation
 
@@ -177,6 +179,7 @@ def alg1_absolute_value_equation(max_a=6, min_b=-10, max_b=10, max_c=15):
 
 
 @register
+@with_variants
 def alg1_exponential_growth_decay(min_principal=100, max_principal=5000,
                                   max_rate=25, max_periods=8):
     r"""Exponential Growth / Decay
@@ -219,6 +222,7 @@ def alg1_exponential_growth_decay(min_principal=100, max_principal=5000,
 
 
 @register
+@with_variants
 def alg1_evaluate_exponential(max_a=10, min_base=2, max_base=6,
                               min_x=-3, max_x=4):
     r"""Evaluate an Exponential Function
@@ -264,6 +268,7 @@ def alg1_evaluate_exponential(max_a=10, min_base=2, max_base=6,
 
 
 @register
+@with_variants
 def alg1_domain_of_function(min_b=-9, max_b=9):
     r"""Domain of a Function
 
@@ -297,6 +302,7 @@ def alg1_domain_of_function(min_b=-9, max_b=9):
 
 
 @register
+@with_variants
 def alg1_discriminant(max_a=5, min_bc=-9, max_bc=9):
     r"""Discriminant and Number of Real Roots
 
@@ -335,6 +341,7 @@ def alg1_discriminant(max_a=5, min_bc=-9, max_bc=9):
 
 
 @register
+@with_variants
 def alg1_axis_of_symmetry(max_a=5, min_bc=-9, max_bc=9):
     r"""Axis of Symmetry of a Parabola
 
@@ -362,6 +369,7 @@ def alg1_axis_of_symmetry(max_a=5, min_bc=-9, max_bc=9):
 
 
 @register
+@with_variants
 def alg1_sum_product_roots(max_a=5, min_bc=-9, max_bc=9):
     r"""Sum and Product of the Roots
 
@@ -395,6 +403,7 @@ def alg1_sum_product_roots(max_a=5, min_bc=-9, max_bc=9):
 
 
 @register
+@with_variants
 def alg1_linear_inequality_solve(max_a=6, min_bc=-10, max_bc=10):
     r"""Solve a Linear Inequality
 
@@ -439,6 +448,7 @@ def alg1_linear_inequality_solve(max_a=6, min_bc=-10, max_bc=10):
 
 
 @register
+@with_variants
 def factoring(max_root=9):
     r"""Factoring Quadratic
 
@@ -478,6 +488,7 @@ def factoring(max_root=9):
 
 
 @register
+@with_variants
 def alg1_product_of_powers(min_base=2, max_base=12, min_exp=2, max_exp=8):
     r"""Product of Powers with the Same Base
 
@@ -506,6 +517,7 @@ def alg1_product_of_powers(min_base=2, max_base=12, min_exp=2, max_exp=8):
 
 
 @register
+@with_variants
 def alg1_power_of_product(min_exp=2, max_exp=6):
     r"""Power of a Product
 
@@ -531,6 +543,7 @@ def alg1_power_of_product(min_exp=2, max_exp=6):
 
 
 @register
+@with_variants
 def alg1_negative_exponent(min_base=2, max_base=5, min_exp=2, max_exp=3):
     r"""Negative Exponents
 
@@ -560,6 +573,7 @@ def alg1_negative_exponent(min_base=2, max_base=5, min_exp=2, max_exp=3):
 
 
 @register
+@with_variants
 def alg1_complete_the_square(max_shift=8, min_c=-10, max_c=10):
     r"""Completing the Square
 
@@ -667,6 +681,7 @@ _LITERAL_STEPS = {
 
 
 @register
+@with_variants
 def alg1_literal_equation():
     r"""Solve a Literal Equation
 
@@ -696,6 +711,7 @@ def alg1_literal_equation():
 
 
 @register
+@with_variants
 def alg1_point_slope_form(coord_max=8, slope_max=6):
     r"""Point-Slope Form
 
@@ -761,6 +777,7 @@ def _linear_factor(coef, const):
 
 
 @register
+@with_variants
 def alg1_multiply_binomials(max_coef=6, max_const=8):
     r"""Multiply Binomials
 
@@ -822,6 +839,7 @@ def _two_var_line(a, b, e):
 
 
 @register
+@with_variants
 def alg1_solve_system(coef_max=6, sol_max=8):
     r"""Solve a System of Equations
 
@@ -861,6 +879,7 @@ def alg1_solve_system(coef_max=6, sol_max=8):
 
 
 @register
+@with_variants
 def alg1_variation(max_k=6, max_x=9):
     r"""Direct and Inverse Variation
 
@@ -926,6 +945,7 @@ def alg1_variation(max_k=6, max_x=9):
 
 
 @register
+@with_variants
 def alg1_simplify_rational(max_root=7):
     r"""Simplify a Rational Expression
 
@@ -970,6 +990,7 @@ def alg1_simplify_rational(max_root=7):
 
 
 @register
+@with_variants
 def alg1_abs_value_inequality(max_a=5, max_b=10, min_c=2, max_c=12):
     r"""Absolute-Value Inequality
 
@@ -1051,6 +1072,7 @@ _SQUAREFREE = [2, 3, 5, 6, 7, 10, 11, 13, 14, 15, 17, 19, 21, 22, 23]
 
 
 @register
+@with_variants
 def alg1_simplify_radical(min_factor=2, max_factor=9):
     r"""Simplify Square Root
 

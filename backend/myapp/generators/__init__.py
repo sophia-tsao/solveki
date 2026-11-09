@@ -68,4 +68,11 @@ from . import (  # noqa: F401,E402
     lib_solids_gen,
 )
 
+# Extra question types ("variants") for existing topics. Each module attaches
+# variants to the dispatchers in its matching category module.
+from . import (  # noqa: F401,E402
+    prealgebra_variants,
+    algebra1_variants,
+)
+
 __all__ = ["LOCAL_GENERATORS", "register"]

@@ -13,13 +13,14 @@ from django.test import TestCase
 
 from myapp.generators import lib_arith_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
 
 def _samples(name):
     random.seed(0)
-    gen = LOCAL_GENERATORS[name]
+    gen = classic(LOCAL_GENERATORS[name])
     for _ in range(SAMPLES):
         problem, solution = gen()[:2]
         yield problem, solution

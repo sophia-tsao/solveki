@@ -104,6 +104,29 @@ describe('Diagnostic', () => {
     expect(submitBody().results).toEqual([{ topic_id: 10, outcome: 'correct_first' }]);
   });
 
+  it('grades by equivalence: a fraction counts, trailing text does not', async () => {
+    const problems = [{ topic_id: 10, problem: '$1 \\div 2$', solution: '0.5', alternatives: [] }];
+    apiFetch.mockImplementation((url = '') => {
+      if (url === '/diagnostic/config/') return Promise.resolve(jsonResponse(CONFIG));
+      if (url === '/diagnostic/start/') return Promise.resolve(jsonResponse({ problems }));
+      if (url.startsWith('/diagnostic/submit/')) return Promise.resolve(jsonResponse(SUBMIT));
+      return Promise.resolve(jsonResponse({}));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<Diagnostic onNavigate={vi.fn()} userId={USER_ID} />);
+
+    await reachCalibration(user);
+    // parseFloat would read this as 0.5; it must be wrong.
+    await user.type(screen.getByLabelText('Your answer'), '0.5abc');
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+    await user.type(screen.getByLabelText('Your answer'), '1/2');
+    // The button reads "Try again" while the wrong-answer flash shows.
+    await user.click(screen.getByRole('button', { name: /^(Submit|Try again)$/ }));
+
+    await screen.findByText("You're all set!");
+    expect(submitBody().results).toEqual([{ topic_id: 10, outcome: 'correct_second' }]);
+  });
+
   it('starts the calibration problems for the chosen course + unit', async () => {
     mockHappyPath();
     const user = userEvent.setup();

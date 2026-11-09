@@ -27,6 +27,7 @@ from fractions import Fraction
 
 from ._format import frac, frac_from, pair
 from ._registry import register
+from ._variants import with_variants
 from ._steps import Steps, paren, tex_frac
 
 
@@ -80,6 +81,7 @@ def _joined(terms):
 
 
 @register
+@with_variants
 def expanding(max_coeff=9):
     r"""Expanding Factored Binomial
 
@@ -236,6 +238,7 @@ _COMPARE_WORD = {">": "greater than", "<": "less than", "=": "equal to"}
 
 
 @register
+@with_variants
 def basic_algebra(max_coeff=9, max_const=10, max_rhs=20):
     r"""Solve a Two-Step Linear Equation
 
@@ -272,6 +275,7 @@ def basic_algebra(max_coeff=9, max_const=10, max_rhs=20):
 
 
 @register
+@with_variants
 def linear_equations(max_value=10, max_coeff=6):
     r"""Solve a System of Two Linear Equations
 
@@ -328,6 +332,7 @@ def linear_equations(max_value=10, max_coeff=6):
 
 
 @register
+@with_variants
 def intersection_of_two_lines(max_slope=5, max_intercept=10):
     r"""Intersection of Two Lines
 
@@ -510,6 +515,7 @@ def int_matrix_22_determinant(max_entry=9):
 
 
 @register
+@with_variants
 def vector_dot(max_entry=9):
     r"""Dot Product of Two Vectors
 

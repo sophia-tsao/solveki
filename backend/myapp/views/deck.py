@@ -1,7 +1,6 @@
 import datetime
 import json
 import logging
-import math
 from collections import Counter, defaultdict
 
 from django.conf import settings as django_settings
@@ -18,6 +17,7 @@ from ..models import (
 from .common import _require_auth
 from .problems import _make_problem_for_topic
 from .. import practice, srs
+from ..answers import answer_matches
 
 logger = logging.getLogger(__name__)
 
@@ -1033,18 +1033,8 @@ def _normalize_solution(solution):
 
 
 def _answer_matches(answer, solution):
-    """True if `answer` is the same as `solution`, as text or as a number.
-
-    "42.0" matches "42". Numbers must parse in full: "1/2" isn't read as 1
-    (JavaScript's parseFloat would read it that way).
-    """
-    if answer == solution:
-        return True
-    try:
-        a, s = float(answer), float(solution)
-    except ValueError:
-        return False
-    return math.isfinite(a) and a == s
+    """True if `answer` is equivalent to `solution` (see `myapp.answers`)."""
+    return answer_matches(answer, solution)
 
 
 @csrf_exempt

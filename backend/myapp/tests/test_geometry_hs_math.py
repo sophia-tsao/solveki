@@ -12,6 +12,7 @@ from django.test import TestCase
 
 from myapp.generators import geometry_hs  # noqa: F401  (registers generators)
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -35,7 +36,7 @@ class RightTriangleSideTests(TestCase):
 
     def test_side_matches_trig(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_right_triangle_side"]
+        gen = classic(LOCAL_GENERATORS["geo_right_triangle_side"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -64,7 +65,7 @@ class RightTrianglePythagTests(TestCase):
 
     def test_pythag_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_solve_right_triangle_pythag"]
+        gen = classic(LOCAL_GENERATORS["geo_solve_right_triangle_pythag"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             ans = int(self.SOLUTION.search(solution).group("ans"))
@@ -94,7 +95,7 @@ class CircleEquationFromCenterRadiusTests(TestCase):
 
     def test_equation_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_circle_equation_from_center_radius"]
+        gen = classic(LOCAL_GENERATORS["geo_circle_equation_from_center_radius"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -119,7 +120,7 @@ class CircleCenterRadiusFromEquationTests(TestCase):
 
     def test_center_radius_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_circle_center_radius_from_equation"]
+        gen = classic(LOCAL_GENERATORS["geo_circle_center_radius_from_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -143,7 +144,7 @@ class TranslatePointTests(TestCase):
 
     def test_translate_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_translate_point"]
+        gen = classic(LOCAL_GENERATORS["geo_translate_point"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -166,7 +167,7 @@ class ReflectPointTests(TestCase):
 
     def test_reflect_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_reflect_point"]
+        gen = classic(LOCAL_GENERATORS["geo_reflect_point"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -195,7 +196,7 @@ class RotatePointTests(TestCase):
 
     def test_rotate_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_rotate_point"]
+        gen = classic(LOCAL_GENERATORS["geo_rotate_point"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -224,7 +225,7 @@ class DilatePointTests(TestCase):
 
     def test_dilate_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_dilate_point"]
+        gen = classic(LOCAL_GENERATORS["geo_dilate_point"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -256,7 +257,7 @@ class InscribedAngleTests(TestCase):
 
     def test_inscribed_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_inscribed_angle"]
+        gen = classic(LOCAL_GENERATORS["geo_inscribed_angle"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             ans = int(self.SOLUTION.search(solution).group("a"))
@@ -280,7 +281,7 @@ class ConditionalProbabilityTableTests(TestCase):
 
     def test_conditional_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_conditional_probability_table"]
+        gen = classic(LOCAL_GENERATORS["geo_conditional_probability_table"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -315,7 +316,7 @@ class CompoundProbabilityTests(TestCase):
 
     def test_compound_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_compound_probability"]
+        gen = classic(LOCAL_GENERATORS["geo_compound_probability"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             p = self.PROBLEM.search(problem)
@@ -342,7 +343,7 @@ class ExpectedValueTests(TestCase):
 
     def test_ev_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_expected_value"]
+        gen = classic(LOCAL_GENERATORS["geo_expected_value"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             body = self.PROBLEM.search(problem)
@@ -377,7 +378,7 @@ class SpecialRightTriangleTests(TestCase):
 
     def test_special_right_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_special_right_triangle"]
+        gen = classic(LOCAL_GENERATORS["geo_special_right_triangle"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -403,7 +404,7 @@ class SimilarTriangleSideTests(TestCase):
 
     def test_similar_side_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_similar_triangle_side"]
+        gen = classic(LOCAL_GENERATORS["geo_similar_triangle_side"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -426,7 +427,7 @@ class ScaleFactorRatioTests(TestCase):
 
     def test_scale_ratio_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_scale_factor_ratio"]
+        gen = classic(LOCAL_GENERATORS["geo_scale_factor_ratio"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -460,7 +461,7 @@ class CircleSegmentsTests(TestCase):
 
     def test_circle_segments_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_circle_segments"]
+        gen = classic(LOCAL_GENERATORS["geo_circle_segments"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             chord = self.CHORD.search(problem)
@@ -487,7 +488,7 @@ class RegularPolygonAreaTests(TestCase):
 
     def test_polygon_area_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_regular_polygon_area"]
+        gen = classic(LOCAL_GENERATORS["geo_regular_polygon_area"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -514,7 +515,7 @@ class CompositeSolidTests(TestCase):
 
     def test_composite_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_composite_solid"]
+        gen = classic(LOCAL_GENERATORS["geo_composite_solid"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             cyl = self.CYL_CONE.search(problem)
@@ -545,7 +546,7 @@ class PolygonAreaVerticesTests(TestCase):
 
     def test_shoelace_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_polygon_area_vertices"]
+        gen = classic(LOCAL_GENERATORS["geo_polygon_area_vertices"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             body = problem.split("Give your answer")[0]
@@ -573,7 +574,7 @@ class FrustumVolumeTests(TestCase):
 
     def test_frustum_volume(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["geo_frustum_volume"]
+        gen = classic(LOCAL_GENERATORS["geo_frustum_volume"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)

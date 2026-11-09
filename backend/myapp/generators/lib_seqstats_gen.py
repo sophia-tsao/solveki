@@ -28,6 +28,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num, frac_from as _frac_from
 from ._steps import Steps, paren, tex_frac
 
@@ -77,6 +78,7 @@ def _x_term(coef, exp):
 
 
 @register
+@with_variants
 def mean_median(min_val=1, max_val=100):
     r"""Mean and Median of a Series
 
@@ -124,6 +126,7 @@ def mean_median(min_val=1, max_val=100):
 
 
 @register
+@with_variants
 def data_summary(min_val=1, max_val=50):
     r"""Mean, Standard Deviation and Variance of a Data Set
 
@@ -407,6 +410,7 @@ def confidence_interval():
 
 
 @register
+@with_variants
 def quadratic_equation(max_num=6, max_den=3):
     r"""Zeros of a Quadratic Equation
 

@@ -23,6 +23,7 @@ from fractions import Fraction
 from math import gcd
 
 from ._registry import register
+from ._variants import with_variants
 from ._steps import Steps, tex_frac
 
 
@@ -98,6 +99,7 @@ def _simplify_step(s, numerator, denominator):
 
 
 @register
+@with_variants
 def common_factors(min_val=2, max_val=100):
     r"""Common Factors of Two Numbers
 
@@ -132,6 +134,7 @@ def common_factors(min_val=2, max_val=100):
 
 
 @register
+@with_variants
 def factors(min_val=2, max_val=100):
     r"""Factors of a Number
 
@@ -164,6 +167,7 @@ def factors(min_val=2, max_val=100):
 
 
 @register
+@with_variants
 def fraction_multiplication(max_val=10):
     r"""Multiplication of Two Fractions
 
@@ -197,6 +201,7 @@ def fraction_multiplication(max_val=10):
 
 
 @register
+@with_variants
 def divide_fractions(max_val=10):
     r"""Division of Two Fractions
 
@@ -281,6 +286,7 @@ def greatest_common_divisor(min_val=2, max_val=100, count_choices=(2, 3)):
 
 
 @register
+@with_variants
 def dice_sum_probability(sides=6):
     r"""Probability of a Given Sum on Two Dice
 

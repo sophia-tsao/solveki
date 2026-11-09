@@ -11,6 +11,7 @@ from math import copysign, isqrt, lcm, log, sqrt
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._steps import Steps, paren, tex_frac
 from ._format import num as _num
 from ._format import frac_from as _frac_from
@@ -531,6 +532,7 @@ def alg2_inverse_linear_function(max_m=6, max_b=10, min_t=-6, max_t=6):
 
 
 @register
+@with_variants
 def alg2_z_score(min_val=-20, max_val=20):
     r"""Z-Score
 
@@ -591,6 +593,7 @@ def alg2_empirical_rule(min_mean=0, max_mean=100, min_sd=1, max_sd=15):
 
 
 @register
+@with_variants
 def alg2_solve_system_matrix(max_coeff=5, min_sol=-6, max_sol=6):
     r"""Solve a 2x2 Linear System
 

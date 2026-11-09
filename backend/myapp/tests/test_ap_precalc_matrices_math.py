@@ -14,6 +14,7 @@ from django.test import SimpleTestCase
 
 from myapp.generators import ap_precalc_matrices  # noqa: F401  (registers generators)
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -94,7 +95,7 @@ class _Base(SimpleTestCase):
 
     def samples(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS[self.name]
+        gen = classic(LOCAL_GENERATORS[self.name])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             yield problem, solution

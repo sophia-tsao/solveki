@@ -17,6 +17,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effects.
 from myapp.generators import lib_angles_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 from myapp.generators._format import num
 
 SAMPLES = 500
@@ -52,7 +53,7 @@ def _assert_typeable(test, problem, solution):
 class AngleRegularPolygonTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["angle_regular_polygon"]
+        gen = classic(LOCAL_GENERATORS["angle_regular_polygon"])
         pat = re.compile(r"polygon with \$(\d+)\$ sides")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -67,7 +68,7 @@ class AngleRegularPolygonTests(TestCase):
 class AngleBtwVectorsTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["angle_btw_vectors"]
+        gen = classic(LOCAL_GENERATORS["angle_btw_vectors"])
         pat = re.compile(r"vectors \(([-\d, ]+)\) and \(([-\d, ]+)\)")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -87,7 +88,7 @@ class AngleBtwVectorsTests(TestCase):
 class DegreeToRadTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["degree_to_rad"]
+        gen = classic(LOCAL_GENERATORS["degree_to_rad"])
         pat = re.compile(r"Convert \$(\d+)\$ degrees to radians")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -102,7 +103,7 @@ class DegreeToRadTests(TestCase):
 class RadianToDegTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["radian_to_deg"]
+        gen = classic(LOCAL_GENERATORS["radian_to_deg"])
         pat = re.compile(r"Convert \$([-\d.]+)\$ radians to degrees")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -117,7 +118,7 @@ class RadianToDegTests(TestCase):
 class ComplexToPolarTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["complex_to_polar"]
+        gen = classic(LOCAL_GENERATORS["complex_to_polar"])
         pat = re.compile(r"number \$(-?\d+)([+-]\d+)i\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -133,7 +134,7 @@ class ComplexToPolarTests(TestCase):
 class TrigDifferentiationTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["trig_differentiation"]
+        gen = classic(LOCAL_GENERATORS["trig_differentiation"])
         expected_map = dict(lib_angles_gen._DERIVATIVES)
         pat = re.compile(r"Differentiate \$(.+?)\$ with respect")
         seen = set()
@@ -153,7 +154,7 @@ class TrigDifferentiationTests(TestCase):
 class FractionToDecimalTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["fraction_to_decimal"]
+        gen = classic(LOCAL_GENERATORS["fraction_to_decimal"])
         pat = re.compile(r"fraction \$(\d+)/(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -166,7 +167,7 @@ class FractionToDecimalTests(TestCase):
 
     def test_exact_ties_round_half_up(self):
         # 1/16 = 0.0625 is an exact tie; float round() would give 0.062.
-        gen = LOCAL_GENERATORS["fraction_to_decimal"]
+        gen = classic(LOCAL_GENERATORS["fraction_to_decimal"])
         for n, d, expected in [(1, 16, "0.063"), (3, 16, "0.188"), (5, 16, "0.313")]:
             with patch("random.randint", side_effect=[n, d]):
                 self.assertEqual(gen()[1], expected, f"{n}/{d}")
@@ -175,7 +176,7 @@ class FractionToDecimalTests(TestCase):
 class CelsiusToFahrenheitTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["celsius_to_fahrenheit"]
+        gen = classic(LOCAL_GENERATORS["celsius_to_fahrenheit"])
         pat = re.compile(r"Convert \$(-?\d+)\$ degrees Celsius")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -204,7 +205,7 @@ class ComplementarySupplementaryTests(TestCase):
 
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["complementary_and_supplementary_angle"]
+        gen = classic(LOCAL_GENERATORS["complementary_and_supplementary_angle"])
         kinds = set()
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
@@ -222,7 +223,7 @@ class ComplementarySupplementaryTests(TestCase):
 class ThirdAngleOfTriangleTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["third_angle_of_triangle"]
+        gen = classic(LOCAL_GENERATORS["third_angle_of_triangle"])
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
             a, b = _degrees(
@@ -236,7 +237,7 @@ class ThirdAngleOfTriangleTests(TestCase):
 class FourthAngleOfQuadrilateralTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["fourth_angle_of_quadrilateral"]
+        gen = classic(LOCAL_GENERATORS["fourth_angle_of_quadrilateral"])
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
             a, b, c = _degrees(
@@ -253,7 +254,7 @@ class FourthAngleOfQuadrilateralTests(TestCase):
 class SumOfPolygonAnglesTests(TestCase):
     def test_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["sum_of_polygon_angles"]
+        gen = classic(LOCAL_GENERATORS["sum_of_polygon_angles"])
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
             (n,) = _degrees(r"polygon with \$(\d+)\$ sides", problem, self)

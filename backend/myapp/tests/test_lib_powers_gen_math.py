@@ -15,6 +15,7 @@ from django.test import TestCase
 
 from myapp.generators import lib_powers_gen  # noqa: F401 - registers generators
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 
 def _half_up(value, places):
@@ -65,7 +66,7 @@ class SystemOfEquationsTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["system_of_equations"]
+        gen = classic(LOCAL_GENERATORS["system_of_equations"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
@@ -93,7 +94,7 @@ class CombineLikeTermsTests(TestCase):
 
     def test_combined_and_ordered(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["combine_like_terms"]
+        gen = classic(LOCAL_GENERATORS["combine_like_terms"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
@@ -140,7 +141,7 @@ class PowerOfPowersTests(TestCase):
 
     def test_product_of_exponents(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["power_of_powers"]
+        gen = classic(LOCAL_GENERATORS["power_of_powers"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
@@ -160,7 +161,7 @@ class QuotientSameBaseTests(TestCase):
 
     def test_difference_of_exponents(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["quotient_of_power_same_base"]
+        gen = classic(LOCAL_GENERATORS["quotient_of_power_same_base"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
@@ -183,7 +184,7 @@ class QuotientSamePowerTests(TestCase):
 
     def test_ratio_base(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["quotient_of_power_same_power"]
+        gen = classic(LOCAL_GENERATORS["quotient_of_power_same_power"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             assert_problem_clean(self, problem)
@@ -215,7 +216,7 @@ class ProductScientificTests(TestCase):
 
     def test_product_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["product_of_scientific_notations"]
+        gen = classic(LOCAL_GENERATORS["product_of_scientific_notations"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             assert_problem_clean(self, problem)

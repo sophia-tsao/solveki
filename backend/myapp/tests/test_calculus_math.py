@@ -15,6 +15,7 @@ from django.test import TestCase
 
 from myapp.generators import calculus  # noqa: F401  (import registers generators)
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 
 def _half_up(value, places):
@@ -103,7 +104,8 @@ def solve_deriv_roots(deriv):
     return sorted({root1, root2})
 
 
-gen = LOCAL_GENERATORS.get  # convenience
+def gen(name):  # convenience; pinned to each generator's original question
+    return classic(LOCAL_GENERATORS.get(name))
 
 
 # --------------------------------- tests ----------------------------------
@@ -455,7 +457,7 @@ class LimitConjugateTests(TestCase):
 
     def test_limit_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["calc_limit_conjugate"]
+        gen = classic(LOCAL_GENERATORS["calc_limit_conjugate"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)

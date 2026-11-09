@@ -20,9 +20,20 @@ from django.test import TestCase
 
 from myapp.generators import LOCAL_GENERATORS
 from myapp.generators._steps import Steps
+from myapp.generators._variants import iter_variants
 from myapp.management.commands.seed_topics import TOPICS
 from myapp.models import Course, Topic
 from myapp.views.problems import _make_problem_for_topic
+
+
+def _variant_names(generator_name):
+    """Each question type of a generator to test: its variant names, or [None]."""
+    variants = getattr(LOCAL_GENERATORS.get(generator_name), "variants", None)
+    return list(variants) if variants else [None]
+
+
+def _label(name, variant):
+    return name if variant is None else f"{name}[{variant}]"
 
 # Third-party generators pick random inputs and can occasionally produce a
 # falsy-but-valid answer (e.g. 0) or hit a random degenerate case. Call each a
@@ -85,9 +96,14 @@ class LocalGeneratorTests(TestCase):
 
     def test_all_local_generators_return_well_formed_pairs(self):
         random.seed(0)
-        for name, generator in LOCAL_GENERATORS.items():
-            with self.subTest(generator=name):
-                problem, solution = generator()[:2]
+        cases = (
+            (name + label, call)
+            for name, generator in LOCAL_GENERATORS.items()
+            for label, call in iter_variants(generator)
+        )
+        for label, call in cases:
+            with self.subTest(generator=label):
+                problem, solution = call()[:2]
                 self.assertIsInstance(problem, str)
                 self.assertTrue(problem)
                 self.assertIsInstance(solution, str)
@@ -147,40 +163,43 @@ class ServedProblemQualityTests(TestCase):
     def test_every_seeded_topic_serves_typeable_problems(self):
         random.seed(0)
         failures = []
-        for topic in self.topics:
+        for topic, variant in (
+            (t, v) for t in self.topics for v in _variant_names(t.generator_name)
+        ):
+            name = _label(topic.generator_name, variant)
             for _ in range(self.SAMPLES):
                 try:
-                    result = _make_problem_for_topic(topic)
+                    result = _make_problem_for_topic(topic, variant=variant)
                 except Exception as exc:  # noqa: BLE001 - a crash 500s the student
-                    failures.append(f"{topic.generator_name}: raised {exc!r}")
+                    failures.append(f"{name}: raised {exc!r}")
                     break
                 if result is None:
                     continue
                 problem, solution = result["problem"], result["solution"]
 
                 if self.LATEX_CMD.search(solution):
-                    failures.append(f"{topic.generator_name}: LaTeX in solution {solution!r}")
+                    failures.append(f"{name}: LaTeX in solution {solution!r}")
                     break
                 if any(c in solution for c in "{}[]"):
-                    failures.append(f"{topic.generator_name}: bracket notation in solution {solution!r}")
+                    failures.append(f"{name}: bracket notation in solution {solution!r}")
                     break
                 if self.E_NOTATION.search(solution):
-                    failures.append(f"{topic.generator_name}: e-notation in solution {solution!r}")
+                    failures.append(f"{name}: e-notation in solution {solution!r}")
                     break
                 if self.LONG_DECIMAL.search(problem) or self.LONG_DECIMAL.search(solution):
-                    failures.append(f"{topic.generator_name}: over-precise decimal in {problem!r} / {solution!r}")
+                    failures.append(f"{name}: over-precise decimal in {problem!r} / {solution!r}")
                     break
                 if problem.count("$") % 2 != 0:
-                    failures.append(f"{topic.generator_name}: unbalanced $ in problem {problem!r}")
+                    failures.append(f"{name}: unbalanced $ in problem {problem!r}")
                     break
                 # Text outside $...$ must not contain raw LaTeX commands.
                 outside = "".join(problem.split("$")[::2])
                 if self.LATEX_CMD.search(outside):
-                    failures.append(f"{topic.generator_name}: raw LaTeX outside math mode {problem!r}")
+                    failures.append(f"{name}: raw LaTeX outside math mode {problem!r}")
                     break
                 step_error = self._step_error(result["steps"])
                 if step_error:
-                    failures.append(f"{topic.generator_name}: {step_error}")
+                    failures.append(f"{name}: {step_error}")
                     break
         self.assertEqual(failures, [], "Non-typeable served problems:\n" + "\n".join(failures))
 
@@ -233,10 +252,13 @@ class StepsReachAnswerTests(TestCase):
     def test_final_step_states_the_answer(self):
         random.seed(0)
         failures = []
-        for name, generator in LOCAL_GENERATORS.items():
+        for name, variant in (
+            (n, v) for n in LOCAL_GENERATORS for v in _variant_names(n)
+        ):
             topic = Topic(id=1, generator_name=name)
+            name = _label(name, variant)
             for _ in range(self.SAMPLES):
-                made = _make_problem_for_topic(topic)
+                made = _make_problem_for_topic(topic, variant=variant)
                 steps = made["steps"]
                 if not steps:
                     failures.append(f"{name}: no step-by-step explanation")

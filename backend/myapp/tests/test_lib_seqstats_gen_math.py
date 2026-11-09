@@ -16,6 +16,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effects.
 from myapp.generators import lib_seqstats_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 from myapp.generators._format import num, frac_from
 
 
@@ -82,7 +83,7 @@ class MeanMedianTests(TypeabilityMixin, TestCase):
     def test_mean_median(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["mean_median"]
+        gen = classic(LOCAL_GENERATORS["mean_median"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -106,7 +107,7 @@ class DataSummaryTests(TypeabilityMixin, TestCase):
     def test_data_summary(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["data_summary"]
+        gen = classic(LOCAL_GENERATORS["data_summary"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -139,7 +140,7 @@ class ArithmeticProgressionSumTests(TypeabilityMixin, TestCase):
     def test_ap_sum(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["arithmetic_progression_sum"]
+        gen = classic(LOCAL_GENERATORS["arithmetic_progression_sum"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -160,7 +161,7 @@ class GeometricProgressionTests(TypeabilityMixin, TestCase):
     def test_gp_term(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["geometric_progression"]
+        gen = classic(LOCAL_GENERATORS["geometric_progression"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -180,7 +181,7 @@ class DefiniteIntegralTests(TypeabilityMixin, TestCase):
     def test_definite_integral(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["definite_integral"]
+        gen = classic(LOCAL_GENERATORS["definite_integral"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -204,7 +205,7 @@ class PowerRuleIntegrationTests(TypeabilityMixin, TestCase):
     def test_power_rule(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["power_rule_integration"]
+        gen = classic(LOCAL_GENERATORS["power_rule_integration"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -239,7 +240,7 @@ class ConfidenceIntervalTests(TypeabilityMixin, TestCase):
     def test_confidence_interval(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["confidence_interval"]
+        gen = classic(LOCAL_GENERATORS["confidence_interval"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)
@@ -268,7 +269,7 @@ class QuadraticEquationTests(TypeabilityMixin, TestCase):
     def test_quadratic(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["quadratic_equation"]
+        gen = classic(LOCAL_GENERATORS["quadratic_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             self._assert_typeable(problem, solution)

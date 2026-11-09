@@ -66,7 +66,7 @@ def _truncated_alternatives(solution, cuts):
     return alternatives
 
 
-def _make_problem_for_topic(topic):
+def _make_problem_for_topic(topic, *, variant=None):
     """Generate a single problem for one specific topic.
 
     Returns a dict with 'problem', 'solution', 'alternatives', 'steps', and
@@ -97,7 +97,10 @@ def _make_problem_for_topic(topic):
     # Library generators (and local ones not yet given explanations) return
     # just (problem, solution); ours return (problem, solution, steps).
     with track_rounding() as rounding:
-        problem, solution, *rest = generator()
+        # `variant` forces one question type of a multi-variant generator
+        # (tests, preview_steps); library generators never receive it.
+        kwargs = {} if variant is None else {"variant": variant}
+        problem, solution, *rest = generator(**kwargs)
         steps = rest[0] if rest else []
         made = _finish_problem(problem, solution, steps)
     made["alternatives"] = _truncated_alternatives(made["solution"], truncations(rounding))

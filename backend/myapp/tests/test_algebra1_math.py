@@ -13,6 +13,7 @@ from django.test import TestCase
 
 from myapp.generators import algebra1  # noqa: F401 - registers the generators
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 
 def _coef(text):
@@ -38,7 +39,7 @@ class AbsoluteValueEquationTests(TestCase):
 
     def test_roots_match(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_absolute_value_equation"]
+        gen = classic(LOCAL_GENERATORS["alg1_absolute_value_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -69,7 +70,7 @@ class ExponentialGrowthDecayTests(TestCase):
 
     def test_final_amount_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_exponential_growth_decay"]
+        gen = classic(LOCAL_GENERATORS["alg1_exponential_growth_decay"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -96,7 +97,7 @@ class EvaluateExponentialTests(TestCase):
 
     def test_value_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_evaluate_exponential"]
+        gen = classic(LOCAL_GENERATORS["alg1_evaluate_exponential"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -120,7 +121,7 @@ class DomainOfFunctionTests(TestCase):
 
     def test_domain_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_domain_of_function"]
+        gen = classic(LOCAL_GENERATORS["alg1_domain_of_function"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             sqrt = self.SQRT.search(problem)
@@ -144,7 +145,7 @@ class DiscriminantTests(TestCase):
 
     def test_discriminant_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_discriminant"]
+        gen = classic(LOCAL_GENERATORS["alg1_discriminant"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             quad = self.PROBLEM.search(problem).group("quad")
@@ -163,7 +164,7 @@ class AxisOfSymmetryTests(TestCase):
 
     def test_axis_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_axis_of_symmetry"]
+        gen = classic(LOCAL_GENERATORS["alg1_axis_of_symmetry"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             quad = self.PROBLEM.search(problem).group("quad")
@@ -184,7 +185,7 @@ class SumProductRootsTests(TestCase):
 
     def test_sum_and_product_match(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_sum_product_roots"]
+        gen = classic(LOCAL_GENERATORS["alg1_sum_product_roots"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             quad = self.PROBLEM.search(problem).group("quad")
@@ -208,7 +209,7 @@ class LinearInequalityTests(TestCase):
 
     def test_inequality_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_linear_inequality_solve"]
+        gen = classic(LOCAL_GENERATORS["alg1_linear_inequality_solve"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -265,7 +266,7 @@ class FactoringTests(TestCase):
 
     def test_factors_expand_to_quadratic(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["factoring"]
+        gen = classic(LOCAL_GENERATORS["factoring"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
@@ -291,7 +292,7 @@ class ProductOfPowersTests(TestCase):
 
     def test_exponents_add(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_product_of_powers"]
+        gen = classic(LOCAL_GENERATORS["alg1_product_of_powers"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -308,7 +309,7 @@ class PowerOfProductTests(TestCase):
 
     def test_exponent_distributes(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_power_of_product"]
+        gen = classic(LOCAL_GENERATORS["alg1_power_of_product"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -324,7 +325,7 @@ class NegativeExponentTests(TestCase):
 
     def test_reciprocal_power(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_negative_exponent"]
+        gen = classic(LOCAL_GENERATORS["alg1_negative_exponent"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -340,7 +341,7 @@ class CompleteTheSquareTests(TestCase):
 
     def test_vertex_form_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_complete_the_square"]
+        gen = classic(LOCAL_GENERATORS["alg1_complete_the_square"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
@@ -382,7 +383,7 @@ class LiteralEquationTests(TestCase):
 
     def test_rearrangement_satisfies_equation(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_literal_equation"]
+        gen = classic(LOCAL_GENERATORS["alg1_literal_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
@@ -416,7 +417,7 @@ class PointSlopeFormTests(TestCase):
 
     def test_equation_matches_point_slope(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_point_slope_form"]
+        gen = classic(LOCAL_GENERATORS["alg1_point_slope_form"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
@@ -454,7 +455,7 @@ class MultiplyBinomialsTests(TestCase):
 
     def test_expansion_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_multiply_binomials"]
+        gen = classic(LOCAL_GENERATORS["alg1_multiply_binomials"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             factors = self.QUAD.search(problem).group("factors")
@@ -490,7 +491,7 @@ class SolveSystemTests(TestCase):
 
     def test_solution_satisfies_both_equations(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_solve_system"]
+        gen = classic(LOCAL_GENERATORS["alg1_solve_system"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             lines = self.LINE.findall(problem)
@@ -523,7 +524,7 @@ class VariationTests(TestCase):
 
     def test_variation_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_variation"]
+        gen = classic(LOCAL_GENERATORS["alg1_variation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.POINT.search(problem)
@@ -561,7 +562,7 @@ class SimplifyRationalTests(TestCase):
 
     def test_simplification_agrees_numerically(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_simplify_rational"]
+        gen = classic(LOCAL_GENERATORS["alg1_simplify_rational"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
@@ -599,7 +600,7 @@ class AbsValueInequalityTests(TestCase):
 
     def test_boundaries_match(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_abs_value_inequality"]
+        gen = classic(LOCAL_GENERATORS["alg1_abs_value_inequality"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -634,7 +635,7 @@ class SimplifyRadicalTests(TestCase):
 
     def test_simplify_radical(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg1_simplify_radical"]
+        gen = classic(LOCAL_GENERATORS["alg1_simplify_radical"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)

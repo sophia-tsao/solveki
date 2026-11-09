@@ -13,6 +13,7 @@ from django.test import TestCase
 
 from myapp.generators import precalculus  # noqa: F401  (registers generators)
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -44,7 +45,7 @@ class LawOfSinesTests(TestCase):
 
     def test_side_matches_law_of_sines(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_law_of_sines"]
+        gen = classic(LOCAL_GENERATORS["pc_law_of_sines"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -65,7 +66,7 @@ class LawOfCosinesSideTests(TestCase):
 
     def test_third_side_matches_law_of_cosines(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_law_of_cosines_side"]
+        gen = classic(LOCAL_GENERATORS["pc_law_of_cosines_side"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -86,7 +87,7 @@ class ObliqueTriangleAreaTests(TestCase):
 
     def test_area_matches_sas_formula(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_oblique_triangle_area"]
+        gen = classic(LOCAL_GENERATORS["pc_oblique_triangle_area"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -104,7 +105,7 @@ class InverseTrigTests(TestCase):
 
     def test_inverse_trig_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_inverse_trig"]
+        gen = classic(LOCAL_GENERATORS["pc_inverse_trig"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -131,7 +132,7 @@ class DoubleAngleTests(TestCase):
 
     def test_double_angle_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_double_angle"]
+        gen = classic(LOCAL_GENERATORS["pc_double_angle"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -157,7 +158,7 @@ class DoubleAngleTests(TestCase):
 
     def test_double_angle_fraction_reduced(self):
         random.seed(1)
-        gen = LOCAL_GENERATORS["pc_double_angle"]
+        gen = classic(LOCAL_GENERATORS["pc_double_angle"])
         for _ in range(SAMPLES):
             _p, solution = gen()[:2]
             fr = self.FRAC.search(solution)
@@ -171,7 +172,7 @@ class SolveTrigEquationTests(TestCase):
 
     def test_solutions_match(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_solve_trig_equation"]
+        gen = classic(LOCAL_GENERATORS["pc_solve_trig_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -198,7 +199,7 @@ class PolarToRectangularTests(TestCase):
 
     def test_conversion_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_polar_to_rectangular"]
+        gen = classic(LOCAL_GENERATORS["pc_polar_to_rectangular"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -221,7 +222,7 @@ class RectangularToPolarTests(TestCase):
 
     def test_conversion_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rectangular_to_polar"]
+        gen = classic(LOCAL_GENERATORS["pc_rectangular_to_polar"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -247,7 +248,7 @@ class FiniteGeometricSumTests(TestCase):
 
     def test_sum_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_finite_geometric_sum"]
+        gen = classic(LOCAL_GENERATORS["pc_finite_geometric_sum"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -266,7 +267,7 @@ class SigmaArithmeticSumTests(TestCase):
 
     def test_sum_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_sigma_arithmetic_sum"]
+        gen = classic(LOCAL_GENERATORS["pc_sigma_arithmetic_sum"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -300,7 +301,7 @@ class SequenceLimitTests(TestCase):
 
     def test_limit_matches_leading_ratio(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_sequence_limit"]
+        gen = classic(LOCAL_GENERATORS["pc_sequence_limit"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -326,7 +327,7 @@ class VectorAddTests(TestCase):
 
     def test_vector_op_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_vector_add"]
+        gen = classic(LOCAL_GENERATORS["pc_vector_add"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -357,7 +358,7 @@ class ParametricToRectangularTests(TestCase):
 
     def test_elimination_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_parametric_to_rectangular"]
+        gen = classic(LOCAL_GENERATORS["pc_parametric_to_rectangular"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
