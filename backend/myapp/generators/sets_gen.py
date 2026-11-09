@@ -15,6 +15,7 @@ precisely so the ``generator_name`` already stored on the Topic keeps working.
 import random
 
 from ._registry import register
+from ._variants import with_variants
 from ._steps import Steps
 
 # (display symbol, human name, how to compute the result set from a, b,
@@ -40,6 +41,7 @@ def _answer_str(values):
 
 
 @register
+@with_variants
 def set_operation(pool_min=1, pool_max=12):
     r"""Union, Intersection, Difference of Two Sets
 

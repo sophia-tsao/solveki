@@ -75,6 +75,8 @@ from . import (  # noqa: F401,E402
     algebra1_variants,
     geometry_variants,
     statistics_variants,
+    algebra2_variants,
+    precalculus_variants,
 )
 
 __all__ = ["LOCAL_GENERATORS", "register"]

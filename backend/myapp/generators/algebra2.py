@@ -229,6 +229,7 @@ def _det3(m):
 
 
 @register
+@with_variants
 def alg2_evaluate_polynomial(min_degree=2, max_degree=3, min_x=-5, max_x=5):
     r"""Evaluate a Polynomial at a Value
 
@@ -250,6 +251,7 @@ def alg2_evaluate_polynomial(min_degree=2, max_degree=3, min_x=-5, max_x=5):
 
 
 @register
+@with_variants
 def alg2_polynomial_division(min_degree=2, max_degree=3, max_root=5):
     r"""Polynomial Division by a Linear Factor
 
@@ -291,6 +293,7 @@ def alg2_polynomial_division(min_degree=2, max_degree=3, max_root=5):
 
 
 @register
+@with_variants
 def alg2_remainder_theorem(min_degree=2, max_degree=3, max_root=5):
     r"""Remainder Theorem
 
@@ -317,6 +320,7 @@ def alg2_remainder_theorem(min_degree=2, max_degree=3, max_root=5):
 
 
 @register
+@with_variants
 def alg2_build_polynomial_from_roots(min_root=-4, max_root=4):
     r"""Build a Polynomial from Its Roots
 
@@ -357,6 +361,7 @@ def alg2_build_polynomial_from_roots(min_root=-4, max_root=4):
 
 
 @register
+@with_variants
 def alg2_add_complex(min_val=-9, max_val=9):
     r"""Add and Subtract Complex Numbers
 
@@ -396,6 +401,7 @@ def alg2_add_complex(min_val=-9, max_val=9):
 
 
 @register
+@with_variants
 def alg2_rational_exponent(min_m=2, max_m=5):
     r"""Rational Exponents
 
@@ -426,6 +432,7 @@ def alg2_rational_exponent(min_m=2, max_m=5):
 
 
 @register
+@with_variants
 def alg2_solve_radical_equation(max_a=4, min_x=-5, max_x=5, max_c=8):
     r"""Solve a Radical Equation
 
@@ -457,6 +464,7 @@ def alg2_solve_radical_equation(max_a=4, min_x=-5, max_x=5, max_c=8):
 
 
 @register
+@with_variants
 def alg2_solve_exponential_log(min_x=1, max_x=5):
     r"""Solve an Exponential Equation with Logarithms
 
@@ -479,6 +487,7 @@ def alg2_solve_exponential_log(min_x=1, max_x=5):
 
 
 @register
+@with_variants
 def alg2_evaluate_log(min_exp=1, max_exp=5):
     r"""Evaluate a Logarithm
 
@@ -504,6 +513,7 @@ def alg2_evaluate_log(min_exp=1, max_exp=5):
 
 
 @register
+@with_variants
 def alg2_inverse_linear_function(max_m=6, max_b=10, min_t=-6, max_t=6):
     r"""Inverse of a Linear Function
 
@@ -562,6 +572,7 @@ def alg2_z_score(min_val=-20, max_val=20):
 
 
 @register
+@with_variants
 def alg2_empirical_rule(min_mean=0, max_mean=100, min_sd=1, max_sd=15):
     r"""Empirical Rule (68-95-99.7)
 
@@ -649,6 +660,7 @@ def alg2_solve_system_matrix(max_coeff=5, min_sol=-6, max_sol=6):
 
 
 @register
+@with_variants
 def alg2_log_product_rule(min_val=-6, max_val=6):
     r"""Logarithm Product Rule
 
@@ -676,6 +688,7 @@ def alg2_log_product_rule(min_val=-6, max_val=6):
 
 
 @register
+@with_variants
 def alg2_log_quotient_rule(min_val=-6, max_val=6):
     r"""Logarithm Quotient Rule
 
@@ -703,6 +716,7 @@ def alg2_log_quotient_rule(min_val=-6, max_val=6):
 
 
 @register
+@with_variants
 def alg2_log_power_rule(min_val=-5, max_val=5, min_k=2, max_k=5):
     r"""Logarithm Power Rule
 
@@ -729,6 +743,7 @@ def alg2_log_power_rule(min_val=-5, max_val=5, min_k=2, max_k=5):
 
 
 @register
+@with_variants
 def alg2_log_change_of_base(min_arg=2, max_arg=50):
     r"""Change of Base Formula
 
@@ -764,6 +779,7 @@ def alg2_log_change_of_base(min_arg=2, max_arg=50):
 
 
 @register
+@with_variants
 def alg2_rationalize_denominator():
     r"""Rationalize a Denominator Using the Conjugate
 
@@ -816,6 +832,7 @@ def alg2_rationalize_denominator():
 
 
 @register
+@with_variants
 def alg2_radical_equation_conjugate(min_root=2, max_root=6):
     r"""Solve a Radical Equation Using the Conjugate
 
@@ -865,6 +882,7 @@ def _linear_factor(k):
 
 
 @register
+@with_variants
 def alg2_function_composition(min_c=-5, max_c=5, min_x=-4, max_x=4):
     r"""Function Composition
 
@@ -913,6 +931,7 @@ def alg2_function_composition(min_c=-5, max_c=5, min_x=-4, max_x=4):
 
 
 @register
+@with_variants
 def alg2_solve_rational_equation(min_v=-6, max_v=6, min_s=-5, max_s=5):
     r"""Solve a Rational Equation
 
@@ -959,6 +978,7 @@ def alg2_solve_rational_equation(min_v=-6, max_v=6, min_s=-5, max_s=5):
 
 
 @register
+@with_variants
 def alg2_rational_expression_ops(min_c=-6, max_c=6):
     r"""Rational Expression Operations
 
@@ -1008,6 +1028,7 @@ def _imag_str(mag_fraction):
 
 
 @register
+@with_variants
 def alg2_complex_division(min_v=-6, max_v=6):
     r"""Complex Number Division
 
@@ -1066,6 +1087,7 @@ def alg2_complex_division(min_v=-6, max_v=6):
 
 
 @register
+@with_variants
 def alg2_complex_modulus(min_v=-9, max_v=9):
     r"""Modulus of a Complex Number
 
@@ -1102,6 +1124,7 @@ def alg2_complex_modulus(min_v=-9, max_v=9):
 
 
 @register
+@with_variants
 def alg2_inverse_nonlinear(min_v=-6, max_v=6):
     r"""Inverse of a Non-Linear Function
 
@@ -1147,6 +1170,7 @@ def _divisors(n):
 
 
 @register
+@with_variants
 def alg2_rational_root_list():
     r"""Rational Root Theorem
 
@@ -1198,6 +1222,7 @@ def alg2_rational_root_list():
 
 
 @register
+@with_variants
 def alg2_solve_system_three(max_coeff=3, min_sol=-4, max_sol=4):
     r"""System of Three Equations
 
@@ -1256,6 +1281,7 @@ def alg2_solve_system_three(max_coeff=3, min_sol=-4, max_sol=4):
 
 
 @register
+@with_variants
 def alg2_matrix_operation(min_v=-6, max_v=6):
     r"""Matrix Operation (2x2)
 
@@ -1305,6 +1331,7 @@ def alg2_matrix_operation(min_v=-6, max_v=6):
 
 
 @register
+@with_variants
 def alg2_solve_polynomial_factoring(min_root=-5, max_root=5):
     r"""Solve a Polynomial by Factoring
 
@@ -1353,6 +1380,7 @@ def alg2_solve_polynomial_factoring(min_root=-5, max_root=5):
 
 
 @register
+@with_variants
 def alg2_conic_equation(min_axis=2, max_axis=8):
     r"""Conic Equation from Features
 
@@ -1400,6 +1428,7 @@ def alg2_conic_equation(min_axis=2, max_axis=8):
 
 
 @register
+@with_variants
 def alg2_polynomial_end_behavior(min_degree=2, max_degree=5):
     r"""End Behavior of a Polynomial
 

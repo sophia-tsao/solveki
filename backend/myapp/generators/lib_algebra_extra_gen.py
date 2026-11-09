@@ -142,6 +142,7 @@ def expanding(max_coeff=9):
 
 
 @register
+@with_variants
 def power_rule_differentiation(min_power=1, max_power=8):
     r"""Power Rule Differentiation
 
@@ -416,6 +417,7 @@ def surds_comparison(max_square=30, max_cube=150):
 
 
 @register
+@with_variants
 def log(max_base=10, max_value=1000):
     r"""Evaluate a Logarithm
 
@@ -448,6 +450,7 @@ def log(max_base=10, max_value=1000):
 
 
 @register
+@with_variants
 def multiply_complex_numbers(max_part=9):
     r"""Multiply Two Complex Numbers
 
@@ -490,6 +493,7 @@ def multiply_complex_numbers(max_part=9):
 
 
 @register
+@with_variants
 def int_matrix_22_determinant(max_entry=9):
     r"""Determinant of a 2x2 Matrix
 
@@ -555,6 +559,7 @@ def _ordinal(n):
 
 
 @register
+@with_variants
 def arithmetic_progression_term(max_first=20, max_diff=10, min_n=5, max_n=30):
     r"""Term of an Arithmetic Sequence
 
@@ -592,6 +597,7 @@ def _times(factors):
 
 
 @register
+@with_variants
 def combinations(min_n=4, max_n=12):
     r"""Combinations
 
@@ -631,6 +637,7 @@ def combinations(min_n=4, max_n=12):
 
 
 @register
+@with_variants
 def permutation(min_n=4, max_n=12, max_r=4):
     r"""Permutations
 
