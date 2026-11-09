@@ -30,10 +30,12 @@ def _tex(value):
 @lib_seqstats_gen.mean_median.variant("missing_score")
 def _mean_missing_score():
     """What score on the last test brings the mean to a target?"""
-    n = random.randint(3, 6)
-    scores = [random.randint(60, 100) for _ in range(n - 1)]
+    # Draw the target first, then the earlier scores around it, so a valid last score always
+    # exists (drawing the scores first could leave no target in range, looping forever).
     while True:
+        n = random.randint(3, 6)
         target = random.randint(70, 95)
+        scores = [random.randint(60, 100) for _ in range(n - 1)]
         last = target * n - sum(scores)
         if 0 <= last <= 100:
             break
