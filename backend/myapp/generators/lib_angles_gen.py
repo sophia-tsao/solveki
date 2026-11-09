@@ -19,6 +19,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num
 from ._steps import Steps, paren, tex_frac
 from .lib_geometry_gen import rounded_answer, tex_pi_multiple
@@ -28,6 +29,7 @@ _RAD_HINT = "Give your answer in radians rounded to the nearest thousandth."
 
 
 @register
+@with_variants
 def angle_regular_polygon():
     r"""Interior Angle of a Regular Polygon
 
@@ -77,6 +79,7 @@ def _magnitude_tex(name, vec):
 
 
 @register
+@with_variants
 def angle_btw_vectors():
     r"""Angle Between Two Vectors
 
@@ -139,6 +142,7 @@ def angle_btw_vectors():
 
 
 @register
+@with_variants
 def degree_to_rad():
     r"""Convert Degrees to Radians
 
@@ -173,6 +177,7 @@ def degree_to_rad():
 
 
 @register
+@with_variants
 def radian_to_deg():
     r"""Convert Radians to Degrees
 
@@ -209,6 +214,7 @@ def radian_to_deg():
 
 
 @register
+@with_variants
 def complex_to_polar():
     r"""Convert a Complex Number to Polar Form
 
@@ -320,6 +326,7 @@ _DERIVATIVE_TEX = {
 
 
 @register
+@with_variants
 def trig_differentiation():
     r"""Differentiate a Basic Trigonometric Function
 
@@ -353,6 +360,7 @@ def trig_differentiation():
 
 
 @register
+@with_variants
 def fraction_to_decimal():
     r"""Convert a Fraction to a Decimal
 
@@ -399,6 +407,7 @@ def fraction_to_decimal():
 
 
 @register
+@with_variants
 def celsius_to_fahrenheit():
     r"""Convert Celsius to Fahrenheit
 
@@ -431,6 +440,7 @@ def celsius_to_fahrenheit():
 
 
 @register
+@with_variants
 def complementary_and_supplementary_angle(comp_min=1, comp_max=89, supp_min=1, supp_max=179):
     r"""Complementary and Supplementary Angles
 
@@ -468,6 +478,7 @@ def complementary_and_supplementary_angle(comp_min=1, comp_max=89, supp_min=1, s
 
 
 @register
+@with_variants
 def third_angle_of_triangle(min_angle=10, max_angle=89):
     r"""Third Angle of a Triangle
 
@@ -501,6 +512,7 @@ def third_angle_of_triangle(min_angle=10, max_angle=89):
 
 
 @register
+@with_variants
 def fourth_angle_of_quadrilateral(min_angle=20, max_angle=160):
     r"""Fourth Angle of a Quadrilateral
 
@@ -538,6 +550,7 @@ def fourth_angle_of_quadrilateral(min_angle=20, max_angle=160):
 
 
 @register
+@with_variants
 def sum_of_polygon_angles(min_sides=3, max_sides=12):
     r"""Sum of the Interior Angles of a Polygon
 

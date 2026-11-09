@@ -27,6 +27,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num, pair, frac_from
 from ._steps import Steps, paren, tex_frac
 
@@ -80,6 +81,7 @@ def _times_pi(s, symbol, solution):
 
 
 @register
+@with_variants
 def area_of_circle(min_radius=1, max_radius=20):
     r"""Area of a Circle
 
@@ -107,6 +109,7 @@ def area_of_circle(min_radius=1, max_radius=20):
 
 
 @register
+@with_variants
 def area_of_circle_given_center_and_point(coord_min=-10, coord_max=10):
     r"""Area of a Circle Given Center and a Point On It
 
@@ -153,6 +156,7 @@ def area_of_circle_given_center_and_point(coord_min=-10, coord_max=10):
 
 
 @register
+@with_variants
 def circumference(min_radius=1, max_radius=20):
     r"""Circumference of a Circle
 
@@ -180,6 +184,7 @@ def circumference(min_radius=1, max_radius=20):
 
 
 @register
+@with_variants
 def sector_area(min_radius=1, max_radius=20, min_angle=1, max_angle=359):
     r"""Area of a Sector
 
@@ -217,6 +222,7 @@ def sector_area(min_radius=1, max_radius=20, min_angle=1, max_angle=359):
 
 
 @register
+@with_variants
 def distance_two_points(coord_min=-15, coord_max=15):
     r"""Distance Between Two Points
 
@@ -251,6 +257,7 @@ def distance_two_points(coord_min=-15, coord_max=15):
 
 
 @register
+@with_variants
 def midpoint_of_two_points(coord_min=-15, coord_max=15):
     r"""Midpoint of Two Points
 
@@ -290,6 +297,7 @@ def midpoint_of_two_points(coord_min=-15, coord_max=15):
 
 
 @register
+@with_variants
 def euclidian_norm(min_dim=2, max_dim=4, comp_min=-10, comp_max=10):
     r"""Euclidian (L2) Norm of a Vector
 
@@ -351,6 +359,7 @@ def _line_solution(m, b):
 
 
 @register
+@with_variants
 def equation_of_line_from_two_points(coord_min=-10, coord_max=10):
     r"""Equation of a Line From Two Points
 
@@ -407,6 +416,7 @@ _POLYGON_NAMES = {
 
 
 @register
+@with_variants
 def perimeter_of_polygons(min_sides=3, max_sides=8, min_length=1, max_length=50):
     r"""Perimeter of a Polygon
 
@@ -439,6 +449,7 @@ def perimeter_of_polygons(min_sides=3, max_sides=8, min_length=1, max_length=50)
 
 
 @register
+@with_variants
 def valid_triangle(min_side=1, max_side=50):
     r"""Can Three Lengths Form a Triangle?
 
@@ -486,6 +497,7 @@ def valid_triangle(min_side=1, max_side=50):
 
 
 @register
+@with_variants
 def arc_length(min_radius=1, max_radius=20, min_angle=1, max_angle=359):
     r"""Arc Length
 

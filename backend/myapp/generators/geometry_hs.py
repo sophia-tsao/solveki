@@ -12,6 +12,7 @@ from fractions import Fraction
 from math import atan2, cos, gcd, isqrt, pi, sin, sqrt, tan
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num, frac as _frac
 from ._steps import Steps, paren, tex_frac
 
@@ -65,6 +66,7 @@ def _reduce(num, den):
 
 
 @register
+@with_variants
 def geo_right_triangle_side(min_angle=15, max_angle=75, min_len=5, max_len=30):
     r"""Right Triangle: Solve for a Side with Trig
 
@@ -125,6 +127,7 @@ def geo_right_triangle_side(min_angle=15, max_angle=75, min_len=5, max_len=30):
 
 
 @register
+@with_variants
 def geo_solve_right_triangle_pythag(max_scale=5):
     r"""Right Triangle: Pythagorean Theorem
 
@@ -165,6 +168,7 @@ def geo_solve_right_triangle_pythag(max_scale=5):
 
 
 @register
+@with_variants
 def geo_circle_equation_from_center_radius(max_center=9, max_radius=12):
     r"""Circle: Equation from Center and Radius
 
@@ -198,6 +202,7 @@ def geo_circle_equation_from_center_radius(max_center=9, max_radius=12):
 
 
 @register
+@with_variants
 def geo_circle_center_radius_from_equation(max_center=9, max_radius=12):
     r"""Circle: Center and Radius from Equation
 
@@ -232,6 +237,7 @@ def geo_circle_center_radius_from_equation(max_center=9, max_radius=12):
 
 
 @register
+@with_variants
 def geo_translate_point(max_coord=10):
     r"""Transformation: Translate a Point
 
@@ -256,6 +262,7 @@ def geo_translate_point(max_coord=10):
 
 
 @register
+@with_variants
 def geo_reflect_point(max_coord=10):
     r"""Transformation: Reflect a Point
 
@@ -290,6 +297,7 @@ def geo_reflect_point(max_coord=10):
 
 
 @register
+@with_variants
 def geo_rotate_point(max_coord=10):
     r"""Transformation: Rotate a Point
 
@@ -321,6 +329,7 @@ def geo_rotate_point(max_coord=10):
 
 
 @register
+@with_variants
 def geo_dilate_point(max_coord=6):
     r"""Transformation: Dilate a Point
 
@@ -353,6 +362,7 @@ def geo_dilate_point(max_coord=6):
 
 
 @register
+@with_variants
 def geo_inscribed_angle(min_half=10, max_half=89):
     r"""Circle: Inscribed Angle Theorem
 
@@ -392,6 +402,7 @@ def geo_inscribed_angle(min_half=10, max_half=89):
 
 
 @register
+@with_variants
 def geo_conditional_probability_table(max_count=40):
     r"""Probability: Conditional Probability from a Two-Way Table
 
@@ -457,6 +468,7 @@ def geo_conditional_probability_table(max_count=40):
 
 
 @register
+@with_variants
 def geo_compound_probability():
     r"""Probability: Compound Probability of Independent Events
 
@@ -511,6 +523,7 @@ def geo_compound_probability():
 
 
 @register
+@with_variants
 def geo_expected_value():
     r"""Probability: Expected Value of a Discrete Distribution
 
@@ -555,6 +568,7 @@ def geo_expected_value():
 
 
 @register
+@with_variants
 def geo_special_right_triangle(min_len=2, max_len=20):
     r"""Special Right Triangles
 
@@ -613,6 +627,7 @@ def geo_special_right_triangle(min_len=2, max_len=20):
 
 
 @register
+@with_variants
 def geo_similar_triangle_side(min_scale=2, max_scale=5, min_base=2, max_base=8):
     r"""Similar Triangles Missing Side
 
@@ -655,6 +670,7 @@ def geo_similar_triangle_side(min_scale=2, max_scale=5, min_base=2, max_base=8):
 
 
 @register
+@with_variants
 def geo_scale_factor_ratio(min_part=1, max_part=6):
     r"""Scale Factor to Area or Volume Ratio
 
@@ -704,6 +720,7 @@ def geo_scale_factor_ratio(min_part=1, max_part=6):
 
 
 @register
+@with_variants
 def geo_circle_segments():
     r"""Segment Lengths in Circles
 
@@ -762,6 +779,7 @@ def geo_circle_segments():
 
 
 @register
+@with_variants
 def geo_regular_polygon_area(min_side=2, max_side=15):
     r"""Area of a Regular Polygon
 
@@ -797,6 +815,7 @@ def geo_regular_polygon_area(min_side=2, max_side=15):
 
 
 @register
+@with_variants
 def geo_composite_solid():
     r"""Composite Solid Volume
 
@@ -856,6 +875,7 @@ def geo_composite_solid():
 
 
 @register
+@with_variants
 def geo_polygon_area_vertices(coord=6):
     r"""Polygon Area from Vertices
 
@@ -916,6 +936,7 @@ def geo_polygon_area_vertices(coord=6):
 
 
 @register
+@with_variants
 def geo_frustum_volume(min_r=1, max_r=8, min_h=3, max_h=15):
     r"""Volume of the Frustum of a Cone
 

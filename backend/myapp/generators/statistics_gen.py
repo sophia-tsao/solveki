@@ -13,6 +13,7 @@ from fractions import Fraction
 from math import gcd
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _fmt  # noqa: F401 — typeable number formatter
 from ._format import frac_from  # noqa: F401 — typeable fraction formatter
 from ._steps import Steps, paren, tex_frac
@@ -85,6 +86,7 @@ def _product_tex(p):
 
 
 @register
+@with_variants
 def stat_five_number_summary(min_val=1, max_val=20):
     r"""Five-Number Summary
 
@@ -152,6 +154,7 @@ def stat_five_number_summary(min_val=1, max_val=20):
 
 
 @register
+@with_variants
 def stat_z_score(min_val=0, max_val=100):
     r"""Z-Score
 
@@ -226,6 +229,7 @@ def _means_step(s, points):
 
 
 @register
+@with_variants
 def stat_correlation_coefficient(max_val=12):
     r"""Pearson Correlation Coefficient
 
@@ -271,6 +275,7 @@ def stat_correlation_coefficient(max_val=12):
 
 
 @register
+@with_variants
 def stat_regression_line(max_val=12):
     r"""Least-Squares Regression Line
 
@@ -329,6 +334,7 @@ def stat_regression_line(max_val=12):
 
 
 @register
+@with_variants
 def stat_margin_of_error(min_n=30, max_n=1500):
     r"""Margin of Error for a Proportion
 
@@ -366,6 +372,7 @@ def stat_margin_of_error(min_n=30, max_n=1500):
 
 
 @register
+@with_variants
 def stat_standard_error_mean(max_sd=50, max_n=400):
     r"""Standard Error of the Mean
 
@@ -401,6 +408,7 @@ def stat_standard_error_mean(max_sd=50, max_n=400):
 
 
 @register
+@with_variants
 def stat_sample_proportion_ci(min_n=30, max_n=1500):
     r"""Confidence Interval for a Proportion
 
@@ -441,6 +449,7 @@ def stat_sample_proportion_ci(min_n=30, max_n=1500):
 
 
 @register
+@with_variants
 def stat_relative_frequency(max_count=20):
     r"""Relative Frequency
 
@@ -488,6 +497,7 @@ def _phi(z):
 
 
 @register
+@with_variants
 def stat_normal_probability():
     r"""Normal Distribution Probability
 
@@ -558,6 +568,7 @@ def stat_normal_probability():
 
 
 @register
+@with_variants
 def stat_test_statistic():
     r"""Test Statistic for a Mean or Proportion
 
@@ -624,6 +635,7 @@ def stat_test_statistic():
 
 
 @register
+@with_variants
 def stat_discrete_variance():
     r"""Expected Value and Variance
 
@@ -682,6 +694,7 @@ def stat_discrete_variance():
 
 
 @register
+@with_variants
 def stat_percentile_rank():
     r"""Percentile Rank
 
@@ -722,6 +735,7 @@ def stat_percentile_rank():
 
 
 @register
+@with_variants
 def stat_counting_probability():
     r"""Counting to Probability
 
@@ -766,6 +780,7 @@ def stat_counting_probability():
 
 
 @register
+@with_variants
 def stat_odds_probability():
     r"""Odds from Probability
 

@@ -23,6 +23,7 @@ import math
 import random
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num
 from ._steps import Steps
 
@@ -55,6 +56,7 @@ _PROB_HINT = "Give your answer as a decimal rounded to the nearest thousandth."
 
 
 @register
+@with_variants
 def percentage():
     r"""Percentage of a Number
 
@@ -81,6 +83,7 @@ def percentage():
 
 
 @register
+@with_variants
 def percentage_difference():
     r"""Percentage Difference Between Two Numbers
 
@@ -116,6 +119,7 @@ def percentage_difference():
 
 
 @register
+@with_variants
 def percentage_error():
     r"""Percentage Error
 
@@ -151,6 +155,7 @@ def percentage_error():
 
 
 @register
+@with_variants
 def simple_interest():
     r"""Simple Interest
 
@@ -183,6 +188,7 @@ def simple_interest():
 
 
 @register
+@with_variants
 def compound_interest():
     r"""Compound Interest (Total Amount)
 
@@ -224,6 +230,7 @@ def compound_interest():
 
 
 @register
+@with_variants
 def profit_loss_percent():
     r"""Profit or Loss Percent
 
@@ -265,6 +272,7 @@ def profit_loss_percent():
 
 
 @register
+@with_variants
 def conditional_probability():
     r"""Conditional Probability P(A | B)
 
@@ -301,6 +309,7 @@ def conditional_probability():
 
 
 @register
+@with_variants
 def binomial_distribution():
     r"""Binomial Distribution P(X = k)
 
