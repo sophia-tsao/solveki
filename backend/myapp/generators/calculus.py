@@ -11,6 +11,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num
 from ._steps import Steps, paren, tex_frac
 from .algebra import _format_polynomial
@@ -191,6 +192,7 @@ def _ftc_steps(s, poly, a, b):
 # --------------------------------- limits ---------------------------------
 
 @register
+@with_variants
 def calc_limit_rational(min_c=-4, max_c=4):
     r"""Limit of a Rational Function at a Point
 
@@ -260,6 +262,7 @@ def calc_limit_rational(min_c=-4, max_c=4):
 
 
 @register
+@with_variants
 def calc_limit_conjugate(min_b=1, max_b=6):
     r"""Limit Using the Conjugate
 
@@ -328,6 +331,7 @@ def calc_limit_conjugate(min_b=1, max_b=6):
 # ------------------------------ derivatives -------------------------------
 
 @register
+@with_variants
 def calc_derivative_polynomial(min_degree=2, max_degree=4):
     r"""Derivative of a Polynomial
 
@@ -354,6 +358,7 @@ def calc_derivative_polynomial(min_degree=2, max_degree=4):
 
 
 @register
+@with_variants
 def calc_product_rule(min_c=-4, max_c=4):
     r"""Product Rule at a Point
 
@@ -398,6 +403,7 @@ def calc_product_rule(min_c=-4, max_c=4):
 
 
 @register
+@with_variants
 def calc_quotient_rule(min_c=-4, max_c=4):
     r"""Quotient Rule at a Point
 
@@ -443,6 +449,7 @@ def calc_quotient_rule(min_c=-4, max_c=4):
 
 
 @register
+@with_variants
 def calc_chain_rule(min_c=-3, max_c=3, max_power=4):
     r"""Chain Rule at a Point
 
@@ -478,6 +485,7 @@ def calc_chain_rule(min_c=-3, max_c=3, max_power=4):
 
 
 @register
+@with_variants
 def calc_derivative_exp_log_trig():
     r"""Derivative of an Exponential, Logarithmic, or Trig Function
 
@@ -548,6 +556,7 @@ def calc_derivative_exp_log_trig():
 
 
 @register
+@with_variants
 def calc_higher_order_derivative(min_c=-3, max_c=3):
     r"""Higher-Order Derivative at a Point
 
@@ -590,6 +599,7 @@ def calc_higher_order_derivative(min_c=-3, max_c=3):
 # ------------------------- applications of derivatives --------------------
 
 @register
+@with_variants
 def calc_tangent_line(min_c=-3, max_c=3):
     r"""Tangent Line to a Polynomial at a Point
 
@@ -624,6 +634,7 @@ def calc_tangent_line(min_c=-3, max_c=3):
 
 
 @register
+@with_variants
 def calc_extrema(min_root=-5, max_root=5):
     r"""Critical Points via the First Derivative
 
@@ -703,6 +714,7 @@ def _second_derivative_steps(s, poly):
 
 
 @register
+@with_variants
 def calc_inflection_point(max_coeff=6):
     r"""Inflection Point of a Cubic via the Second Derivative
 
@@ -734,6 +746,7 @@ def calc_inflection_point(max_coeff=6):
 # -------------------------------- integrals -------------------------------
 
 @register
+@with_variants
 def calc_definite_integral_poly():
     r"""Definite Integral of a Polynomial
 
@@ -759,6 +772,7 @@ def calc_definite_integral_poly():
 
 
 @register
+@with_variants
 def calc_indefinite_integral_poly():
     r"""Indefinite Integral of a Polynomial
 
@@ -800,6 +814,7 @@ def calc_indefinite_integral_poly():
 
 
 @register
+@with_variants
 def calc_usub_integral():
     r"""Definite Integral by u-Substitution
 
@@ -846,6 +861,7 @@ def calc_usub_integral():
 
 
 @register
+@with_variants
 def calc_area_between_curves():
     r"""Area Between Two Curves
 
@@ -887,6 +903,7 @@ def calc_area_between_curves():
 
 
 @register
+@with_variants
 def calc_average_value():
     r"""Average Value of a Function
 
@@ -921,6 +938,7 @@ def calc_average_value():
 
 
 @register
+@with_variants
 def calc_riemann_sum():
     r"""Left or Right Riemann Sum
 
@@ -993,6 +1011,7 @@ def _cx(coef):
 
 
 @register
+@with_variants
 def calc_implicit_differentiation():
     r"""Implicit Differentiation
 
@@ -1056,6 +1075,7 @@ def calc_implicit_differentiation():
 
 
 @register
+@with_variants
 def calc_particle_motion():
     r"""Particle Motion
 
@@ -1126,6 +1146,7 @@ _KPI_HINT = "Your answer has the form k*pi; give the value of k as a fraction a/
 
 
 @register
+@with_variants
 def calc_volume_revolution():
     r"""Volume of a Solid of Revolution
 
@@ -1196,6 +1217,7 @@ def calc_volume_revolution():
 
 
 @register
+@with_variants
 def calc_lhopital():
     r"""L'Hopital's Rule
 
@@ -1258,6 +1280,7 @@ def calc_lhopital():
 
 
 @register
+@with_variants
 def calc_limit_definition_derivative():
     r"""Derivative Using the Limit Definition
 
@@ -1305,6 +1328,7 @@ def calc_limit_definition_derivative():
 
 
 @register
+@with_variants
 def calc_integration_by_parts():
     r"""Integration by Parts
 
@@ -1397,6 +1421,7 @@ _TRIPLES = [(3, 4, 5), (5, 12, 13), (8, 15, 17), (7, 24, 25),
 
 
 @register
+@with_variants
 def calc_related_rates():
     r"""Related Rates
 
@@ -1487,6 +1512,7 @@ def calc_related_rates():
 
 
 @register
+@with_variants
 def calc_mvt_find_c():
     r"""Mean Value Theorem
 
@@ -1556,6 +1582,7 @@ def calc_mvt_find_c():
 
 
 @register
+@with_variants
 def calc_trapezoidal_rule():
     r"""Trapezoidal Rule
 
@@ -1625,6 +1652,7 @@ def calc_trapezoidal_rule():
 
 
 @register
+@with_variants
 def calc_separable_ode():
     r"""Separable Differential Equation
 
@@ -1691,6 +1719,7 @@ def calc_separable_ode():
 
 
 @register
+@with_variants
 def calc_concavity_interval():
     r"""Concavity Interval
 
@@ -1736,6 +1765,7 @@ def calc_concavity_interval():
 
 
 @register
+@with_variants
 def calc_taylor_coefficient():
     r"""Taylor/Maclaurin Coefficient
 

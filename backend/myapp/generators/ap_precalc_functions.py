@@ -15,6 +15,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num, frac_from as _frac_from
 from ._steps import Steps, paren, tex_frac
 
@@ -128,6 +129,7 @@ def _nonzero(lo, hi):
 # --------------------------- AP 1.1-1.5: polynomials ---------------------------
 
 @register
+@with_variants
 def pc_change_in_tandem(min_second=1, max_second=4, min_start=-10, max_start=10, points=5):
     r"""Change in Tandem: Increasing and Concavity
 
@@ -179,6 +181,7 @@ def pc_change_in_tandem(min_second=1, max_second=4, min_start=-10, max_start=10,
 
 
 @register
+@with_variants
 def pc_second_differences(min_a=-4, max_a=4, min_b=-6, max_b=6, min_c=-9, max_c=9):
     r"""Second Differences of a Quadratic
 
@@ -229,6 +232,7 @@ def pc_second_differences(min_a=-4, max_a=4, min_b=-6, max_b=6, min_c=-9, max_c=
 
 
 @register
+@with_variants
 def pc_degree_from_differences(min_degree=1, max_degree=3, max_coeff=5):
     r"""Polynomial Degree from Finite Differences
 
@@ -265,6 +269,7 @@ def pc_degree_from_differences(min_degree=1, max_degree=3, max_coeff=5):
 
 
 @register
+@with_variants
 def pc_complex_conjugate_zeros(max_real=6, max_part=6):
     r"""Complex Conjugate Zeros
 
@@ -366,6 +371,7 @@ def _neg(terms):
 
 
 @register
+@with_variants
 def pc_even_odd_function(max_coeff=6):
     r"""Even and Odd Functions (Symmetry)
 
@@ -419,6 +425,7 @@ _STRETCHES = [1, 2, 3, -1, -2, Fraction(1, 2), Fraction(1, 3)]
 
 
 @register
+@with_variants
 def pc_function_transformation(min_shift=-5, max_shift=5, min_point=-6, max_point=6):
     r"""Transform a Point on a Function's Graph
 
@@ -486,6 +493,7 @@ def _model_values(kind):
 
 
 @register
+@with_variants
 def pc_identify_model():
     r"""Identify a Linear, Quadratic, or Exponential Model
 
@@ -539,6 +547,7 @@ _QUAD_CONTEXTS = [
 
 
 @register
+@with_variants
 def pc_quadratic_model_predict(max_input=8):
     r"""Predict with a Quadratic Model
 
@@ -585,6 +594,7 @@ _EXP_BASES = [2, 3, 4, 5, Fraction(1, 2), Fraction(1, 3), Fraction(3, 2)]
 
 
 @register
+@with_variants
 def pc_exponential_from_two_points(max_coeff=9):
     r"""Exponential Function from Two Points
 
@@ -645,6 +655,7 @@ _ROOT_PAIRS = [(4, 2, 2), (9, 2, 3), (16, 2, 4), (25, 2, 5), (36, 2, 6), (49, 2,
 
 
 @register
+@with_variants
 def pc_rewrite_exponential(min_coeff=2, max_coeff=9):
     r"""Rewrite an Exponential Expression
 
@@ -698,6 +709,7 @@ def pc_rewrite_exponential(min_coeff=2, max_coeff=9):
 
 
 @register
+@with_variants
 def pc_residual(min_x=1, max_x=10):
     r"""Residual of a Regression Model
 
@@ -765,6 +777,7 @@ def _max_power(base, limit=125):
 
 
 @register
+@with_variants
 def pc_inverse_exponential(max_coeff=5, min_shift=-10, max_shift=10):
     r"""Evaluate the Inverse of an Exponential Function
 
@@ -808,6 +821,7 @@ def _log_tex(b, arg):
 
 
 @register
+@with_variants
 def pc_log_function_features(min_shift=-6, max_shift=6):
     r"""Features of a Logarithmic Function
 
@@ -871,6 +885,7 @@ def _factor_pairs(n):
 
 
 @register
+@with_variants
 def pc_solve_log_equation(max_shift=9):
     r"""Solve a Logarithmic Equation
 
@@ -935,6 +950,7 @@ _FLIP = {">": "<", ">=": "<=", "<": ">", "<=": ">="}
 
 
 @register
+@with_variants
 def pc_exp_log_inequality(max_shift=5):
     r"""Exponential and Logarithmic Inequalities
 
@@ -999,6 +1015,7 @@ def pc_exp_log_inequality(max_shift=5):
 
 
 @register
+@with_variants
 def pc_log_model_context(min_exp=2, max_exp=12):
     r"""Logarithmic Scales in Context (pH, Decibels, Richter)
 
@@ -1072,6 +1089,7 @@ def pc_log_model_context(min_exp=2, max_exp=12):
 
 
 @register
+@with_variants
 def pc_semilog_model(min_slope=2, max_slope=30):
     r"""Exponential Model from a Semi-Log Plot
 
