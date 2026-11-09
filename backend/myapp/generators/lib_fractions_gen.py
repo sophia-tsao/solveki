@@ -239,6 +239,7 @@ def divide_fractions(max_val=10):
 
 
 @register
+@with_variants
 def greatest_common_divisor(min_val=2, max_val=100, count_choices=(2, 3)):
     r"""Greatest Common Divisor (HCF) of Several Numbers
 

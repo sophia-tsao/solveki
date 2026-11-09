@@ -79,6 +79,7 @@ from . import (  # noqa: F401,E402
     precalculus_variants,
     ap_precalc_variants,
     calculus_variants,
+    arithmetic_variants,
 )
 
 __all__ = ["LOCAL_GENERATORS", "register"]

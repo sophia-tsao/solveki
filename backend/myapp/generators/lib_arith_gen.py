@@ -17,6 +17,7 @@ import random
 
 from ._registry import register
 from ._steps import Steps, paren, tex_frac
+from ._variants import with_variants
 
 _PLACES = ["ones", "tens", "hundreds", "thousands", "ten-thousands"]
 
@@ -95,6 +96,7 @@ def _primality_steps(s, n):
 
 
 @register
+@with_variants
 def addition(max_sum=99, max_addend=50):
     r"""Addition of Two Numbers
 
@@ -151,6 +153,7 @@ def addition(max_sum=99, max_addend=50):
 
 
 @register
+@with_variants
 def subtraction(max_minuend=99, max_diff=99):
     r"""Subtraction of Two Numbers
 
@@ -204,6 +207,7 @@ def subtraction(max_minuend=99, max_diff=99):
 
 
 @register
+@with_variants
 def multiplication(max_factor=12):
     r"""Multiplication Facts
 
@@ -237,6 +241,7 @@ def multiplication(max_factor=12):
 
 
 @register
+@with_variants
 def division(max_divisor=10, max_quotient=10):
     r"""Division Facts
 
@@ -269,6 +274,7 @@ def division(max_divisor=10, max_quotient=10):
 
 
 @register
+@with_variants
 def absolute_difference(max_val=25):
     r"""Absolute Difference Between Two Numbers
 
@@ -302,6 +308,7 @@ def absolute_difference(max_val=25):
 
 
 @register
+@with_variants
 def exponentiation(min_base=2, max_base=10, min_exp=2, max_exp=5, max_value=10000):
     r"""Exponentiation
 
@@ -333,6 +340,7 @@ def exponentiation(min_base=2, max_base=10, min_exp=2, max_exp=5, max_value=1000
 
 
 @register
+@with_variants
 def square(min_val=1, max_val=20):
     r"""Square of a Number
 
@@ -360,6 +368,7 @@ def square(min_val=1, max_val=20):
 
 
 @register
+@with_variants
 def square_root(min_root=1, max_root=15):
     r"""Square Root of a Perfect Square
 
@@ -387,6 +396,7 @@ def square_root(min_root=1, max_root=15):
 
 
 @register
+@with_variants
 def lcm(min_val=2, max_val=12):
     r"""Least Common Multiple
 
@@ -417,6 +427,7 @@ def lcm(min_val=2, max_val=12):
 
 
 @register
+@with_variants
 def prime_factors(min_val=4, max_val=100):
     r"""Prime Factorization
 
@@ -462,6 +473,7 @@ def prime_factors(min_val=4, max_val=100):
 
 
 @register
+@with_variants
 def is_prime(min_val=2, max_val=100):
     r"""Is the Number Prime?
 
@@ -483,6 +495,7 @@ def is_prime(min_val=2, max_val=100):
 
 
 @register
+@with_variants
 def is_composite(min_val=2, max_val=100):
     r"""Is the Number Composite?
 
@@ -512,6 +525,7 @@ def _scale(n, d, k):
 
 
 @register
+@with_variants
 def compare_fractions(min_den=2, max_den=12):
     r"""Compare Two Fractions
 
@@ -554,6 +568,7 @@ def compare_fractions(min_den=2, max_den=12):
 
 
 @register
+@with_variants
 def factorial(min_n=0, max_n=8):
     r"""Factorial
 

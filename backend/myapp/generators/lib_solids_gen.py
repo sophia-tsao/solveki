@@ -224,6 +224,7 @@ def curved_surface_area_cylinder(min_r=2, max_r=20, min_h=2, max_h=20):
 
 
 @register
+@with_variants
 def cube_root(min_root=1, max_root=20):
     r"""Cube Root
 

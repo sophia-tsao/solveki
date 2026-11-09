@@ -4,7 +4,7 @@ This is a proposal for extra question variations for every seeded Solveki topic.
 
 **How variations are served.** A variation is served inside its topic's existing generator, which picks a variant at random. The current question is kept as the `classic` variant. No new topics are added, so spaced-repetition grading stays per concept. The mechanics are in `backend/myapp/generators/_variants.py`.
 
-**Status.** This is a proposal. A ★ marks the variant to build first for its topic. Variants are implemented phase by phase, with math tests for each.
+**Status.** A ★ marks the variant to build first for its topic. All six phases have been built, with ★ variants first and a math test for each variant. About 640 variants live in the `*_variants.py` modules, one module per subject area. Not every non-★ idea below is built. In particular, many non-★ AP Precalculus and Calculus items are still open, and some catalogue items were left out because they would have needed a second topic's skill or a non-typeable answer. To see what a topic serves, run `python manage.py preview_steps <generator> --all-variants`.
 
 ## Hard constraints every variation must satisfy
 
