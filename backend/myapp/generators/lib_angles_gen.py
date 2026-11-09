@@ -27,16 +27,6 @@ _ROUND_HINT = "Give your answer as a decimal rounded to the nearest thousandth."
 _RAD_HINT = "Give your answer in radians rounded to the nearest thousandth."
 
 
-def _round_half_up(value, places=3):
-    """Round a non-negative ``Fraction`` to ``places`` decimals, halves up.
-
-    Float ``round`` sends exact ties like ``1/16 = 0.0625`` to the even digit
-    (``0.062``); a student rounding by hand writes ``0.063``.
-    """
-    scale = 10 ** places
-    return Fraction(math.floor(value * scale + Fraction(1, 2)), scale)
-
-
 @register
 def angle_regular_polygon():
     r"""Interior Angle of a Regular Polygon
@@ -380,7 +370,7 @@ def fraction_to_decimal():
         f"Convert the fraction ${numerator}/{denominator}$ to a decimal. "
         f"{_ROUND_HINT}"
     )
-    solution = num(_round_half_up(Fraction(numerator, denominator)))
+    solution = num(Fraction(numerator, denominator))
 
     s = Steps()
     s.step("A fraction means division: divide the top number (numerator) by "

@@ -53,7 +53,11 @@ def parse_poly(poly):
 
 
 def normalize_sci(fr):
-    """Same convention as the generator: mantissa in [1,10), 3 dp; int exp."""
+    """Same convention as the generator: mantissa in [1,10), 3 dp; int exp.
+
+    The mantissa is rounded half up from the exact value (1.5625 -> 1.563),
+    as a student would; float ``round`` would give 1.562.
+    """
     ten = Fraction(10)
     x = fr
     exp = 0
@@ -63,7 +67,7 @@ def normalize_sci(fr):
     while x < 1:
         x *= ten
         exp -= 1
-    return round(float(x), 3), exp
+    return math.floor(x * 1000 + Fraction(1, 2)) / 1000, exp
 
 
 class UnitRateTests(TestCase):

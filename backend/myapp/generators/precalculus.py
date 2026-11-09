@@ -368,8 +368,9 @@ def pc_law_of_cosines_side(min_side=3, max_side=20, min_angle=20, max_angle=160)
     s.step("Simplify, then evaluate the cosine in degree mode.",
            rf"c^2 = {side_a ** 2 + side_b ** 2} - {2 * side_a * side_b}\cos {angle_c}^\circ"
            rf" \approx {_num(c_sq)}")
-    s.step("Take the square root of both sides (using the unrounded value of $c^2$).",
-           rf"c \approx \sqrt{{{_num(c_sq)}}} \approx {_num(ans)}")
+    s.step("Take the square root of both sides, using the unrounded value of $c^2$.",
+           rf"c = \sqrt{{{side_a ** 2 + side_b ** 2} - {2 * side_a * side_b}\cos {angle_c}^\circ}}"
+           rf" \approx {_num(ans)}")
     s.answer(solution, lead="Rounded to the nearest thousandth, the answer is")
     return problem, solution, s.done()
 
@@ -1791,11 +1792,10 @@ def pc_binomial_term():
 
 def _complex_str(a, b):
     """Render a complex number as a typeable ``a+bi`` / ``a-bi`` string."""
-    a_s = _num(a)
-    b_val = round(b, 3) + 0.0
-    if b_val >= 0:
-        return f"{a_s}+{_num(b_val)}i"
-    return f"{a_s}-{_num(abs(b_val))}i"
+    a_s, b_s = _num(a), _num(b)
+    if b_s.startswith("-"):
+        return f"{a_s}-{b_s[1:]}i"
+    return f"{a_s}+{b_s}i"
 
 
 @register

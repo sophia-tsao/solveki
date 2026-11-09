@@ -40,9 +40,11 @@ const TOTAL_STEPS = PROFILE_STEPS + CALIBRATION_PROBLEMS; // the diagnostic is 5
 // One calibration problem: two attempts, then reveal the answer. Reports the
 // outcome ('correct_first' | 'correct_second' | 'incorrect') via onResolve, the
 // same vocabulary the deck uses for SM-2 grading. Reuses the practice card's
-// exact/float answer comparison (see MathProblemResponse.jsx). Keyed by the
-// problem in the parent, so it remounts (resetting attempts) for each question.
-function CalibrationCard({ problem, solution, onResolve }) {
+// exact/float answer comparison (see MathProblemResponse.jsx), against the
+// solution or any of its `alternatives` (the same answer with rounded numbers
+// truncated instead). Keyed by the problem in the parent, so it remounts
+// (resetting attempts) for each question.
+function CalibrationCard({ problem, solution, alternatives = [], onResolve }) {
   const MAX_ATTEMPTS = 2;
   const [attempt, setAttempt] = useState(1);
   const [response, setResponse] = useState('');
@@ -55,9 +57,10 @@ function CalibrationCard({ problem, solution, onResolve }) {
   const submit = () => {
     if (response.trim() === '') return;
     const numR = parseFloat(response);
-    const numS = parseFloat(solution);
-    const correct = response === solution ||
-      (!isNaN(numR) && !isNaN(numS) && numR === numS);
+    const correct = [solution, ...alternatives].some((accepted) => {
+      const numS = parseFloat(accepted);
+      return response === accepted || (!isNaN(numR) && !isNaN(numS) && numR === numS);
+    });
     if (correct) {
       onResolve(attempt === 1 ? 'correct_first' : 'correct_second');
     } else if (attempt < MAX_ATTEMPTS) {
@@ -366,6 +369,7 @@ function Diagnostic({ onNavigate, userId }) {
           key={problemIndex}
           problem={problems[problemIndex].problem}
           solution={problems[problemIndex].solution}
+          alternatives={problems[problemIndex].alternatives}
           onResolve={handleResolve}
         />
       )}

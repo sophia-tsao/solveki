@@ -125,6 +125,10 @@ class ServedProblemQualityTests(TestCase):
     SAMPLES = 30
     LATEX_CMD = re.compile(r"\\[a-zA-Z]+")
     LONG_DECIMAL = re.compile(r"\d\.\d{4,}")
+    # Steps carry exact intermediate values (rounding happens only at the end),
+    # which can need a few more places, like 2.37 x 6.82 = 16.1634. Only a
+    # float's noise digits (0.30000000000000004) are a leak there.
+    FLOAT_NOISE = re.compile(r"\d\.\d{7,}")
     E_NOTATION = re.compile(r"\d[eE][+-]?\d")
 
     @classmethod
@@ -205,8 +209,8 @@ class ServedProblemQualityTests(TestCase):
             latex = "".join(text.split("$")[1::2]) + (math or "")
             if re.search(r"(?<!\\)%", latex):
                 return f"unescaped % in math in step {step!r}"
-            if self.LONG_DECIMAL.search(text) or self.LONG_DECIMAL.search(math or ""):
-                return f"over-precise decimal in step {step!r}"
+            if self.FLOAT_NOISE.search(text) or self.FLOAT_NOISE.search(math or ""):
+                return f"float noise in step {step!r}"
         return None
 
 
@@ -257,11 +261,13 @@ class ServedStepsTests(TestCase):
         with mock.patch.dict(LOCAL_GENERATORS, {"fake_gen": generator}):
             return _make_problem_for_topic(topic)
 
-    def test_steps_are_served_with_decimals_rounded(self):
-        steps = Steps().step("Multiply $3.14159265$ by $2$.", "6.2831853").step("Done.").done()
-        made = self._serve(lambda: ("$2\\pi=$", "$6.283$", steps))
+    def test_steps_are_served_unrounded(self):
+        # Rounding happens only at the end: an exact intermediate like 16.1634
+        # must reach the student as written, not cut to 16.163 mid-calculation.
+        steps = Steps().step("Multiply $2.37$ by $6.82$.", "16.1634").step("Done.").done()
+        made = self._serve(lambda: ("$2.37 \\times 6.82$", "$16.163$", steps))
         self.assertEqual(made["steps"], [
-            {"text": "Multiply $3.142$ by $2$.", "math": "6.283"},
+            {"text": "Multiply $2.37$ by $6.82$.", "math": "16.1634"},
             {"text": "Done.", "math": None},
         ])
 

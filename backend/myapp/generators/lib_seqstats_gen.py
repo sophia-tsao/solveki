@@ -159,11 +159,13 @@ def data_summary(min_val=1, max_val=50):
     s.formula("The population variance", r"\sigma^2 = \frac{\sum (x - \mu)^2}{N}")
     s.step(f"Subtract the mean from each value, square the result, and add all "
            f"{n} squares.",
-           rf"\sum (x - \mu)^2 {_eq(exact_ss)} {_num(exact_ss)}")
+           rf"\sum (x - \mu)^2 = {_ftex(exact_ss)}")
+    # Keep the sum of squares exact (a fraction) here, so the variance and
+    # standard deviation are rounded only once, at the end.
     s.step("Divide by $N$ to get the variance.",
-           rf"\sigma^2 = \frac{{{_num(exact_ss)}}}{{{n}}} {_eq(variance)} {_num(variance)}")
-    s.step("The standard deviation is the square root of the variance.",
-           rf"\sigma = \sqrt{{\sigma^2}} {_eq(std_dev)} {_num(std_dev)}")
+           rf"\sigma^2 = {_ftex(exact_ss / n)} {_eq(variance)} {_num(variance)}")
+    s.step("The standard deviation is the square root of the unrounded variance.",
+           rf"\sigma = \sqrt{{{_ftex(exact_ss / n)}}} {_eq(std_dev)} {_num(std_dev)}")
     s.answer(solution, lead="As mean, standard deviation, variance, each rounded "
              "to the nearest thousandth, the answer is")
     return problem, solution, s.done()

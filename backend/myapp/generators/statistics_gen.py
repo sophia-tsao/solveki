@@ -290,13 +290,12 @@ def stat_regression_line(max_val=12):
     m = sxy / sxx
     b = mean_y - m * mean_x
 
-    b_val = round(b, 3)
-    sign = "+" if b_val >= 0 else "-"
+    sign = "-" if _fmt(b).startswith("-") else "+"
     problem = (
         f"Given the points: {_points_str(points)}. Find the least-squares "
         "regression line y = m x + b (m and b rounded to 3 decimal places)."
     )
-    solution = f"$y = {_fmt(m)} x {sign} {_fmt(abs(b_val))}$"
+    solution = f"$y = {_fmt(m)} x {sign} {_fmt(abs(b))}$"
 
     e_mx, e_my, e_sxx, _, e_sxy = _deviation_sums(points)
     e_m = e_sxy / e_sxx

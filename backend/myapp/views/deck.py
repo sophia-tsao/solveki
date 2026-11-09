@@ -1085,7 +1085,10 @@ def check_answer(request):
     reveal = {"solution": solution, "steps": card.get("steps", [])}
     if deck.attempts >= _MAX_ATTEMPTS:
         return JsonResponse({"correct": False, "attempts_left": 0, **reveal})
-    if _answer_matches(answer.strip()[:_MAX_ANSWER], solution):
+    # A rounded answer may also be typed truncated (see `_make_problem_for_topic`);
+    # decks built before that have no "alternatives" key.
+    accepted = [solution, *card.get("alternatives", [])]
+    if any(_answer_matches(answer.strip()[:_MAX_ANSWER], s) for s in accepted):
         return JsonResponse({"correct": True, "attempts_left": _MAX_ATTEMPTS - deck.attempts})
 
     deck.attempts += 1

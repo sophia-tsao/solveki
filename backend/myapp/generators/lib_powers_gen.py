@@ -276,23 +276,21 @@ def product_of_scientific_notations(min_exp=-9, max_exp=9):
     )
     solution = f"{num(mantissa)}*10^{exponent}"
 
-    # Show the product of the mantissas at the precision the answer keeps:
-    # derived from the rounded mantissa, so the steps agree with the answer.
+    # The product of two 2dp mantissas is exact at 4dp (5dp once normalised),
+    # so the steps carry it unrounded and only the answer is rounded.
     final = Fraction(num(mantissa))
     product = a * b
-    shown = final * 10 if product >= 10 else final
-    rel = "=" if shown == product else r"\approx"
     s = Steps()
     s.step("Multiply the decimal parts together and the powers of ten together.",
            rf"({num(a)} \times 10^{{{p}}})({num(b)} \times 10^{{{q}}}) = "
            rf"({num(a)} \times {num(b)}) \times 10^{{{p} + {paren(q)}}}")
     s.step("Multiply the decimals, and add the exponents.",
-           rf"{num(a)} \times {num(b)} {rel} {num(shown)}, \qquad {p} + {paren(q)} = {p + q}")
+           rf"{num(a)} \times {num(b)} = {num(product, 4)}, \qquad {p} + {paren(q)} = {p + q}")
     if product >= 10:
-        s.step(f"${num(shown)}$ is not between $1$ and $10$, so move the decimal "
+        s.step(f"${num(product, 4)}$ is not between $1$ and $10$, so move the decimal "
                "point one place left and add $1$ to the exponent.",
-               rf"{num(shown)} \times 10^{{{p + q}}} = {num(final)} \times 10^{{{exponent}}}")
+               rf"{num(product, 4)} \times 10^{{{p + q}}} = {num(mantissa, 5)} \times 10^{{{exponent}}}")
     _typed_answer(s, rf"{num(final)} \times 10^{{{exponent}}}", solution,
                   lead="Rounded to the nearest thousandth, the answer is"
-                  if rel != "=" else "The answer is")
+                  if final != mantissa else "The answer is")
     return problem, solution, s.done()

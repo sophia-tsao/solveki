@@ -85,6 +85,25 @@ describe('Diagnostic', () => {
     expect(onNavigate).toHaveBeenCalledWith('math');
   });
 
+  it('accepts a truncated answer listed in the alternatives', async () => {
+    const problems = [{ topic_id: 10, problem: '$8/3$', solution: '2.667', alternatives: ['2.666'] }];
+    apiFetch.mockImplementation((url = '') => {
+      if (url === '/diagnostic/config/') return Promise.resolve(jsonResponse(CONFIG));
+      if (url === '/diagnostic/start/') return Promise.resolve(jsonResponse({ problems }));
+      if (url.startsWith('/diagnostic/submit/')) return Promise.resolve(jsonResponse(SUBMIT));
+      return Promise.resolve(jsonResponse({}));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<Diagnostic onNavigate={vi.fn()} userId={USER_ID} />);
+
+    await reachCalibration(user);
+    await user.type(screen.getByLabelText('Your answer'), '2.666');
+    await user.click(screen.getByRole('button', { name: 'Submit' }));
+
+    await screen.findByText("You're all set!");
+    expect(submitBody().results).toEqual([{ topic_id: 10, outcome: 'correct_first' }]);
+  });
+
   it('starts the calibration problems for the chosen course + unit', async () => {
     mockHappyPath();
     const user = userEvent.setup();

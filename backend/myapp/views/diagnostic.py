@@ -147,6 +147,7 @@ def diagnostic_start(request):
                 "topic_id": made["topic_id"],
                 "problem": made["problem"],
                 "solution": made["solution"],
+                "alternatives": made["alternatives"],
             })
     return JsonResponse({"problems": problems})
 

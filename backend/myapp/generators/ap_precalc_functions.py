@@ -742,8 +742,15 @@ def pc_residual(min_x=1, max_x=10):
     else:
         meaning = " The model predicts this point exactly."
     equals = "=" if (residual * 1000).denominator == 1 else r"\approx"
-    s.step(f"Subtract the predicted value from the actual value ${_num(actual)}$.{meaning}",
-           rf"{_num(actual)} - {paren(_num(predicted))} {equals} {_num(residual)}")
+    # Subtract the unrounded prediction: for an exponential model that's the
+    # expression itself, so the residual is rounded only once, at the end.
+    if (predicted * 1000).denominator == 1:
+        predicted_tex = paren(_num(predicted))
+    else:
+        predicted_tex = rf"{a}({_num(rate)})^{{{x}}}"
+    s.step(f"Subtract the unrounded predicted value from the actual value "
+           f"${_num(actual)}$.{meaning}",
+           rf"{_num(actual)} - {predicted_tex} {equals} {_num(residual)}")
     s.answer(solution)
     return problem, solution, s.done()
 

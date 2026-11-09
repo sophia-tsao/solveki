@@ -464,7 +464,8 @@ def pre_multi_step_inequality():
 def _normalize_sci(fr):
     """Return ``(mantissa, exponent)`` for a positive ``Fraction`` value.
 
-    Mantissa lands in ``[1, 10)`` and is rounded to 3 dp.
+    The mantissa lands in ``[1, 10)`` and is a string rounded (half up) from
+    the exact value to 3 dp, keeping a ``.0`` on whole numbers: ``"5.0"``.
     """
     ten = Fraction(10)
     x = fr
@@ -475,7 +476,8 @@ def _normalize_sci(fr):
     while x < 1:
         x *= ten
         exp -= 1
-    return round(float(x), 3), exp
+    text = num(x)
+    return (text if "." in text else f"{text}.0"), exp
 
 
 def _sci_steps(op, m1t, m2t, e1, e2, mant, exp):
@@ -562,7 +564,7 @@ def pre_scientific_notation_ops():
         if value <= 0:
             continue
         mant, exp = _normalize_sci(value)
-        if mant < 1.0 or mant >= 10.0:
+        if not 1 <= Fraction(mant) < 10:
             continue
         m1 = m1t / 10
         m2 = m2t / 10

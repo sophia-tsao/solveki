@@ -7,6 +7,7 @@ precisely.
 import datetime
 import json
 from collections import Counter
+from fractions import Fraction
 from unittest import mock
 
 from django.test import TestCase, Client
@@ -16,6 +17,7 @@ from myapp.models import (
     AnswerRecord, ProblemReport,
 )
 from myapp import views
+from myapp.generators._format import num
 from myapp.views.deck import _select_deck_topics, _generate_problems, _grade_topic
 from myapp.views.problems import _make_problem_for_topic
 from .factories import make_user, make_course, make_topic, select
@@ -961,6 +963,33 @@ class CheckAnswerTests(TestCase):
         # parseFloat would read both "1/2" and "1/3" as 1 and call them equal.
         self.client.get("/deck/?today=2026-07-21")
         self.assertFalse(self._check("1/2").json()["correct"])
+
+    @mock.patch("myapp.views.mathgenerator.gcd",
+                side_effect=lambda: ("$8/3$", f"${num(Fraction(8, 3))}$"))
+    def test_truncated_answer_is_also_correct(self, mock_gen):
+        # 8/3 = 2.6666...: rounded is 2.667, truncated is 2.666; nothing else.
+        self.client.get("/deck/?today=2026-07-21")
+        self.assertTrue(self._check("2.667").json()["correct"])
+        self.assertTrue(self._check("2.666").json()["correct"])
+        self.assertFalse(self._check("2.665").json()["correct"])
+
+    @mock.patch("myapp.views.mathgenerator.gcd",
+                side_effect=lambda: ("$(5/3, 3/2)$", f"({num(Fraction(5, 3))}, {num(Fraction(3, 2))})"))
+    def test_each_number_may_be_truncated(self, mock_gen):
+        self.client.get("/deck/?today=2026-07-21")
+        self.assertTrue(self._check("(1.666, 1.5)").json()["correct"])
+        self.assertTrue(self._check("(1.667, 1.5)").json()["correct"])
+        # 1.5 is exact, so there's nothing to truncate: 1.4 is just wrong.
+        self.assertFalse(self._check("(1.666, 1.4)").json()["correct"])
+
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
+    def test_card_from_before_alternatives_still_grades(self, mock_gen):
+        self.client.get("/deck/?today=2026-07-21")
+        deck = DailyDeck.objects.get(user=self.user)
+        for card in deck.problems:
+            del card["alternatives"]
+        deck.save()
+        self.assertTrue(self._check("2").json()["correct"])
 
     @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$"))
     def test_stale_card_and_bad_input(self, mock_gen):

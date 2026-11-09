@@ -1,3 +1,4 @@
+import itertools
 import logging
 import re
 
@@ -19,6 +20,13 @@ logger = logging.getLogger(__name__)
 # captured so negatives round correctly.
 _LONG_DECIMAL_RE = re.compile(r"-?\d+\.\d{4,}")
 
+# An unsigned number in a solution, such as the 2.667 in "(1.5, -2.667)".
+_NUMBER_RE = re.compile(r"\d+(?:\.\d+)?")
+
+# Most truncated variants kept for one solution (each rounded number in it can
+# be typed rounded or truncated, so a list of n numbers has up to 2^n - 1).
+_MAX_ALTERNATIVES = 63
+
 
 def _round_decimals(text):
     """Round every over-precise decimal in `text` to the nearest thousandth.
@@ -35,11 +43,36 @@ def _round_decimals(text):
     return _LONG_DECIMAL_RE.sub(lambda m: _num(m.group()), text)
 
 
+def _truncated_alternatives(solution, cuts):
+    """Every other way to type `solution` with some rounded numbers truncated.
+
+    `cuts` maps a rounded number's text to its truncated text (see
+    `generators._format.truncations`): a student who truncates 2.6666... to
+    2.666 instead of rounding to 2.667 is also right. Each rounded number in
+    the solution may independently be typed either way.
+    """
+    parts = _NUMBER_RE.split(solution)
+    numbers = _NUMBER_RE.findall(solution)
+    choices = [[n, cuts[n]] if n in cuts else [n] for n in numbers]
+    alternatives = []
+    for combo in itertools.product(*choices):
+        if list(combo) == numbers:
+            continue
+        alternatives.append("".join(
+            part + (combo[i] if i < len(combo) else "") for i, part in enumerate(parts)
+        ))
+        if len(alternatives) >= _MAX_ALTERNATIVES:
+            break
+    return alternatives
+
+
 def _make_problem_for_topic(topic):
     """Generate a single problem for one specific topic.
 
-    Returns a dict with 'problem', 'solution', 'steps', and 'topic_id', or None
-    if the topic has no usable generator. The `topic_id` ties the stored problem
+    Returns a dict with 'problem', 'solution', 'alternatives', 'steps', and
+    'topic_id', or None if the topic has no usable generator. `alternatives`
+    lists other accepted answers: the solution with rounded numbers truncated
+    instead (see `_truncated_alternatives`). The `topic_id` ties the stored problem
     back to the topic it came from, so an answer can be attributed to that topic
     for spaced-repetition scheduling (see myapp.srs); it isn't sent to the
     client. `steps` is the generator's step-by-step explanation (see
@@ -51,6 +84,7 @@ def _make_problem_for_topic(topic):
         return None
     import mathgenerator  # lazy; see module-top note
     from ..generators import LOCAL_GENERATORS  # lazy; see module-top note
+    from ..generators._format import track_rounding, truncations  # lazy
     # Prefer our own generators, then fall back to the mathgenerator library.
     generator = LOCAL_GENERATORS.get(name) or getattr(mathgenerator, name, None)
     if generator is None:
@@ -62,9 +96,17 @@ def _make_problem_for_topic(topic):
         return None
     # Library generators (and local ones not yet given explanations) return
     # just (problem, solution); ours return (problem, solution, steps).
-    problem, solution, *rest = generator()
-    steps = rest[0] if rest else []
+    with track_rounding() as rounding:
+        problem, solution, *rest = generator()
+        steps = rest[0] if rest else []
+        made = _finish_problem(problem, solution, steps)
+    made["alternatives"] = _truncated_alternatives(made["solution"], truncations(rounding))
+    made["topic_id"] = topic.id
+    return made
 
+
+def _finish_problem(problem, solution, steps):
+    """Normalise a generator's output into the card's problem/solution/steps."""
     # Strip the surrounding LaTeX '$' delimiters so every solution is returned
     # consistently, whether it's an integer, a decimal, or a symbolic answer.
     sol_str = str(solution).strip().replace('$', '').strip()
@@ -84,13 +126,9 @@ def _make_problem_for_topic(topic):
     # student never sees a 16-digit decimal anywhere on the card. LaTeX in the
     # problem uses no bare decimal tokens that this would corrupt.
     problem = _round_decimals(problem)
-    # Same for the explanation, so its numbers agree with the rounded card.
-    steps = [
-        {
-            "text": _round_decimals(step["text"]),
-            "math": _round_decimals(step["math"]) if step.get("math") else None,
-        }
-        for step in steps
-    ]
+    # The explanation is left as the generator wrote it: its intermediate
+    # values are exact (rounding happens only at the end), so rounding them
+    # here would be the mid-calculation rounding the steps avoid.
+    steps = [{"text": step["text"], "math": step.get("math") or None} for step in steps]
 
-    return {"problem": problem, "solution": sol_str, "steps": steps, "topic_id": topic.id}
+    return {"problem": problem, "solution": sol_str, "steps": steps}
