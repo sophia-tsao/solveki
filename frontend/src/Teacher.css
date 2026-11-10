@@ -267,7 +267,8 @@
   cursor: pointer;
 }
 
-.teacher-table .row-sub {
+/* A muted second line under a cell's or row's main text. */
+.row-sub {
   display: block;
   color: var(--ink-3);
   font-size: 0.75rem;
@@ -1618,10 +1619,11 @@
   box-shadow: inset 0 0 0 2px var(--crit);
 }
 
+/* Wide left padding keeps the header clear of the last angled topic name. */
 .cpg-meta-head,
 .cpg-meta {
   text-align: left;
-  padding-left: 0.75rem;
+  padding-left: 3rem;
   white-space: nowrap;
   font-size: 0.75rem;
   color: var(--ink-3);

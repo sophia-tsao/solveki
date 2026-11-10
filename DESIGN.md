@@ -141,17 +141,21 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 | POST | `diagnostic/submit/` | `diagnostic_submit` |
 | GET/POST | `classes/` | `classes` (teacher: list/create) |
 | GET/PATCH/DELETE | `classes/<id>/` | `class_detail` (teacher) |
-| GET | `classes/<id>/students/` | `class_students` (teacher) |
+| GET | `classes/<id>/students/` | `class_students` (teacher: roster with band mix, week, overdue) |
+| GET | `classes/<id>/progress/` | `class_progress` (teacher: students x topics band grid) |
 | DELETE | `classes/<id>/students/<sid>/` | `remove_student` (teacher) |
 | POST | `classes/join/` | `join_class` (student) |
 | GET | `classes/mine/` | `my_classes` (student) |
-| GET/POST | `assignments/` | `assignments` (teacher: list/create) |
+| GET/POST | `assignments/` | `assignments` (teacher: list with classes, due dates, status counts / create) |
 | GET/PATCH/DELETE | `assignments/<id>/` | `assignment_detail` (teacher) |
 | POST | `assignments/<id>/assign/` | `assign_to_classes` (teacher) |
 | GET | `assignments/<id>/results/` | `assignment_results` (teacher analytics) |
+| POST | `assignments/<id>/duplicate/` | `duplicate_assignment` (teacher) |
 | GET | `assignments/mine/` | `my_assignments` (student) |
 | GET | `assignments/<id>/play/` | `play_assignment` (student: start → the assignment's deck) |
 | GET | `teacher/overview/` | `teacher_overview` (teacher analytics) |
+| GET | `teacher/overview/focus/` | `overview_focus` (teacher: newly taught topics, weak spots) |
+| GET | `teacher/overview/summary/` | `overview_summary` (teacher home: KPIs, needs attention, due soon) |
 | GET | `teacher/proficiency-history/` | `proficiency_history` (teacher analytics) |
 | GET | `teacher/students/<sid>/` | `student_detail` (teacher analytics) |
 
@@ -470,22 +474,47 @@ the student's own topics share their `questions_per_day`.
 ### Teacher analytics
 
 Because assignment work *is* normal practice, analytics read the same
-spaced-repetition state rather than a separate attempt log. A daily
-**ProficiencySnapshot** per student (counts of their selected topics by band)
-gives the charts history to draw.
+spaced-repetition state rather than a separate attempt log: `TopicReview` for
+where a topic stands now, `DailyTopicGrade` snapshots for how it got there,
+`AnswerRecord` for accuracy and time, and `DailyPractice` for cards per day.
+The read-side helpers shared by these views live in `views/insights.py`
+(band counts, struggled topics, bulk weekly activity, the weekly goal, the
+band matrix) and `views/assignments.py` (due maps, status counts, overdue).
+
+Teachers see an assignment's status as *done*, *in progress* or *not started*,
+where a student it reached who hasn't answered a card on it yet reads as not
+started (the row itself starts in progress the moment it's assigned; students
+still see that). A student is *on track* when their cards over the last 7
+days reach `WEEKLY_GOAL_DAYS` (3) times their daily card setting.
 
 - `assignment_results` is a progress and proficiency report over the
-  assignment's topic set: per student, their `completion_pct` and status, the
-  "needs help" (`max_reached`), `late` and overdue flags, a proficiency-band
-  breakdown of those topics (from each `TopicReview.interval`), and a
-  class-wide band summary plus the topics students struggled with most.
+  assignment's topic set: per student, their status, cards answered and
+  needed, `completion_pct`, first-try accuracy and topics solid since it
+  reached them, last active day, the "needs help" (`max_reached`), `late` and
+  overdue flags, a band timeline since it reached them, plus per-topic band
+  counts, status `counts`, and the topics students struggled with most.
+- `assignments` (GET) gives each assignment its classes and due dates, next
+  due date, topic count and status counts in a fixed number of queries.
+- `overview_summary` backs the teacher home: KPIs for the week (students on
+  track and last week's figure, cards, cards per active student, first-try
+  accuracy this week and last, overdue student-assignments), a ranked
+  `needs_attention` list (overdue and/or quiet students, students who hit the
+  card cap without getting solid, trouble-spot topics with who missed them,
+  work due within 48 hours that students haven't started), and what's due in
+  the next week. `overview_focus` gives the newly taught topics and weak spots.
+- `class_progress` is the class grid: each student's band on each topic of one
+  of the class's assignments (the most recently assigned open one by default),
+  `null` where they haven't answered it, flagged when missed in the last 14
+  days, plus the share of the class at Familiar or above per topic.
 - `teacher_overview` returns class sizes and student counts; the
   familiarity-over-time chart is served separately by `proficiency_history`,
-  which forward-fills each student's latest snapshot per day and averages the
-  band percentages across a chosen scope (all students / one class / one student).
+  which counts the group's topics per band each day, each topic banded by its
+  average interval across the students, rebuilt from `DailyTopicGrade`.
 - `student_detail` combines a student's SM-2 topic stats — the *same* view their
-  own dashboard shows — with their assignment practice status, gated so a teacher
-  can only open a student enrolled in one of their classes.
+  own dashboard shows, plus 30-day accuracy per topic — with their assignment
+  practice status, the teacher's classes they're in, and benchmarks against one
+  class (median cards and time this week, class accuracy over 30 days), gated so
+  a teacher can only open a student enrolled in one of their classes.
 
 Proficiency bands follow `TopicReview.interval`: `<= 1` → New, `< 6` → Learning,
 `< 21` → Familiar, else → Proficient.
@@ -494,7 +523,8 @@ Proficiency bands follow `TopicReview.interval`: `<= 1` → New, `< 6` → Learn
 
 Located at `frontend/` (top-level, a sibling of `backend/`). Uses KaTeX for
 math rendering and oxlint for linting. `App.jsx` is a top-level hash router
-(`#/page` or `#/page/42` for the detail pages, parsed without a router library).
+(`#/page`, `#/page/42` for the detail pages, and `?key=value` params for page
+context such as `?class=3` or `?tab=progress`; see `router.js`, no router library).
 `LoginPage` shows when unauthenticated; a brand-new user then hits `RolePicker`
 before entering the app. The set of reachable pages is **keyed by role**
 (`STUDENT_PAGES` / `TEACHER_PAGES`), so a student can't navigate to a teacher
@@ -507,10 +537,27 @@ page by editing the URL — and the backend enforces the same on every endpoint.
   the wrong-answer face. Course selection is in `CourseList.jsx` / `CourseBar.jsx`;
   `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` (opening an
   assignment just routes to the practice page; its topics are already in the deck); `StudentClasses.jsx`.
-- **Teacher pages.** `TeacherOverview.jsx`, `ClassList.jsx` / `ClassDetail.jsx`,
-  `StudentDetail.jsx`, `TeacherAssignments.jsx` / `AssignmentBuilder.jsx` /
-  `AssignmentDetail.jsx`, the `ProficiencyTrend.jsx` familiarity-over-time chart,
-  and a `TeacherGuide.jsx` new teachers land on first.
+- **Teacher pages.** The top bar has Home · Classes · Assignments, with the guide
+  behind "?" and Settings / Log out in the account menu; detail pages light up
+  their area and carry breadcrumbs.
+  - `TeacherOverview.jsx` (Home): KPI tiles, Needs attention, Due soon, Topics
+    to revisit, and the `ProficiencyTrend.jsx` familiarity-over-time chart.
+  - `ClassList.jsx` / `ClassDetail.jsx`: the class page has Students, Progress
+    (`ClassProgressGrid.jsx`, the students x topics grid with "Hide names" for
+    projecting), Assignments and Settings tabs.
+  - `StudentDetail.jsx`: alerts, practice tiles with class benchmarks,
+    assignments, a topics table, Prev / Next through the roster, print report.
+  - `TeacherAssignments.jsx` (with the shared `AssignmentsTable.jsx`) /
+    `AssignmentBuilder.jsx` / `AssignmentDetail.jsx` (status counters that filter
+    the table, Students / Topics tabs).
+  - `TeacherGuide.jsx`, which new teachers land on first.
+  - Shared pieces live in `ui/`: `PageHeader`, `StatusChip` (status is always an
+    icon + label), `StatusCounters`, `Tabs`, `OverflowMenu`, `ConfirmDialog`
+    (destructive actions ask first), `KpiTile`, `useSortable`, and `format.js`.
+  - Styling: `tokens.css` holds the design tokens (font stack, ink/line/surface,
+    one brand blue, status colors, and the teacher proficiency ramp). Teacher
+    pages show bands on a single blue ramp (`BANDS` in `BandBar.jsx`) so a level
+    never borrows a status color; student pages keep `TopicProgress`'s palette.
 
 Auth helpers (including the `apiFetch` credentialed wrapper) live in `auth.js`.
 

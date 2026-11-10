@@ -171,18 +171,22 @@ def _progress_topics(request, classroom):
     """The topics a class progress grid covers, plus the assignments to pick from.
 
     `?assignment=<id>` picks one of this class's assignments; by default it's
-    the one most recently assigned to the class. Returns (topics, assignment
-    id or None, the class's assignments as [{id, title}], newest first).
+    the most recently assigned one still open (no due date, or due later),
+    else the most recently assigned. Returns (topics, assignment id or None,
+    the class's assignments as [{id, title}], newest first).
     """
     links = list(
         AssignmentClass.objects.filter(classroom=classroom)
         .select_related("assignment").order_by("-assigned_at", "-id")
     )
-    choices, seen = [], set()
+    now = timezone.now()
+    choices, seen, first_open = [], set(), None
     for link in links:
         if link.assignment_id not in seen:
             seen.add(link.assignment_id)
             choices.append({"id": link.assignment_id, "title": link.assignment.title})
+            if first_open is None and (link.due_at is None or link.due_at >= now):
+                first_open = link.assignment_id
     picked = None
     if request.GET.get("assignment"):
         try:
@@ -191,7 +195,7 @@ def _progress_topics(request, classroom):
             wanted = None
         picked = wanted if wanted in seen else None
     elif choices:
-        picked = choices[0]["id"]
+        picked = first_open or choices[0]["id"]
     if picked is None:
         return [], None, choices
     topic_ids = list(

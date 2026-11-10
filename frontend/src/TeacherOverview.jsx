@@ -59,7 +59,7 @@ function Alert({ item, onOpenStudent, onOpenAssignment, onFollowUp, scopeClass }
     action = { label: 'Assign follow-up', run: () => onFollowUp(item.topic_id, scopeClass || null) };
   } else if (item.type === 'not_started') {
     icon = '◷';
-    title = `${plural(item.count, 'student')} haven’t started “${item.title}”`;
+    title = `${plural(item.count, 'student')} ${item.count === 1 ? 'hasn’t' : 'haven’t'} started “${item.title}”`;
     detail = `Due ${fmtRelativeDue(item.due_at, localDay())}, ${fmtShortDate(item.due_at)} · ${item.class_name}`;
     action = {
       label: 'See who',
