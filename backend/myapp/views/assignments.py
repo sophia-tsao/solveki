@@ -14,7 +14,7 @@ from ..models import (
     DailyDeck, StudentAssignment, Topic, UserTopicSelection, TopicReview,
 )
 from .common import _require_auth, _require_teacher
-from .deck import _client_today, _get_or_create_today_deck, _interval_band
+from .deck import _client_today, _get_or_create_today_deck, _interval_band, _scope_for
 from .insights import struggled_topics
 from .. import practice
 
@@ -558,12 +558,13 @@ def my_assignments(request):
 def play_assignment(request, assignment_id):
     """Send the current student to practice for an assignment.
 
-    The assignment's topics are already in the student's deck (added when it
-    was assigned, or when they joined the class), so opening it just routes them
-    to their normal practice page. Starting it again here is a no-op except for
-    students assigned before topics were added on assign. Returns
-    {"goto": "practice"} for the client to navigate; the actual practice
-    happens through the deck endpoints.
+    The assignment's topics are already in the student's selection (added when
+    it was assigned, or when they joined the class). Starting it again here is
+    a no-op except for students assigned before topics were added on assign.
+    Builds today's deck for the assignment (see `deck.DeckScope`): its share of
+    today if it's open, or practice on its topics if it's done. Returns
+    {"goto": "practice", "assignment_id"} for the client to open that deck; the
+    actual practice happens through the deck endpoints.
     """
     auth = _require_auth(request)
     if auth:
@@ -577,10 +578,15 @@ def play_assignment(request, assignment_id):
 
     _start_assignment_for(assignment, link.classroom_id, [request.user.id])
 
-    # Build or top up today's deck. Starting the assignment flagged it stale, so
-    # it's rebuilt with today's share of the assignment's cards on top of the
-    # student's daily setting.
-    _get_or_create_today_deck(request.user, _client_today(request))
+    # Build or top up the assignment's deck for today. Starting the assignment
+    # flagged an existing one stale, so it's rebuilt with today's share of the
+    # assignment's cards on top of the student's daily setting.
+    _get_or_create_today_deck(
+        request.user, _client_today(request), _scope_for(request.user, assignment.id)
+    )
 
     logger.info("Student %s started assignment %s", request.user.id, assignment_id)
-    return JsonResponse({"goto": "practice", "title": assignment.title, "deck_size": assignment.deck_size})
+    return JsonResponse({
+        "goto": "practice", "assignment_id": assignment.id,
+        "title": assignment.title, "deck_size": assignment.deck_size,
+    })

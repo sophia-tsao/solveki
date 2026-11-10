@@ -66,7 +66,7 @@ def struggled_topics(student_ids, topic_ids=None, since=None, limit=3):
         records = records.filter(date__gte=since)
     missed = ~Q(outcome="correct_first")
     rows = (
-        records.values("topic_id", "topic__topic_name")
+        records.values("topic_id", "topic__topic_name", "topic__course__course_name")
         .annotate(
             answers=Count("id"),
             misses=Count("id", filter=missed),
@@ -79,6 +79,7 @@ def struggled_topics(student_ids, topic_ids=None, since=None, limit=3):
         {
             "topic_id": r["topic_id"],
             "topic_name": r["topic__topic_name"],
+            "course_name": r["topic__course__course_name"] or "",
             "answers": r["answers"],
             "accuracy": round((r["answers"] - r["misses"]) / r["answers"] * 100),
             "students": r["students"],

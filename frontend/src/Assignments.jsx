@@ -2,14 +2,10 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
 import { createLogger } from './logger.js';
+import { formatDue } from './assignmentDue.js';
 import './Assignments.css';
 
 const log = createLogger('assignments');
-
-function formatDue(due) {
-  if (!due) return 'No due date';
-  return `Due ${new Date(due).toLocaleString()}`;
-}
 
 function Assignments({ onStarted }) {
   const queryClient = useQueryClient();
@@ -29,17 +25,16 @@ function Assignments({ onStarted }) {
     setError(null);
     setStartingId(assignmentId);
     try {
-      // The assignment's topics are already in the student's deck (added when it
-      // was assigned); this rebuilds today's deck with its share of the
-      // assignment's cards and sends the student to the normal practice page,
-      // where every card on the assignment's topics counts.
+      // The assignment's topics are already in the student's selection (added
+      // when it was assigned); this builds the assignment's own deck for today
+      // (its share of the cards, or practice on its topics once it's done) and
+      // sends the student to the practice page on that deck.
       const res = await apiFetch(`/assignments/${assignmentId}/play/`, { method: 'POST' });
       if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
-      // The deck now includes the assigned topics — drop the cached deck so the
-      // practice page refetches the grown deck.
+      // Drop the cached decks so the practice page refetches the built one.
       queryClient.invalidateQueries({ queryKey: ['deck'] });
       log.info('Started assignment', assignmentId);
-      onStarted();
+      onStarted(assignmentId);
     } catch (err) {
       setError(err.message);
     } finally {

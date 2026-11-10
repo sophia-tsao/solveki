@@ -198,17 +198,22 @@ function AssignmentBuilder({ assignmentId, onDone }) {
         classes.map((c) => {
           const isSelected = c.id in classDue;
           return (
-            <div key={c.id} className="teacher-topic-row">
-              <label style={{ flex: 1 }}>
+            <div key={c.id} className={`ab-class-row${isSelected ? ' selected' : ''}`}>
+              <label className="ab-class-name">
                 <input type="checkbox" checked={isSelected} onChange={() => toggleClass(c.id)} />
-                {' '}{c.name}
+                {c.name}
               </label>
               {isSelected && (
-                <input
-                  type="datetime-local"
-                  value={classDue[c.id] || ''}
-                  onChange={(e) => setClassDue((prev) => ({ ...prev, [c.id]: e.target.value || null }))}
-                />
+                <label className="ab-due">
+                  <span className="ab-due-label">Due</span>
+                  <input
+                    type="datetime-local"
+                    className="ab-due-input"
+                    value={classDue[c.id] || ''}
+                    onChange={(e) => setClassDue((prev) => ({ ...prev, [c.id]: e.target.value || null }))}
+                    aria-label={`Due date for ${c.name}`}
+                  />
+                </label>
               )}
             </div>
           );

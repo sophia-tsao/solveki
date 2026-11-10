@@ -84,7 +84,8 @@ the same way every view calls `_require_auth`.
   user's `role` (`student`/`teacher`) plus `role_chosen`. Role rides along with
   the per-user config that `Settings.load(user)` provisions on demand rather than
   living on a separate profile.
-- **DailyDeck** — per user + date; `problems` (JSON list of `{problem, solution,
+- **DailyDeck** — per user + date + `assignment` (null for the student's
+  default deck; see "Which deck" below); `problems` (JSON list of `{problem, solution,
   topic_id, kind}`), `current_index`, `attempts`, and `needs_regen`. `kind` is
   `required`, `pool` or `extra` (see "Deck sizing" below). `attempts` counts
   wrong answers on the current card (reset when the card changes), so the
@@ -106,8 +107,8 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 - **StudentAssignment** — one student's progress on one assignment (`status`,
   `started_at`, `cards_answered`, `cards_needed`, `completion_pct`,
   `max_reached`, `late`, `completed_at`), created in progress as soon as the
-  assignment reaches the student. There's no per-assignment problem set: the
-  assignment just feeds the student's normal practice (see below).
+  assignment reaches the student. There's no fixed problem set: the
+  assignment's deck is built each day by the normal deck logic (see below).
 - **ProficiencySnapshot** — one row per (user, date) with a count of the user's
   selected topics in each proficiency band (`new`/`learning`/`familiar`/
   `proficient`), captured daily so the teacher's familiarity-over-time charts have
@@ -122,7 +123,7 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 | POST | `auth/test-login/` | `test_login` (E2E only; 404 unless `ENABLE_TEST_LOGIN`) |
 | POST | `auth/logout/` | `logout_view` |
 | DELETE | `auth/delete/` | `delete_account` |
-| GET | `deck/` | `get_deck` |
+| GET | `deck/` | `get_deck` (`?assignment=<id>` picks an assignment's deck; see "Which deck") |
 | POST | `deck/advance/` | `advance_deck` |
 | POST | `deck/check/` | `check_answer` (grades an answer; the deck payload never carries the solution) |
 | GET | `deck/test-solution/` | `test_solution` (E2E only; 404 unless `ENABLE_TEST_LOGIN`) |
@@ -149,7 +150,7 @@ models (detailed in [Roles, classes, and assignments](#roles-classes-and-assignm
 | POST | `assignments/<id>/assign/` | `assign_to_classes` (teacher) |
 | GET | `assignments/<id>/results/` | `assignment_results` (teacher analytics) |
 | GET | `assignments/mine/` | `my_assignments` (student) |
-| GET | `assignments/<id>/play/` | `play_assignment` (student: start → practice deck) |
+| GET | `assignments/<id>/play/` | `play_assignment` (student: start → the assignment's deck) |
 | GET | `teacher/overview/` | `teacher_overview` (teacher analytics) |
 | GET | `teacher/proficiency-history/` | `proficiency_history` (teacher analytics) |
 | GET | `teacher/students/<sid>/` | `student_detail` (teacher analytics) |
@@ -404,8 +405,8 @@ each student it:
 3. flags today's deck stale (`needs_regen`), so the unanswered tail is rebuilt
    with the assignment's cards on the next practice-page load.
 
-Each day's deck then carries a share of the assignment's remaining cards (see
-"Deck sizing"). Every card the student answers *on one of the assignment's
+Each day the assignment's deck carries a share of its remaining cards (see
+"Deck sizing" and "Which deck"). Every card the student answers *on one of the assignment's
 topics* bumps `cards_answered` (`_count_assignment_card`); cards after the due
 date only count if `allow_late`. Completion is adaptive (`practice.is_complete`):
 
@@ -426,15 +427,45 @@ student who got it right isn't sent straight back to it.
 
 Opening an assignment (`POST /assignments/<id>/play/`, `play_assignment`) checks
 the student is assigned it, re-runs the start (a no-op unless they were assigned
-before topics were added on assign), builds or tops up today's deck, and
-returns `{ "goto": "practice" }` so the client routes to the normal practice
-page.
+before topics were added on assign), builds or tops up the assignment's deck
+for today, and returns `{ "goto": "practice", "assignment_id" }` so the client
+opens the practice page on that deck (`#/math/<id>`).
+
+### Which deck
+
+A student has one deck per day for each assignment they open, plus a default
+deck (`DeckScope` in `views/deck.py`). Which one the practice page shows
+(`_request_scope`):
+
+- **no assignment open** (none assigned, or all done or past due without late
+  work): the default deck — the student's own practice, as above;
+- **one open**: its deck, straight away;
+- **several open**: no deck; `GET /deck/` returns `{"choose": [...]}`, the open
+  assignments soonest due first, and the student picks one (`?assignment=<id>`).
+  The Assignments page opens a specific one the same way.
+
+An open assignment's deck holds *its* share of today (other open assignments'
+cards stay in their own decks), the usual reviews and lapses, and pool practice
+up to `questions_per_day`: each deck fills up to the setting on its own. A
+finished assignment's deck ("Practice again") is pool practice on just its
+topics, up to `questions_per_day`, with no required cards. The payload of an
+assignment's deck names it (`assignment`, with `open` false when it's done) and
+counts the open ones (`open_assignments`), which tells the client where its
+exit button leads: the list with several open, the Assignments page when it's
+the only one open, otherwise the practice page; the client keeps sending `?assignment=` on that deck, so
+a student who finishes the only open assignment mid-deck stays on it.
+
+Grading doesn't depend on the deck. A card counts toward the topic's day grade
+and every open assignment on its topic, whichever deck it's in, and the
+required plan subtracts cards already answered on a topic today, so a review
+done in one deck isn't asked for again in the next one built. The dashboard's
+practice record sums the decks opened that day.
 
 From there the assigned topics are practised like the rest of the student's
-topics: the same daily deck, the same two-attempt UI, the same `_grade_topic`
-SM-2 grading and once-per-day rule. What differs is dose: assignment topics get
-their share of the teacher's cards each day and `20 / ease` cards when due for
-review, where the student's own topics share their `questions_per_day`.
+topics: the same two-attempt UI, the same `_grade_topic` SM-2 grading and
+once-per-day rule. What differs is dose: assignment topics get their share of
+the teacher's cards each day and `20 / ease` cards when due for review, where
+the student's own topics share their `questions_per_day`.
 
 ### Teacher analytics
 

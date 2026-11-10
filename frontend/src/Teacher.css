@@ -261,6 +261,98 @@
   margin-bottom: 0.4rem;
 }
 
+/* ---- Assignment builder: class rows + due date ---- */
+
+/* Class rows mirror the topic picker's course bars (blue rail, soft shadow). */
+.ab-class-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  min-height: 52px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border: 1px solid #dde3ed;
+  border-left: 4px solid #cbd5e1;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.ab-class-row.selected {
+  border-left-color: #2563eb;
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.15);
+}
+
+.ab-class-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+}
+
+.ab-class-name input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.ab-due {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ab-due-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #2563eb;
+}
+
+.ab-due-input {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #dde3ed;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #111827;
+  font: inherit;
+  font-size: 14px;
+  color-scheme: light;
+  accent-color: #2563eb;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ab-due-input:hover {
+  border-color: #93b4f5;
+}
+
+.ab-due-input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  background: #ffffff;
+}
+
+.ab-due-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.ab-due-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 /* ---- Compact visual guidance in the assignment builder ---- */
 
 /* A left-to-right "pill → pill → pill" flow that shows, at a glance, how an
@@ -495,18 +587,36 @@
   margin-top: 1rem;
 }
 
-.struggled-list {
-  margin: 0.5rem 0 0;
-  padding-left: 1.25rem;
+/* Assignment report: "Finished" beside "Struggled with most". */
+.ad-summary {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) 3fr;
+  gap: 1rem;
+  align-items: start;
+  margin-top: 1rem;
 }
 
-.struggled-list li {
-  margin-top: 0.4rem;
+.ad-summary .struggled-card {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .ad-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The topics are deck-style cards (.dash-cards / .dash-card); drop the list
+   chrome. */
+.struggled-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
 }
 
 .struggled-list li .teacher-card-stat {
   display: block;
-  margin-top: 0.1rem;
+  margin-top: 0.35rem;
 }
 
 .struggled-name {
@@ -705,3 +815,57 @@
   border-radius: 2px;
   background: #2563eb;
 }
+
+/* ---- Student detail ---- */
+
+.sd-attention {
+  margin: 0.75rem 0 0;
+}
+
+/* Struggled beside the familiarity trend; stacked on narrow screens. */
+.sd-progress {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 1.25fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+@media (max-width: 900px) {
+  .sd-progress {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sd-trend {
+  min-width: 0;
+}
+
+/* Keep the chart about the height of the list beside it; the plot scales with
+   its width (fixed viewBox), so cap the width. The cap is on the plot's column
+   so the time frame / legend column stays flush against the plot. */
+.sd-trend .ptrend-main {
+  flex: 0 1 520px;
+}
+
+/* Space between the plot and the time frame / legend column, matching the
+   card's side padding. */
+.sd-trend .ptrend-body {
+  gap: 1.25rem;
+}
+
+/* Both cards fill the row height so they line up. */
+.sd-progress .struggled-card,
+.sd-progress .ptrend {
+  margin: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.sd-row-link {
+  cursor: pointer;
+}
+
+.sd-row-link:hover {
+  background: #f8f9ff;
+}
+

@@ -3,8 +3,9 @@
 Covers role gating, class create/join/roster, assignment authoring and
 assign-to-multiple-classes, and the simplified student flow: assigning an
 assignment to a class (or joining a class that has one) adds its topics to the
-student's selections and stretches today's practice deck to fit the teacher's
-card count; opening it just sends the student to normal practice. An assignment
+student's selections, and each open assignment gets its own deck for the day
+carrying its share of the teacher's card count (with several open, the
+practice page lists them to pick from). An assignment
 is done once the student has answered its card count (any topic) since it
 reached them; the teacher report adds familiarity on the assignment's topics
 from the student's SM-2 state.
@@ -386,11 +387,19 @@ class StartAssignmentTests(TestCase):
     def _due_today(self):
         return timezone.localtime().replace(hour=23, minute=59, second=0, microsecond=0)
 
-    def _advance(self, outcome="correct_first"):
+    def _advance(self, outcome="correct_first", assignment=None):
+        url = "/deck/advance/" + (f"?assignment={assignment['id']}" if assignment else "")
         return self.client.post(
-            "/deck/advance/", data=json.dumps({"outcome": outcome}),
-            content_type="application/json",
+            url, data=json.dumps({"outcome": outcome}), content_type="application/json",
         ).json()
+
+    def _deck(self, assignment=None):
+        url = "/deck/" + (f"?assignment={assignment['id']}" if assignment else "")
+        return self.client.get(url).json()
+
+    def _deck_topics(self, assignment):
+        deck = DailyDeck.objects.get(user=self.student, assignment_id=assignment["id"])
+        return {p["topic_id"] for p in deck.problems}
 
     def _row(self, a):
         return StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
@@ -569,11 +578,17 @@ class StartAssignmentTests(TestCase):
         own = make_topic(self.course, topic_name="Own", generator_name="gcd")
         select(self.student, own)
         self.client.get("/deck/")
-        self._create_and_assign(cls)
-        # Today's deck is rebuilt with the new topic on the next practice load.
-        self.assertTrue(DailyDeck.objects.get(user=self.student).needs_regen)
-        self.client.get("/deck/")
-        self.assertFalse(DailyDeck.objects.get(user=self.student).needs_regen)
+        a = self._create_and_assign(cls)
+        # Today's default deck is rebuilt with the new topic when next loaded.
+        default = DailyDeck.objects.get(user=self.student, assignment__isnull=True)
+        self.assertTrue(default.needs_regen)
+        # With one assignment open, the practice page opens its deck instead.
+        data = self.client.get("/deck/").json()
+        self.assertEqual(data["assignment"], {"id": a["id"], "title": "HW", "open": True})
+        self.assertEqual(data["open_assignments"], 1)
+        self.assertFalse(
+            DailyDeck.objects.get(user=self.student, assignment_id=a["id"]).needs_regen
+        )
 
     def test_editing_topics_reaches_assigned_students(self, _gen):
         cls = self._class_with_student()
@@ -613,10 +628,10 @@ class StartAssignmentTests(TestCase):
         a = self._create_and_assign(cls, deck_size=3)
         sa = StudentAssignment.objects.get(assignment_id=a["id"], student=self.student)
         self.assertEqual(sa.cards_answered, 0)
-        # The deck is rebuilt after the 2 answered cards with today's sitting
-        # of the assignment (at least 4 cards), past the daily 3.
+        # The assignment's own deck holds today's sitting of it (at least 4
+        # cards), past the daily 3.
         data = self.client.get("/deck/").json()
-        self.assertEqual((data["current_number"], data["total"]), (3, 6))
+        self.assertEqual((data["current_number"], data["total"]), (1, 4))
 
     def test_open_assignments_count_the_same_cards(self, _gen):
         settings = Settings.load(self.student)
@@ -625,19 +640,97 @@ class StartAssignmentTests(TestCase):
 
         small, _ = self._setup_assignment(deck_size=2)
         big, _ = self._setup_assignment(deck_size=4)
-        self.client.post(f"/assignments/{small['id']}/play/")
-        self.client.post(f"/assignments/{big['id']}/play/")
-        # One deck covers both: the larger share of the shared topic, not the sum.
-        self.assertEqual(self.client.get("/deck/").json()["total"], 4)
+        self.assertEqual(self._deck(small)["total"], 4)
         for _ in range(2):
-            self._advance()
+            self._advance(assignment=small)
         statuses = dict(
             StudentAssignment.objects.filter(student=self.student)
             .values_list("assignment_id", "status")
         )
+        # The cards on the shared topic counted toward both.
         self.assertEqual(statuses[small["id"]], StudentAssignment.COMPLETED)
         self.assertEqual(statuses[big["id"]], StudentAssignment.IN_PROGRESS)
-        self.assertEqual(self.client.get("/deck/").json()["total"], 4)
+        self.assertEqual(self._row(big).cards_answered, 2)
+        # Now the only one open, the big one opens directly, with the rest of
+        # today's sitting on the topic.
+        data = self._deck()
+        self.assertEqual((data["assignment"]["id"], data["total"]), (big["id"], 2))
+
+    def test_several_open_assignments_are_listed_to_choose_from(self, _gen):
+        soon = timezone.now() + timezone.timedelta(days=1)
+        later, _ = self._setup_assignment(due_at=soon + timezone.timedelta(days=1))
+        undated, _ = self._setup_assignment()
+        first, _ = self._setup_assignment(due_at=soon)
+        data = self._deck()
+        self.assertEqual(
+            [c["assignment_id"] for c in data["choose"]],
+            [first["id"], later["id"], undated["id"]],
+        )
+        self.assertFalse(DailyDeck.objects.filter(user=self.student).exists())
+        # Without picking one there's no card to answer or advance past.
+        res = self.client.post(
+            "/deck/check/", data=json.dumps({"answer": "4", "from_number": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(res.status_code, 409)
+        self.assertIn("choose", self._advance())
+
+    def test_an_assignments_deck_carries_only_its_own_cards(self, _gen):
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 1
+        settings.save(update_fields=["questions_per_day"])
+        other = make_topic(self.course, topic_name="Other", generator_name="gcd")
+        a, _ = self._setup_assignment(deck_size=4)
+        b, _ = self._setup_assignment(deck_size=4, topics=[other])
+
+        data = self._deck(a)
+        self.assertEqual((data["assignment"]["id"], data["open_assignments"]), (a["id"], 2))
+        self.assertEqual(self._deck_topics(a), {self.picked.id})
+        self._deck(b)
+        self.assertEqual(self._deck_topics(b), {other.id})
+        # Answering in one deck leaves the other where it was.
+        self._advance(assignment=a)
+        self.assertEqual(self._deck(a)["current_number"], 2)
+        self.assertEqual(self._deck(b)["current_number"], 1)
+
+    def test_each_deck_fills_up_to_the_daily_setting(self, _gen):
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 10
+        settings.save(update_fields=["questions_per_day"])
+        a, _ = self._setup_assignment(deck_size=2)
+        b, _ = self._setup_assignment(deck_size=2)
+        self.assertEqual(self._deck(a)["total"], 10)
+        self.assertEqual(self._deck(b)["total"], 10)
+
+    def test_finished_assignment_practices_again_on_its_topics(self, _gen):
+        settings = Settings.load(self.student)
+        settings.questions_per_day = 3
+        settings.save(update_fields=["questions_per_day"])
+        own = make_topic(self.course, topic_name="Own", generator_name="gcd")
+        select(self.student, own)
+        a, _ = self._setup_assignment(deck_size=4, due_at=self._due_today())
+        self._deck(a)
+        for _ in range(4):
+            self._advance(assignment=a)
+        self.assertEqual(self._row(a).status, StudentAssignment.COMPLETED)
+        DailyDeck.objects.filter(user=self.student).delete()
+
+        # Practicing it again builds a deck on just its topics, without
+        # counting toward anything further.
+        res = self.client.post(f"/assignments/{a['id']}/play/")
+        self.assertEqual(res.json()["assignment_id"], a["id"])
+        data = self._deck(a)
+        self.assertEqual(
+            (data["assignment"]["id"], data["assignment"]["open"], data["total"]), (a["id"], False, 3)
+        )
+        self.assertEqual(self._deck_topics(a), {self.picked.id})
+        # With nothing open, the practice page is the default deck again.
+        self.assertNotIn("assignment", self._deck())
+
+    def test_deck_for_an_assignment_not_given_to_the_student_is_404(self, _gen):
+        a, _ = self._setup_assignment()
+        self.client.force_login(make_user())
+        self.assertEqual(self.client.get(f"/deck/?assignment={a['id']}").status_code, 404)
 
     def test_unassigned_student_cannot_start(self, _gen):
         a, _ = self._setup_assignment()

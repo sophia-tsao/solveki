@@ -29,7 +29,7 @@ from .courses import (
     set_course_topics_selected,
 )
 from .settings import settings_view, set_role
-from .deck import get_deck, advance_deck, check_answer, test_solution
+from .deck import get_deck, advance_deck, check_answer, finish_assignment_now, test_solution
 from .dashboard import view_dashboard, view_practice_calendar
 from .diagnostic import diagnostic_config, diagnostic_start, diagnostic_submit
 from .classes import (
@@ -82,6 +82,7 @@ __all__ = [
     "set_role",
     "get_deck",
     "advance_deck",
+    "finish_assignment_now",
     "check_answer",
     "test_solution",
     "view_dashboard",

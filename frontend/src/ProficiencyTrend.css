@@ -19,18 +19,16 @@
   color: #111827;
 }
 
+/* The time frame picker is a .teacher-field; in the header it keeps the same
+   width as in the side column. */
 .ptrend-range {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  margin-top: 0.35rem;
-  font-size: 0.85rem;
-  color: #374151;
+  margin: 0;
 }
 
-.ptrend-range select {
-  font: inherit;
-  padding: 0.15rem 0.35rem;
+.ptrend-head .ptrend-range {
+  align-self: flex-start;
+  width: 150px;
+  margin-top: 0.5rem;
 }
 
 .ptrend-desc {
@@ -162,31 +160,56 @@
   font-weight: 600;
 }
 
-.ptrend-table-toggle {
-  margin-top: 0.75rem;
+/* ---- Side-controls layout (student page): the plot flush against a column
+   holding the time frame and a vertical legend. The column moves above the
+   plot on narrow screens. ---- */
+
+.ptrend-body {
+  display: flex;
+  align-items: flex-start;
+}
+
+.ptrend-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ptrend-side {
+  flex: none;
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ptrend-side-legend {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  margin: 0;
   font-size: 0.85rem;
 }
 
-.ptrend-table-toggle summary {
-  cursor: pointer;
-  color: #4b5563;
+@media (max-width: 640px) {
+  .ptrend-body {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .ptrend-side {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .ptrend-side-legend {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.25rem 1rem;
+  }
 }
 
-.ptrend-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 0.5rem;
-  font-size: 0.8rem;
-}
-
-.ptrend-table th,
-.ptrend-table td {
-  border: 1px solid #e5e7eb;
-  padding: 0.25rem 0.5rem;
-  text-align: right;
-}
-
-.ptrend-table th:first-child,
-.ptrend-table td:first-child {
-  text-align: left;
+.ptrend-axis-x.is-last {
+  text-anchor: end;
 }
