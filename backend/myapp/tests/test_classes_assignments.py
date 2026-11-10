@@ -839,6 +839,30 @@ class AssignmentResultsTests(TestCase):
         self.assertEqual(by_name["Easy"], {"new": 0, "learning": 1, "familiar": 0, "proficient": 1})
         self.assertEqual(by_name["Hard"], {"new": 2, "learning": 0, "familiar": 0, "proficient": 0})
 
+    def test_timeline_tracks_band_switches_since_the_assignment_started(self):
+        student = make_user()
+        a = self._assign_to_student(student)
+        today = timezone.localdate()
+        ago = lambda days: (today - timezone.timedelta(days=days)).isoformat()
+        StudentAssignment.objects.filter(assignment_id=a["id"], student=student).update(
+            started_at=timezone.now() - timezone.timedelta(days=4),
+        )
+        # Easy: 0 until graded two days ago, 30 since; Hard never practiced.
+        # The average goes 0 (new) -> 15 (familiar).
+        TopicReview.objects.create(user=student, topic=self.easy, interval=30, repetitions=1, ease=2.5)
+        DailyTopicGrade.objects.create(
+            user=student, topic=self.easy, date=today - timezone.timedelta(days=2),
+            applied_quality=5, snapshot_ease=2.5, snapshot_interval=0, snapshot_repetitions=0,
+        )
+
+        self.client.force_login(self.teacher)
+        res = self.client.get(f"/assignments/{a['id']}/results/", {"today": today.isoformat()}).json()
+        self.assertEqual(res["students"][0]["timeline"], [
+            {"band": "new", "start": ago(4), "end": ago(3)},
+            {"band": "familiar", "start": ago(2), "end": ago(0)},
+        ])
+        self.assertEqual(res["timeline_range"], {"start": ago(4), "end": ago(0)})
+
     def test_struggled_ranks_assigned_topics_by_misses(self):
         student = make_user()
         a = self._assign_to_student(student)

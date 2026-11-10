@@ -47,9 +47,58 @@ describe('AssignmentDetail', () => {
     expect(within(struggled).getByText('Decimals')).toBeInTheDocument();
     expect(within(struggled).getByText(/25% right first try · 8 answers · 3 students missed it/)).toBeInTheDocument();
 
-    const fractionsRow = screen.getByRole('cell', { name: 'Fractions' }).closest('tr');
-    expect(within(fractionsRow).getByRole('img'))
-      .toHaveAccessibleName('New: 1, Learning: 0, Familiar: 2, Proficient: 1');
+    // One bar per band for the picked topic, the first by default.
+    const bar = (name) => screen.getByRole('img', { name });
+    expect(bar('Fractions, Familiar: 2 students')).toBeInTheDocument();
+    expect(bar('Fractions, New: 1 student')).toBeInTheDocument();
+
+    // Hovering a bar shows its share of the topic's students.
+    fireEvent.mouseEnter(bar('Fractions, Familiar: 2 students').closest('.tbc-col'));
+    const card = screen.getByRole('tooltip');
+    expect(within(card).getByText('2 of 4 students')).toBeInTheDocument();
+    expect(within(card).getByText('50%')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Topic'), { target: { value: '2' } });
+    expect(bar('Decimals, New: 4 students')).toBeInTheDocument();
+    expect(bar('Decimals, Familiar: 0 students')).toBeInTheDocument();
+  });
+
+  it('draws each student’s familiarity timeline and shows the date on hover', async () => {
+    apiFetch.mockResolvedValueOnce(json({
+      assignment: { title: 'HW 1', deck_size: 10, classes: [] },
+      topics: [], struggled: [], num_students: 1, num_completed: 0, band_totals: {},
+      timeline_range: { start: '2026-10-01', end: '2026-10-10' },
+      students: [{
+        student_id: 1, name: 'Ada', class_id: 1, due_at: null, cards_answered: 0,
+        completion_pct: 0, max_reached: false, late: false, overdue: false, status: 'in_progress',
+        proficiency: BANDS_MIXED,
+        timeline: [
+          { band: 'new', start: '2026-10-03', end: '2026-10-05' },
+          { band: 'learning', start: '2026-10-06', end: '2026-10-10' },
+        ],
+      }],
+    }));
+    renderWithClient(<AssignmentDetail assignmentId={7} onOpenStudent={() => {}} />);
+
+    const row = (await screen.findByRole('cell', { name: 'Ada' })).closest('tr');
+    const bar = within(row).getByRole('img');
+    expect(bar).toHaveAccessibleName('New Oct 3–Oct 5, Learning Oct 6–Oct 10');
+    expect(apiFetch).toHaveBeenCalledWith('/assignments/7/results/?today=2026-10-24');
+
+    // 10 days across 100px: x=75 is the 8th day, Oct 8.
+    const hit = bar.parentElement;
+    hit.getBoundingClientRect = () => ({ left: 0, width: 100, top: 0, height: 10 });
+    fireEvent.mouseMove(hit, { clientX: 75 });
+    const card = within(row).getByRole('tooltip');
+    expect(within(card).getByText('Oct 8')).toBeInTheDocument();
+    expect(within(card).getByText('Learning')).toBeInTheDocument();
+    expect(within(card).getByText('since Oct 6')).toBeInTheDocument();
+
+    // Before the assignment reached the student.
+    fireEvent.mouseMove(hit, { clientX: 5 });
+    expect(within(row).getByText('Not assigned yet')).toBeInTheDocument();
+    fireEvent.mouseLeave(hit);
+    expect(within(row).queryByRole('tooltip')).toBeNull();
   });
 
   it('shows each student’s completion with needs-help and late flags', async () => {

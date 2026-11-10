@@ -1,0 +1,216 @@
+/* ---- Shared hover card ---- */
+
+.ad-tooltip {
+  position: absolute;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  background: #111827;
+  color: #f9fafb;
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  z-index: 3;
+}
+
+.ad-tooltip-title {
+  font-weight: 600;
+}
+
+.ad-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ad-tooltip-val {
+  margin-left: auto;
+  padding-left: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.ad-tooltip-muted {
+  color: #d1d5db;
+}
+
+/* ---- Familiarity timeline (one per student) ---- */
+
+.tl {
+  position: relative;
+  display: block;
+  padding: 6px 0; /* a hit target taller than the bar */
+  cursor: crosshair;
+}
+
+/* The empty track is the time before the assignment reached the student. */
+.tl-track {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: #f3f4f6;
+}
+
+.tl-seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  box-sizing: border-box;
+  background-clip: padding-box;
+}
+
+/* A switch to a new band: a surface gap marks the boundary. */
+.tl-seg.is-switch {
+  border-left: 2px solid #ffffff;
+}
+
+.tl-cursor {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  margin-left: -1px;
+  background: #111827;
+  border-radius: 1px;
+  pointer-events: none;
+}
+
+.tl-tooltip {
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+}
+
+.tl-range {
+  display: block;
+  font-weight: 400;
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* ---- Familiarity by topic (one topic's students per band) ---- */
+
+.tbc {
+  --tbc-axis-w: 2rem;
+  --tbc-plot-h: 220px;
+  max-width: calc(28rem + var(--tbc-axis-w));
+  margin: 0 0 1.5rem;
+}
+
+.tbc-picker {
+  width: 240px;
+  margin: 0 0 0.75rem;
+}
+
+.tbc-axis-title {
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.5rem;
+}
+
+.tbc-chart {
+  display: flex;
+}
+
+.tbc-yaxis {
+  position: relative;
+  flex: none;
+  width: var(--tbc-axis-w);
+  height: var(--tbc-plot-h);
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.tbc-yaxis span {
+  position: absolute;
+  right: 0.5rem;
+  transform: translateY(50%);
+  font-variant-numeric: tabular-nums;
+}
+
+.tbc-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.tbc-plot {
+  position: relative;
+  display: grid;
+  height: var(--tbc-plot-h);
+  border-bottom: 1px solid #d1d5db;
+}
+
+.tbc-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.tbc-gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #eef0f2;
+}
+
+/* The whole column is the hit target, taller than its bar. */
+.tbc-col {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  transition: opacity 120ms ease;
+}
+
+/* While one bar is hovered, the others step back. */
+.tbc-col.is-dimmed {
+  opacity: 0.45;
+}
+
+/* The bar, with its count sitting just above it. */
+.tbc-bar-wrap {
+  position: relative;
+  display: flex;
+  width: 50%;
+  max-width: 48px;
+}
+
+.tbc-bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+}
+
+.tbc-value {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  padding-bottom: 0.2rem;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.tbc-tooltip {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.tbc-xlabels {
+  display: grid;
+  margin-top: 0.4rem;
+}
+
+.tbc-label {
+  font-size: 0.8rem;
+  color: #374151;
+  text-align: center;
+}

@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { apiFetch } from './auth.js';
-import { BandBar } from './BandBar.jsx';
+import { apiFetch, localDay } from './auth.js';
+import { BandLegend } from './BandBar.jsx';
+import { BandTimeline, TopicBandChart, fmtDay } from './AssignmentCharts.jsx';
 import AssignmentProgress from './AssignmentProgress.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
 import './Teacher.css';
@@ -16,8 +17,10 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
   const { data, isPending, error } = useQuery({
     queryKey: ['assignment', assignmentId, 'results', classFilter],
     queryFn: async () => {
-      const q = classFilter ? `?class=${classFilter}` : '';
-      const res = await apiFetch(`/assignments/${assignmentId}/results/${q}`);
+      // The local day is sent so the timelines end on the teacher's today.
+      const params = new URLSearchParams({ today: localDay() });
+      if (classFilter) params.set('class', classFilter);
+      const res = await apiFetch(`/assignments/${assignmentId}/results/?${params}`);
       if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
       return res.json();
     },
@@ -33,7 +36,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
   if (isPending) return <div className="teacher-page">{backButton}<p>Loading…</p></div>;
   if (error) return <div className="teacher-page">{backButton}<p className="teacher-error">Failed to load results.</p></div>;
 
-  const { assignment, topics, struggled, num_students, num_completed, students } = data;
+  const { assignment, topics, struggled, num_students, num_completed, students, timeline_range } = data;
   const classes = assignment.classes || [];
 
   return (
@@ -74,42 +77,48 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
       </div>
 
       <h2>Familiarity by topic</h2>
-      <p className="teacher-help">How many assigned students sit in each band for each topic.</p>
-      <table className="teacher-table">
-        <thead>
-          <tr><th>Topic</th><th>Familiarity</th></tr>
-        </thead>
-        <tbody>
-          {topics.map((t) => (
-            <tr key={t.topic_id}>
-              <td>{t.topic_name}</td>
-              <td style={{ minWidth: '200px' }}><BandBar counts={t.proficiency} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <p className="teacher-help">Pick a topic to see how many assigned students sit in each band.</p>
+      {topics.length === 0
+        ? <p className="teacher-empty">This assignment has no topics.</p>
+        : <TopicBandChart topics={topics} />}
 
       <h2>Per-student progress</h2>
       {students.length === 0 ? (
         <p className="teacher-empty">No students are assigned this yet.</p>
       ) : (
-        <table className="teacher-table">
-          <thead>
-            <tr>
-              <th>Student</th><th>Completion</th><th>Familiarity</th><th>Due</th>
-            </tr>
-          </thead>
-          <tbody>
-            {students.map((s) => (
-              <tr key={s.student_id}>
-                <td className="clickable" onClick={() => onOpenStudent(s.student_id)}>{s.name}</td>
-                <td><AssignmentProgress row={s} /></td>
-                <td style={{ minWidth: '160px' }}><BandBar counts={s.proficiency} /></td>
-                <td>{fmtDue(s.due_at)}</td>
+        <>
+          <p className="teacher-help">
+            Each bar shows a student’s familiarity on these topics over time; a new color is a switch
+            to a new band. Hover a bar to see the date.
+          </p>
+          <BandLegend />
+          <table className="teacher-table">
+            <thead>
+              <tr>
+                <th>Student</th><th>Completion</th>
+                <th>
+                  Familiarity over time
+                  {timeline_range && (
+                    <span className="tl-range">{fmtDay(timeline_range.start)} – {fmtDay(timeline_range.end)}</span>
+                  )}
+                </th>
+                <th>Due</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {students.map((s) => (
+                <tr key={s.student_id}>
+                  <td className="clickable" onClick={() => onOpenStudent(s.student_id)}>{s.name}</td>
+                  <td><AssignmentProgress row={s} /></td>
+                  <td style={{ minWidth: '220px', width: '40%' }}>
+                    <BandTimeline segments={s.timeline} range={timeline_range} />
+                  </td>
+                  <td>{fmtDue(s.due_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );

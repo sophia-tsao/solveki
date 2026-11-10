@@ -1,3 +1,4 @@
+import datetime
 import json
 import logging
 
@@ -11,7 +12,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
     Assignment, AssignmentTopic, AssignmentClass, Classroom, ClassEnrollment,
-    DailyDeck, StudentAssignment, Topic, UserTopicSelection, TopicReview,
+    DailyDeck, DailyTopicGrade, StudentAssignment, Topic, UserTopicSelection, TopicReview,
 )
 from .common import _require_auth, _require_teacher
 from .deck import _client_today, _get_or_create_today_deck, _interval_band, _scope_for
@@ -359,6 +360,60 @@ def _empty_bands():
     return {b: 0 for b in _BANDS}
 
 
+def _band_timelines(starts, topic_ids, current, end):
+    """Each student's familiarity band on the topics, day by day, as segments.
+
+    `starts` maps student id -> the first day to report (when the assignment
+    reached them); `current` maps (student, topic) -> today's SM-2 interval.
+    A student's band each day is that of their *average* interval across the
+    topics (0 for a topic not yet practiced), rebuilt from `DailyTopicGrade`
+    snapshots like `teacher._topic_band_history`: the interval at the end of
+    day `d` is the snapshot of the first graded day after `d`, or the current
+    interval when there is none.
+
+    Returns student id -> [{"band", "start", "end"}], oldest first, with
+    consecutive days in the same band merged and `end` inclusive.
+    """
+    if not starts or not topic_ids:
+        return {sid: [] for sid in starts}
+    grades = {}  # (student, topic) -> [(date, interval before that day's grade)], oldest first
+    for uid, tid, day, interval in (
+        DailyTopicGrade.objects.filter(user_id__in=list(starts), topic_id__in=topic_ids)
+        .order_by("date")
+        .values_list("user_id", "topic_id", "date", "snapshot_interval")
+    ):
+        grades.setdefault((uid, tid), []).append((day, interval))
+
+    out = {}
+    for sid, start in starts.items():
+        start = min(start, end)
+        # Per topic: its interval before the first graded day, then the
+        # interval it ends each graded day on.
+        values, changes = {}, {}  # topic -> interval; date -> [(topic, interval)]
+        for tid in topic_ids:
+            gs = grades.get((sid, tid), [])
+            now = current.get((sid, tid), 0)
+            values[tid] = gs[0][1] if gs else now
+            for i, (day, _) in enumerate(gs):
+                after = gs[i + 1][1] if i + 1 < len(gs) else now
+                changes.setdefault(day, []).append((tid, after))
+        for day in sorted(d for d in changes if d < start):
+            values.update(changes[day])
+
+        segments = []
+        day = start
+        while day <= end:
+            values.update(changes.get(day, ()))
+            band = _interval_band(sum(values.values()) / len(topic_ids))
+            if segments and segments[-1]["band"] == band:
+                segments[-1]["end"] = day.isoformat()
+            else:
+                segments.append({"band": band, "start": day.isoformat(), "end": day.isoformat()})
+            day += datetime.timedelta(days=1)
+        out[sid] = segments
+    return out
+
+
 def _student_due_map(assignment):
     """Map each assigned student's id -> (class_id, due_at), earliest due wins.
 
@@ -391,7 +446,8 @@ def assignment_results(request, assignment_id):
     assignment can ask for (`max_reached`, shown as "needs help") or after the
     due date (`late`), their proficiency-band mix on the assignment's topics
     (from their SM-2 state), and whether they're overdue (past due date without
-    finishing). Assignments are practiced through the
+    finishing), plus a `timeline` of the bands they've sat in since it reached
+    them (see `_band_timelines`). Assignments are practiced through the
     student's normal deck, so familiarity is measured by the SM-2 schedule the
     practice builds — not a one-off quiz score.
 
@@ -426,12 +482,15 @@ def assignment_results(request, assignment_id):
         user_id__in=student_ids, topic_id__in=topic_ids
     ).values_list("user_id", "topic_id", "interval"):
         intervals[(uid, tid)] = interval
-    progress = {  # student_id -> progress dict (see `_progress_row`)
-        row.student_id: _progress_row(row)
-        for row in StudentAssignment.objects.filter(
-            assignment=assignment, student_id__in=student_ids
-        )
-    }
+    progress = {}  # student_id -> progress dict (see `_progress_row`)
+    created = timezone.localdate(assignment.created_at)
+    starts = {sid: created for sid in student_ids}  # student_id -> first timeline day
+    for row in StudentAssignment.objects.filter(assignment=assignment, student_id__in=student_ids):
+        progress[row.student_id] = _progress_row(row)
+        if row.started_at:
+            starts[row.student_id] = timezone.localdate(row.started_at)
+    today = _client_today(request)
+    timelines = _band_timelines(starts, topic_ids, intervals, today)
 
     User = get_user_model()
     names = {
@@ -465,6 +524,7 @@ def assignment_results(request, assignment_id):
             **row,
             "overdue": bool(due_at and due_at < now and not done),
             "proficiency": bands,
+            "timeline": timelines[sid],
         })
     students_out.sort(key=lambda s: s["name"].lower())
 
@@ -481,6 +541,11 @@ def assignment_results(request, assignment_id):
         "num_students": len(student_ids),
         "num_completed": num_completed,
         "band_totals": totals,
+        # The span every student's timeline is drawn against.
+        "timeline_range": {
+            "start": min([*starts.values(), today]).isoformat(),
+            "end": today.isoformat(),
+        },
         "students": students_out,
     })
 
