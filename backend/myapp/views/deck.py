@@ -220,16 +220,19 @@ def _visible_total(user, deck):
 
 
 def _open_assignments(user, now=None):
-    """The user's in-progress assignments that still take cards, with their topics.
+    """The user's unfinished assignments that still take cards, with their topics.
 
     Returns `[(student_assignment, topic_ids, due_at)]`: the assignment's topics
     that have a generator, in the order the teacher added them, and its due date
     for the student's class (or None). An assignment past its due date that
-    doesn't allow late work is left out: its progress is frozen.
+    doesn't allow late work is left out: its progress is frozen. One that
+    reached the student but is still marked not started (assigning normally
+    starts it) counts as open too, so it can be begun from the practice page.
     """
     now = now or timezone.now()
     rows = list(
-        StudentAssignment.objects.filter(student=user, status=StudentAssignment.IN_PROGRESS)
+        StudentAssignment.objects.filter(student=user)
+        .exclude(status=StudentAssignment.COMPLETED)
         .select_related("assignment")
     )
     if not rows:

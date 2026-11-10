@@ -675,6 +675,19 @@ class StartAssignmentTests(TestCase):
         self.assertEqual(res.status_code, 409)
         self.assertIn("choose", self._advance())
 
+    def test_not_started_assignments_are_listed_to_choose_from(self, _gen):
+        started, _ = self._setup_assignment()
+        fresh, _ = self._setup_assignment()
+        StudentAssignment.objects.filter(assignment_id=fresh["id"], student=self.student).update(
+            status=StudentAssignment.NOT_STARTED, started_at=None,
+        )
+        data = self._deck()
+        self.assertEqual(
+            {c["assignment_id"] for c in data["choose"]}, {started["id"], fresh["id"]},
+        )
+        # Its deck opens from the list like any open assignment's.
+        self.assertEqual(self._deck(fresh)["assignment"]["id"], fresh["id"])
+
     def test_an_assignments_deck_carries_only_its_own_cards(self, _gen):
         settings = Settings.load(self.student)
         settings.questions_per_day = 1
