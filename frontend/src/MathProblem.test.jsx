@@ -663,8 +663,8 @@ describe('MathProblem — assignment decks', () => {
 
     expect(await screen.findByText('Choose an assignment')).toBeInTheDocument();
     expect(screen.getByText('Unit 3')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Keep practicing' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Practice' }));
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Begin' }));
     expect(onOpenAssignment).toHaveBeenCalledWith(9);
   });
 

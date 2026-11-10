@@ -19,7 +19,7 @@ function AssignmentChooser({ choices, onOpen }) {
               </span>
             </div>
             <button className="assignments-item-action" onClick={() => onOpen(a.assignment_id)}>
-              {a.cards_answered > 0 ? 'Keep practicing' : 'Practice'}
+              {a.cards_answered > 0 ? 'Continue' : 'Begin'}
             </button>
           </li>
         ))}

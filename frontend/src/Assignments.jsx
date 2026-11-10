@@ -74,7 +74,7 @@ function Assignments({ onStarted }) {
                     >
                       {startingId === a.assignment_id
                         ? 'Opening…'
-                        : a.cards_answered > 0 ? 'Keep practicing' : 'Practice'}
+                        : a.cards_answered > 0 ? 'Continue' : 'Begin'}
                     </button>
                   </li>
                 ))}
