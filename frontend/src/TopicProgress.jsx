@@ -194,11 +194,51 @@ export function ProficiencyPie({ counts, total }) {
   );
 }
 
+// Group selected topics (each with an `interval`) by proficiency level.
+function groupByLevel(selected) {
+  const byLevel = { new: [], learning: [], young: [], mature: [] };
+  for (const t of selected) byLevel[intervalLevel(t.interval)].push(t);
+  return byLevel;
+}
+
 /**
- * The shared spaced-repetition progress view: the proficiency donut plus the
- * topics grouped into proficiency decks. Rendered both on a student's own
- * dashboard and — identically — on the teacher's student-detail page, so the
- * teacher sees a student's progress in the exact format the student does.
+ * "Topics by proficiency": every selected topic grouped into proficiency decks,
+ * plus the "Shown soon" deck of `upcoming` topics. Part of TopicProgress, and
+ * shown on its own on the teacher's student-detail page.
+ */
+export function TopicDecks({ selected = [], upcoming = [], description }) {
+  const byLevel = groupByLevel(selected);
+  return (
+    <section className="dash-section dash-section-decks">
+      <div className="dash-section-head">
+        <h2 className="dash-section-title">Topics by proficiency</h2>
+        <p className="dash-section-desc">{description}</p>
+      </div>
+      <div className="dash-decks">
+        {CATEGORIES.map((c) => (
+          <Deck
+            key={c.level}
+            title={c.label}
+            hint={c.hint}
+            level={c.level}
+            topics={byLevel[c.level]}
+          />
+        ))}
+        <Deck
+          title="Shown soon"
+          hint="The topics the next practice session will draw from."
+          topics={upcoming}
+        />
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The student's spaced-repetition progress view on their own dashboard: the
+ * proficiency donut plus the topics grouped into proficiency decks. The
+ * teacher's student-detail page shows the same decks (TopicDecks), without the
+ * donut.
  *
  * `selected` is every selected topic (each with an `interval`); `upcoming` are
  * the topics the next practice session will draw ("Shown soon"). `calendar`,
@@ -206,8 +246,7 @@ export function ProficiencyPie({ counts, total }) {
  * their practice calendar; the teacher view omits it).
  */
 function TopicProgress({ selected = [], upcoming = [], calendar = null }) {
-  const byLevel = { new: [], learning: [], young: [], mature: [] };
-  for (const t of selected) byLevel[intervalLevel(t.interval)].push(t);
+  const byLevel = groupByLevel(selected);
   const counts = {
     new: byLevel.new.length,
     learning: byLevel.learning.length,
@@ -234,32 +273,13 @@ function TopicProgress({ selected = [], upcoming = [], calendar = null }) {
         </div>
       </section>
 
-      <section className="dash-section dash-section-decks">
-        <div className="dash-section-head">
-          <h2 className="dash-section-title">Topics by proficiency</h2>
-          <p className="dash-section-desc">
-            {calendar
-              ? "Every topic you've selected, grouped by how well you've learned it."
-              : "Every selected topic, grouped by how well it's been learned."}
-          </p>
-        </div>
-        <div className="dash-decks">
-          {CATEGORIES.map((c) => (
-            <Deck
-              key={c.level}
-              title={c.label}
-              hint={c.hint}
-              level={c.level}
-              topics={byLevel[c.level]}
-            />
-          ))}
-          <Deck
-            title="Shown soon"
-            hint="The topics the next practice session will draw from."
-            topics={upcoming}
-          />
-        </div>
-      </section>
+      <TopicDecks
+        selected={selected}
+        upcoming={upcoming}
+        description={calendar
+          ? "Every topic you've selected, grouped by how well you've learned it."
+          : "Every selected topic, grouped by how well it's been learned."}
+      />
     </>
   );
 }

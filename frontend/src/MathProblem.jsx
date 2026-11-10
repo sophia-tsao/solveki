@@ -166,6 +166,9 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
   // deck, and how many assignments are open (to offer a way back to the list).
   const [deckAssignment, setDeckAssignment] = useState(null);
   const [openAssignments, setOpenAssignments] = useState(0);
+  // On a finished assignment deck: cards the assignment still needs on later
+  // days, which the student can choose to do now (see finishNow). 0 for none.
+  const [cardsLeft, setCardsLeft] = useState(0);
   const [error, setError] = useState(null);
   const [flipped, setFlipped] = useState(false); // true rotates the card to its back
   const [result, setResult] = useState('correct'); // 'correct' | 'incorrect' — back-face content
@@ -216,6 +219,7 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
     if (result.completed) {
       // Fall back to the last known total when the payload omits it.
       setTotal((prev) => result.total ?? prev);
+      setCardsLeft(result.cards_left ?? 0);
       setStatus('completed');
       log.info('Deck completed');
       if (celebrating) celebrate();
@@ -309,6 +313,21 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
     onSuccess: (data) => applyDeck(data, { celebrating: true }),
     onError: (err) => {
       log.error('Failed to advance deck:', err.message);
+      setError(err.message);
+    },
+  });
+
+  // "Finish it now": move the rest of the assignment into today's deck, which
+  // resumes on the first of the added cards.
+  const finishNow = useMutation({
+    mutationFn: async () => {
+      const response = await apiFetch(`/deck/finish-now/?today=${localDay()}${scopeParam}`, { method: 'POST' });
+      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      return response.json();
+    },
+    onSuccess: (data) => applyDeck(data),
+    onError: (err) => {
+      log.error('Failed to finish assignment now:', err.message);
       setError(err.message);
     },
   });
@@ -493,9 +512,28 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
           {showConfetti && <Confetti />}
           <div className="math-problem-card math-problem-card-centered">
             {assignmentLabel}
-            <span className="math-problem-display">
-              You've finished all {total} question{total === 1 ? '' : 's'} for today. Come back tomorrow for a new set!
-            </span>
+            {cardsLeft > 0 ? (
+              <>
+                <span className="math-problem-display">
+                  You've finished today's {total} question{total === 1 ? '' : 's'} for this assignment.
+                </span>
+                <span className="math-problem-finish-note">
+                  {cardsLeft} more question{cardsLeft === 1 ? ' is' : 's are'} left. You can do them over the
+                  days before it's due, or finish the assignment now.
+                </span>
+                <button
+                  className="math-problem-submit math-problem-finish-now"
+                  onClick={() => finishNow.mutate()}
+                  disabled={finishNow.isPending}
+                >
+                  Finish it now
+                </button>
+              </>
+            ) : (
+              <span className="math-problem-display">
+                You've finished all {total} question{total === 1 ? '' : 's'} for today. Come back tomorrow for a new set!
+              </span>
+            )}
           </div>
         </div>
       </>

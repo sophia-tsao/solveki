@@ -51,7 +51,7 @@ function AccuracyBar({ accuracy, showPercent = false }) {
 }
 
 // One topic in a focus column: its name over a bar. Resting the pointer on it
-// for `HOVER_DELAY_MS` (or tabbing to it) writes the exact figures into the
+// for `HOVER_DELAY_MS` (or clicking or tabbing to it) writes the exact figures into the
 // bar and opens a detail card just below the row; leaving fades it back out.
 function FocusItem({ topic, renderBar, detail }) {
   const [card, setCard] = useState('closed'); // 'closed' | 'open' | 'closing'
@@ -79,8 +79,10 @@ function FocusItem({ topic, renderBar, detail }) {
         timer.current = setTimeout(open, HOVER_DELAY_MS);
       }}
       onMouseLeave={close}
+      // A click (or tap) opens at once, like a finished hover.
+      onClick={open}
       onFocus={(e) => {
-        // Keyboard focus opens at once; a click's focus waits for the hover delay.
+        // Keyboard focus opens at once; a click's focus is handled by onClick.
         if (focusVisible(e.currentTarget)) open();
       }}
       onBlur={close}
@@ -229,7 +231,6 @@ function TeacherOverview({ onOpenClass }) {
             }
             scope={selected ? 'class' : 'all'}
             classId={selected ? selected.id : undefined}
-            defaultDays={30}
           />
 
           {data.classes.length === 0 ? (

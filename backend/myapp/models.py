@@ -397,6 +397,9 @@ class StudentAssignment(models.Model):
     max_reached = models.BooleanField(default=False)
     late = models.BooleanField(default=False)
     completed_at = models.DateTimeField(blank=True, null=True)
+    # The day the student chose "Finish it now": it counts as the assignment's
+    # last day, so all its remaining cards are due then (see `deck._days_left`).
+    finish_on = models.DateField(blank=True, null=True)
 
     class Meta:
         constraints = [
@@ -416,12 +419,12 @@ class DailyDeck(models.Model):
     """
     user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="decks")
     date = models.DateField()
-    problems = models.JSONField(default=list)
-    current_index = models.IntegerField(default=0)
-    # Wrong answers submitted for the current card (see check_answer). Kept
     assignment = models.ForeignKey(
         "Assignment", null=True, blank=True, on_delete=models.CASCADE, related_name="decks"
     )
+    problems = models.JSONField(default=list)
+    current_index = models.IntegerField(default=0)
+    # Wrong answers submitted for the current card (see check_answer). Kept
     # server-side so the solution is only revealed once attempts run out, and
     # reset whenever the current card changes.
     attempts = models.IntegerField(default=0)

@@ -730,4 +730,26 @@ describe('MathProblem — assignment decks', () => {
     expect(urls).toContain('/deck/advance/?today=2026-07-20&assignment=7');
   });
 
+  it("offers to finish the assignment now once today's share is done", async () => {
+    const user = userEvent.setup();
+    const assignment = { id: 7, title: 'Unit 3', open: true };
+    apiFetch
+      .mockResolvedValueOnce(deckResponse({ completed: true, total: 4, cards_left: 8, assignment, open_assignments: 1 }))
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 5, total: 12, assignment, open_assignments: 1 }));
+    renderWithClient(<MathProblem assignmentId={7} />);
+    expect(await screen.findByText(/You've finished today's 4 questions for this assignment/)).toBeInTheDocument();
+    expect(screen.getByText(/8 more questions are left/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Finish it now' }));
+    expect(apiFetch).toHaveBeenCalledWith('/deck/finish-now/?today=2026-07-20&assignment=7', { method: 'POST' });
+    await findQuestion(5, 12);
+  });
+
+  it('offers nothing more when the assignment has no cards left', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse({
+      completed: true, total: 4, assignment: { id: 7, title: 'Unit 3', open: true }, open_assignments: 1,
+    }));
+    renderWithClient(<MathProblem assignmentId={7} />);
+    expect(await screen.findByText(/You've finished all 4 questions for today/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Finish it now' })).not.toBeInTheDocument();
+  });
 });
