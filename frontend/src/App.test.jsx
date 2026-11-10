@@ -170,6 +170,22 @@ describe('App — routing', () => {
     });
     expect(await screen.findByText('courses-page')).toBeInTheDocument();
   });
+
+  it('keeps a teacher on their deep-linked page across a reload', async () => {
+    // The first render happens before the session resolves, while the role is
+    // still the "student" fallback — the teacher's hash must survive that.
+    window.location.hash = '#/classes';
+    // Let jsdom's async hashchange for that assignment fire before mounting —
+    // a real reload has no hashchange, and the listener would mask the bug.
+    await new Promise((r) => setTimeout(r, 0));
+    fetchMe.mockResolvedValue({
+      authenticated: true,
+      user: { name: 'Grace', role: 'teacher', role_chosen: true },
+    });
+    renderWithClient(<App />);
+    expect(await screen.findByText('classes-page')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/classes');
+  });
 });
 
 describe('App — logout', () => {

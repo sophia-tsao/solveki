@@ -1,13 +1,19 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, localDay } from './auth.js';
 import AssignmentProgress from './AssignmentProgress.jsx';
-import TopicProgress from './TopicProgress.jsx';
+import { TopicDecks } from './TopicProgress.jsx';
 import ProficiencyTrend from './ProficiencyTrend.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
 import './Teacher.css';
+import './Dashboard.css';
 
 function fmtStatus(s) {
   return s.replace('_', ' ');
+}
+
+function fmtDate(iso) {
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
 // A duration in seconds as "1h 5m", "12m" or "45s".
@@ -63,7 +69,73 @@ function PracticeActivity({ activity }) {
   );
 }
 
-function StudentDetail({ studentId }) {
+// A one-line callout of what needs the teacher's attention, or nothing.
+function Attention({ assignments, activity }) {
+  const overdue = assignments.filter((a) => a.overdue).length;
+  const needsHelp = assignments.filter((a) => a.max_reached).length;
+  const items = [];
+  if (overdue) items.push(`${overdue} overdue assignment${overdue === 1 ? '' : 's'}`);
+  if (needsHelp) {
+    items.push(`${needsHelp} assignment${needsHelp === 1 ? '' : 's'} finished without getting solid on every topic`);
+  }
+  if (activity && activity.week.cards_answered === 0) items.push('no practice in the last 7 days');
+  if (items.length === 0) return null;
+  return (
+    <div className="tg-note warn sd-attention" role="status">
+      <span className="tg-note-icon">!</span>
+      <span>Needs attention: {items.join(' · ')}</span>
+    </div>
+  );
+}
+
+// Assignments shown before "View more".
+const RECENT_ASSIGNMENTS = 3;
+
+// The student's assignments, most recently assigned first, collapsed to the
+// latest few. Clicking a row opens that assignment's report.
+function Assignments({ assignments, onOpenAssignment }) {
+  const [showAll, setShowAll] = useState(false);
+  if (assignments.length === 0) return <p className="teacher-empty">No assignments yet.</p>;
+  const sorted = [...assignments].sort((a, b) => b.assigned_at.localeCompare(a.assigned_at));
+  const visible = showAll ? sorted : sorted.slice(0, RECENT_ASSIGNMENTS);
+  const hidden = sorted.length - RECENT_ASSIGNMENTS;
+  return (
+    <>
+      <table className="teacher-table">
+        <thead>
+          <tr><th>Assignment</th><th>Class</th><th>Due</th><th>Status</th><th>Completion</th></tr>
+        </thead>
+        <tbody>
+          {visible.map((a) => (
+            <tr
+              key={a.assignment_id}
+              className="sd-row-link"
+              onClick={() => onOpenAssignment(a.assignment_id)}
+            >
+              <td className="clickable">{a.title}</td>
+              <td>{a.class_name}</td>
+              <td>{a.due_at ? fmtDate(a.due_at) : '—'}</td>
+              <td>{fmtStatus(a.status)}</td>
+              <td><AssignmentProgress row={a} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {hidden > 0 && (
+        <button
+          type="button"
+          className="deck-toggle"
+          aria-expanded={showAll}
+          onClick={() => setShowAll((v) => !v)}
+        >
+          {showAll ? 'View fewer' : `View more (${hidden})`}
+        </button>
+      )}
+    </>
+  );
+}
+
+function StudentDetail({ studentId, onOpenAssignment }) {
   const { data, isPending, error } = useQuery({
     queryKey: ['teacher', 'student', studentId],
     queryFn: async () => {
@@ -81,48 +153,42 @@ function StudentDetail({ studentId }) {
     <div className="teacher-page teacher-page-wide">
       <h1>{data.student.name}</h1>
       <p className="teacher-card-stat">{data.student.email}</p>
+      <Attention assignments={data.assignments} activity={data.activity} />
 
       <h2>Practice</h2>
       {data.activity && <PracticeActivity activity={data.activity} />}
-      <StruggledTopics
-        topics={data.struggled || []}
-        emptyText="Nothing stands out — no misses in the last 30 days."
-      />
 
-      <ProficiencyTrend
-        title="Familiarity over time"
-        description="This student's topics in each proficiency band, day by day."
-        scope="student"
-        studentId={data.student.id}
-      />
-
-      <h2>Assignments</h2>
-      {data.assignments.length === 0 ? (
-        <p className="teacher-empty">No assignments yet.</p>
-      ) : (
-        <table className="teacher-table">
-          <thead>
-            <tr><th>Assignment</th><th>Class</th><th>Status</th><th>Completion</th></tr>
-          </thead>
-          <tbody>
-            {data.assignments.map((a) => (
-              <tr key={a.assignment_id}>
-                <td>{a.title}</td>
-                <td>{a.class_name}</td>
-                <td>{fmtStatus(a.status)}</td>
-                <td><AssignmentProgress row={a} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-
-      <h2>Topic progress</h2>
+      <h2>Proficiency</h2>
+      {/* Weak spots beside the trend, then where every topic stands now. */}
+      <div className="sd-progress">
+        <div>
+          <StruggledTopics
+            topics={data.struggled || []}
+            emptyText="Nothing stands out — no misses in the last 30 days."
+          />
+        </div>
+        <div className="sd-trend">
+          <ProficiencyTrend
+            title="Familiarity over time"
+            description="This student's topics in each proficiency band, day by day."
+            scope="student"
+            studentId={data.student.id}
+            sideControls
+          />
+        </div>
+      </div>
       {data.topics.length === 0 ? (
         <p className="teacher-empty">No topics selected.</p>
       ) : (
-        <TopicProgress selected={data.topics} upcoming={data.upcoming || []} />
+        <TopicDecks
+          selected={data.topics}
+          upcoming={data.upcoming || []}
+          description="Every selected topic, grouped by how well it's been learned."
+        />
       )}
+
+      <h2>Assignments</h2>
+      <Assignments assignments={data.assignments} onOpenAssignment={onOpenAssignment} />
     </div>
   );
 }

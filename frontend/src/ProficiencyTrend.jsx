@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, localDay } from './auth.js';
 import { LEVEL_COLOR } from './TopicProgress.jsx';
+import './Teacher.css';
 import './ProficiencyTrend.css';
 
 // The four proficiency bands, in progression order, each mapped to the shared
@@ -29,7 +30,6 @@ const MAX_DAILY_BARS = 90;
 const VIEW_W = 640;
 const VIEW_H = 300;
 const MARGIN = { top: 24, right: 16, bottom: 36, left: 40 };
-const PLOT_W = VIEW_W - MARGIN.left - MARGIN.right;
 const PLOT_H = VIEW_H - MARGIN.top - MARGIN.bottom;
 const BASELINE = MARGIN.top + PLOT_H;
 const MAX_BAR_W = 24;
@@ -81,11 +81,15 @@ function useHistory({ scope, classId, studentId, days }) {
  * by the students' average familiarity with it, so bars grow as topics are
  * added. Used on the teacher overview (all students / per class) and on a
  * single student's page. `defaultDays` is the starting time frame, which the
- * viewer can switch.
+ * viewer can switch. `sideControls` moves the time frame and legend into a
+ * column flush against the plot's right edge (the student page).
  */
-function ProficiencyTrend({ title, description, scope = 'all', classId, studentId, defaultDays = 90 }) {
+function ProficiencyTrend({
+  title, description, scope = 'all', classId, studentId, defaultDays = 30, sideControls = false,
+}) {
   const [hover, setHover] = useState(null); // index into bars, or null
   const [days, setDays] = useState(defaultDays);
+  const rangeId = useId();
   const { data, isPending, error } = useHistory({ scope, classId, studentId, days });
 
   const series = data?.series || [];
@@ -98,38 +102,28 @@ function ProficiencyTrend({ title, description, scope = 'all', classId, studentI
   const yTicks = niceTicks(Math.max(0, ...bars.map(total)));
   const yMax = yTicks[yTicks.length - 1];
   const yScale = (v) => BASELINE - (v / yMax) * PLOT_H;
-  const slot = PLOT_W / Math.max(n, 1);
+  // With side controls the plot runs flush against the column to its right.
+  const marginRight = sideControls ? 0 : MARGIN.right;
+  const plotW = VIEW_W - MARGIN.left - marginRight;
+  const slot = plotW / Math.max(n, 1);
   const barW = Math.max(1, Math.min(MAX_BAR_W, slot * 0.7));
   const barX = (i) => MARGIN.left + i * slot + (slot - barW) / 2;
   const xTickIdx = n <= 1 ? [0] : [0, Math.floor((n - 1) / 2), n - 1];
   const point = hover != null ? bars[hover] : null;
 
-  return (
-    <figure className="ptrend">
-      <figcaption className="ptrend-head">
-        <span className="ptrend-title">{title}</span>
-        {description && <span className="ptrend-desc">{description}</span>}
-        <label className="ptrend-range">
-          <span>Time frame</span>
-          <select
-            value={days}
-            onChange={(e) => { setDays(Number(e.target.value)); setHover(null); }}
-          >
-            {RANGES.map((r) => <option key={r.days} value={r.days}>{r.label}</option>)}
-          </select>
-        </label>
-      </figcaption>
+  const onRange = (e) => { setDays(Number(e.target.value)); setHover(null); };
+  // The time frame picker, styled as a .teacher-field like the page's other filters.
+  const rangeField = (
+    <div className="teacher-field ptrend-range">
+      <label htmlFor={rangeId}>Time frame</label>
+      <select id={rangeId} value={days} onChange={onRange}>
+        {RANGES.map((r) => <option key={r.days} value={r.days}>{r.label}</option>)}
+      </select>
+    </div>
+  );
 
-      {/* Legend — identity is never color alone. */}
-      <ul className="ptrend-legend">
-        {BANDS.map((b) => (
-          <li key={b.key} className="ptrend-legend-item">
-            <span className="ptrend-swatch" style={{ background: b.color }} />
-            {b.label}
-          </li>
-        ))}
-      </ul>
-
+  const chart = (
+    <>
       {isPending && <p className="ptrend-note">Loading…</p>}
       {error && <p className="ptrend-note ptrend-error">Failed to load progress.</p>}
       {!isPending && !error && n === 0 && (
@@ -151,17 +145,26 @@ function ProficiencyTrend({ title, description, scope = 'all', classId, studentI
             </text>
             {yTicks.map((t) => (
               <g key={t}>
-                <line x1={MARGIN.left} x2={VIEW_W - MARGIN.right} y1={yScale(t)} y2={yScale(t)} className="ptrend-grid" />
+                <line x1={MARGIN.left} x2={VIEW_W - marginRight} y1={yScale(t)} y2={yScale(t)} className="ptrend-grid" />
                 <text x={MARGIN.left - 8} y={yScale(t) + 4} className="ptrend-axis ptrend-axis-y">{t}</text>
               </g>
             ))}
 
-            {/* X date labels */}
-            {xTickIdx.map((i) => (
-              <text key={i} x={barX(i) + barW / 2} y={VIEW_H - 12} className="ptrend-axis ptrend-axis-x">
-                {fmtDate(bars[i].date)}
-              </text>
-            ))}
+            {/* X date labels. With no right margin, the last one right-aligns to
+                its bar so it isn't cut off at the edge. */}
+            {xTickIdx.map((i) => {
+              const flushEnd = sideControls && i > 0 && i === n - 1;
+              return (
+                <text
+                  key={i}
+                  x={flushEnd ? barX(i) + barW : barX(i) + barW / 2}
+                  y={VIEW_H - 12}
+                  className={`ptrend-axis ptrend-axis-x${flushEnd ? ' is-last' : ''}`}
+                >
+                  {fmtDate(bars[i].date)}
+                </text>
+              );
+            })}
 
             {/* One stacked bar per day: bands from the baseline up, split by a
                 surface gap, the top segment carrying the rounded data-end. */}
@@ -218,28 +221,55 @@ function ProficiencyTrend({ title, description, scope = 'all', classId, studentI
           )}
         </div>
       )}
+    </>
+  );
 
-      {n > 0 && (
-        <details className="ptrend-table-toggle">
-          <summary>Show data table</summary>
-          <table className="ptrend-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                {BANDS.map((b) => <th key={b.key}>{b.label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {series.map((d) => (
-                <tr key={d.date}>
-                  <td>{fmtDate(d.date)}</td>
-                  {BANDS.map((b) => <td key={b.key}>{d[b.key]}</td>)}
-                </tr>
+  if (sideControls) {
+    return (
+      <figure className="ptrend">
+        <figcaption className="ptrend-head">
+          <span className="ptrend-title">{title}</span>
+          {description && <span className="ptrend-desc">{description}</span>}
+        </figcaption>
+        <div className="ptrend-body">
+          <div className="ptrend-main">{chart}</div>
+          {/* The time frame, then the legend (identity is never color alone),
+              listed top-down in the bars' stacking order. */}
+          <div className="ptrend-side">
+            {rangeField}
+            <ul className="ptrend-legend ptrend-side-legend">
+              {[...BANDS].reverse().map((b) => (
+                <li key={b.key} className="ptrend-legend-item">
+                  <span className="ptrend-swatch" style={{ background: b.color }} />
+                  {b.label}
+                </li>
               ))}
-            </tbody>
-          </table>
-        </details>
-      )}
+            </ul>
+          </div>
+        </div>
+      </figure>
+    );
+  }
+
+  return (
+    <figure className="ptrend">
+      <figcaption className="ptrend-head">
+        <span className="ptrend-title">{title}</span>
+        {description && <span className="ptrend-desc">{description}</span>}
+        {rangeField}
+      </figcaption>
+
+      {/* Legend — identity is never color alone. */}
+      <ul className="ptrend-legend">
+        {BANDS.map((b) => (
+          <li key={b.key} className="ptrend-legend-item">
+            <span className="ptrend-swatch" style={{ background: b.color }} />
+            {b.label}
+          </li>
+        ))}
+      </ul>
+
+      {chart}
     </figure>
   );
 }

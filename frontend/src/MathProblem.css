@@ -501,3 +501,14 @@
     color: #374151;
     text-align: center;
 }
+
+/* "Finish it now" on a finished assignment deck: what's left, and the button. */
+.math-problem-finish-note {
+    font-size: 15px;
+    color: #4b5563;
+    text-align: center;
+}
+
+.math-problem-finish-now {
+    align-self: center;
+}

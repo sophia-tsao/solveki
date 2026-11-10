@@ -9,6 +9,7 @@ urlpatterns = [
     path('deck/', views.get_deck, name="get_deck"),
     path('deck/advance/', views.advance_deck, name="advance_deck"),
     path('deck/check/', views.check_answer, name="check_answer"),
+    path('deck/finish-now/', views.finish_assignment_now, name="finish_assignment_now"),
     path('deck/test-solution/', views.test_solution, name="test_solution"),
     path('dashboard/', views.view_dashboard, name="view_dashboard"),
     path('practice-calendar/', views.view_practice_calendar, name="view_practice_calendar"),

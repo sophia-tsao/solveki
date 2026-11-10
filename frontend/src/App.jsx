@@ -74,6 +74,16 @@ function App() {
 
   const [route, setRoute] = useState(() => routeForRole(role));
 
+  // The first render runs before the session loads, so `role` is the "student"
+  // fallback and a teacher's hash (e.g. "#/student-detail/5" on reload) gets
+  // rejected. Re-resolve the hash once the real role is known — during render,
+  // so the URL-sync effect below never sees (and writes back) the stale route.
+  const [routeRole, setRouteRole] = useState(role);
+  if (!authLoading && routeRole !== role) {
+    setRouteRole(role);
+    setRoute(routeForRole(role));
+  }
+
   const setSession = (nextUser) =>
     queryClient.setQueryData(['me'], nextUser
       ? { authenticated: true, user: nextUser }
@@ -184,7 +194,7 @@ function App() {
         {page === "teacher-overview" && <TeacherOverview onOpenClass={(cid) => navigate("class-detail", cid)} />}
         {page === "classes" && <ClassList onOpenClass={(cid) => navigate("class-detail", cid)} />}
         {page === "class-detail" && <ClassDetail classId={id} onBack={() => navigate("classes")} onOpenStudent={(sid) => navigate("student-detail", sid)} />}
-        {page === "student-detail" && <StudentDetail studentId={id} />}
+        {page === "student-detail" && <StudentDetail studentId={id} onOpenAssignment={(aid) => navigate("assignment-detail", aid)} />}
         {page === "teacher-assignments" && (
           <TeacherAssignments
             onCreate={() => navigate("assignment-builder")}

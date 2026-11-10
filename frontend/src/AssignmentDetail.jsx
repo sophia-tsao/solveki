@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
-import { BandBar, BandLegend } from './BandBar.jsx';
+import { BandBar } from './BandBar.jsx';
 import AssignmentProgress from './AssignmentProgress.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
 import './Teacher.css';
@@ -33,7 +33,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
   if (isPending) return <div className="teacher-page">{backButton}<p>Loading…</p></div>;
   if (error) return <div className="teacher-page">{backButton}<p className="teacher-error">Failed to load results.</p></div>;
 
-  const { assignment, topics, struggled, num_students, num_completed, band_totals, students } = data;
+  const { assignment, topics, struggled, num_students, num_completed, students } = data;
   const classes = assignment.classes || [];
 
   return (
@@ -59,25 +59,19 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
         </div>
       </div>
 
-      <div className="teacher-cards" style={{ marginTop: '1rem' }}>
+      <div className="ad-summary">
         <div className="teacher-card static">
           <div className="teacher-card-title">Finished</div>
           <div className="teacher-card-stat" style={{ fontSize: '1.5rem' }}>
             {num_completed} / {num_students}
           </div>
         </div>
-        <div className="teacher-card static" style={{ flex: 2 }}>
-          <div className="teacher-card-title">Familiarity on assigned topics</div>
-          <BandBar counts={band_totals} />
-          <BandLegend counts={band_totals} />
-        </div>
+        <StruggledTopics
+          topics={struggled}
+          showStudents
+          emptyText="No misses on these topics yet."
+        />
       </div>
-
-      <StruggledTopics
-        topics={struggled}
-        showStudents
-        emptyText="No misses on these topics yet."
-      />
 
       <h2>Familiarity by topic</h2>
       <p className="teacher-help">How many assigned students sit in each band for each topic.</p>

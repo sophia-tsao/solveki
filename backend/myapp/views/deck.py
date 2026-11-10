@@ -267,7 +267,12 @@ def _outcomes_since(user, topic_ids, since):
 
 
 def _days_left(row, due_at, today):
-    """Days the assignment's remaining cards are spread over, counting today (at least 1)."""
+    """Days the assignment's remaining cards are spread over, counting today (at least 1).
+
+    Just today once the student chose to finish it today (`finish_on`).
+    """
+    if row.finish_on is not None and row.finish_on >= today:
+        return 1
     if due_at is not None:
         return max(1, (timezone.localdate(due_at) - today).days + 1)
     started = timezone.localdate(row.started_at) if row.started_at else today
@@ -1000,6 +1005,10 @@ def _deck_payload(user, deck, scope=_DEFAULT_SCOPE):
     sending it while it stays on this deck, and `open_assignments`, the
     student's open assignment count, so the client knows where leaving the
     deck goes: the list to pick another when there's more than one.
+
+    A finished deck whose open assignment still needs cards on a later day
+    carries `cards_left`, so the client can offer to finish it now
+    (`finish_assignment_now`).
     """
     payload = _deck_state(user, deck, scope)
     if deck.assignment_id is not None:
@@ -1008,7 +1017,23 @@ def _deck_payload(user, deck, scope=_DEFAULT_SCOPE):
             "open": scope.topic_ids is None,
         }
         payload["open_assignments"] = len(_open_assignments(user))
+        if payload.get("completed"):
+            cards_left = _cards_left_after_today(user, scope, deck.date)
+            if cards_left:
+                payload["cards_left"] = cards_left
     return payload
+
+
+def _cards_left_after_today(user, scope, today):
+    """Cards the deck's open assignment still needs beyond today, or 0.
+
+    0 when the deck carries no open assignment, or today is already its last
+    day (`_days_left`), since then today's deck holds everything left.
+    """
+    for row, topic_ids, due_at in _scope_assignments(user, scope):
+        if topic_ids and _days_left(row, due_at, today) > 1:
+            return max(0, (row.cards_needed or row.assignment.deck_size) - row.cards_answered)
+    return 0
 
 
 def _deck_state(user, deck, scope):
@@ -1170,6 +1195,38 @@ def advance_deck(request):
             "Ignoring stale advance for user %s: client left card %s but deck is on %d",
             request.user.id, from_number, deck.current_index + 1,
         )
+    return JsonResponse(_deck_payload(request.user, deck, scope))
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def finish_assignment_now(request):
+    """Add the rest of the deck's assignment to today's deck ("Finish it now").
+
+    Offered once the student has finished today's share of an assignment that
+    isn't due yet (`cards_left` in the deck payload). Marks today as the
+    assignment's last day (`finish_on`), so `_required_plan` schedules every
+    remaining card today and `_add_practice` keeps adding cards while it still
+    needs more, then rebuilds the deck's unanswered tail. Needs an open
+    assignment's deck (`?assignment=<id>`). Returns the deck payload.
+    """
+    auth = _require_auth(request)
+    if auth:
+        return auth
+    scope, response = _request_scope(request)
+    if response:
+        return response
+    rows = _scope_assignments(request.user, scope) if scope.assignment_id is not None else []
+    if not rows:
+        return JsonResponse({"error": "No open assignment to finish"}, status=400)
+    today = _client_today(request)
+    row = rows[0][0]
+    row.finish_on = today
+    row.save(update_fields=["finish_on"])
+    deck = _get_or_create_today_deck(request.user, today, scope)
+    _regenerate_deck(request.user, deck, today, scope)
+    _record_practice(request.user, today)
+    logger.info("User %s chose to finish assignment %s today", request.user.id, scope.assignment_id)
     return JsonResponse(_deck_payload(request.user, deck, scope))
 
 

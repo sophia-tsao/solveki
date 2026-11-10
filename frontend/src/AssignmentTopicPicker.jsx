@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useLayoutEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
 import './AssignmentTopicPicker.css';
@@ -29,6 +29,62 @@ function groupByUnit(topics) {
     byKey.get(key).topics.push(t);
   }
   return groups;
+}
+
+// One collapsible course bar. Expands/collapses with the same animation as the
+// student courses page (CourseBar): max-height driven by the measured content
+// plus the inner list sliding down into place.
+function PickerCourse({ course, topics, isOpen, selectedCount, selected, onToggleCourse, onToggleTopic }) {
+  const innerRef = useRef(null);
+  const [height, setHeight] = useState(0);
+
+  // Re-measure whenever the open state or the visible topics change, so long
+  // lists aren't clipped and search filtering resizes the panel.
+  useLayoutEffect(() => {
+    if (innerRef.current) setHeight(innerRef.current.scrollHeight);
+  }, [isOpen, topics]);
+
+  return (
+    <div className={`atp-course${isOpen ? ' open' : ''}`}>
+      <button
+        type="button"
+        className="atp-course-header"
+        onClick={() => onToggleCourse(course.id)}
+        aria-expanded={isOpen}
+      >
+        <span className="atp-course-name">{course.course_name}</span>
+        <span className="atp-course-right">
+          {selectedCount > 0 && <span className="atp-course-count">{selectedCount} selected</span>}
+          <svg className="atp-chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+          </svg>
+        </span>
+      </button>
+      <div className="atp-topics" style={{ maxHeight: isOpen ? height : 0 }} inert={!isOpen}>
+        <div className="atp-topics-inner" ref={innerRef}>
+          {groupByUnit(topics).map((group) => (
+            <div className="atp-unit" key={group.key}>
+              {group.name && <h4 className="atp-unit-title">{group.name}</h4>}
+              <ul>
+                {group.topics.map((t) => (
+                  <li key={t.id}>
+                    <span className="atp-topic-name">{t.topic_name}</span>
+                    <input
+                      type="checkbox"
+                      className="atp-topic-checkbox"
+                      checked={selected[t.id] != null}
+                      onChange={() => onToggleTopic(t.id)}
+                      aria-label={t.topic_name}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -106,49 +162,18 @@ function AssignmentTopicPicker({ selected, onToggleTopic }) {
         <p className="teacher-empty">No courses or topics match “{search.trim()}”.</p>
       )}
 
-      {rows.map(({ course, topics }) => {
-        const isOpen = searching || expanded.has(course.id);
-        const n = selectedCount(course);
-        return (
-          <div key={course.id} className={`atp-course${isOpen ? ' open' : ''}`}>
-            <button type="button" className="atp-course-header" onClick={() => toggleCourse(course.id)}>
-              <span className="atp-course-name">{course.course_name}</span>
-              <span className="atp-course-right">
-                {n > 0 && <span className="atp-course-count">{n} selected</span>}
-                <svg className="atp-chevron" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-                  <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                </svg>
-              </span>
-            </button>
-            {isOpen && (
-              <div className="atp-topics">
-                {groupByUnit(topics).map((group) => (
-                  <div className="atp-unit" key={group.key}>
-                    {group.name && <h4 className="atp-unit-title">{group.name}</h4>}
-                    <ul>
-                      {group.topics.map((t) => {
-                        const isSelected = selected[t.id] != null;
-                        return (
-                          <li key={t.id}>
-                            <span className="atp-topic-name">{t.topic_name}</span>
-                            <input
-                              type="checkbox"
-                              className="atp-topic-checkbox"
-                              checked={isSelected}
-                              onChange={() => onToggleTopic(t.id)}
-                              aria-label={t.topic_name}
-                            />
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+      {rows.map(({ course, topics }) => (
+        <PickerCourse
+          key={course.id}
+          course={course}
+          topics={topics}
+          isOpen={searching || expanded.has(course.id)}
+          selectedCount={selectedCount(course)}
+          selected={selected}
+          onToggleCourse={toggleCourse}
+          onToggleTopic={onToggleTopic}
+        />
+      ))}
     </div>
   );
 }

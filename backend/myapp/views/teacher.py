@@ -503,6 +503,7 @@ def student_detail(request, student_id):
             "class_name": link.classroom.name,
             **row,
             "deck_size": a.deck_size,
+            "assigned_at": link.assigned_at.isoformat(),
             "due_at": link.due_at.isoformat() if link.due_at else None,
             "overdue": bool(link.due_at and link.due_at < now and not done),
         })
