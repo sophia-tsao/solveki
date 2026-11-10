@@ -539,7 +539,7 @@ page by editing the URL — and the backend enforces the same on every endpoint.
   assignment just routes to the practice page; its topics are already in the deck); `StudentClasses.jsx`.
 - **Teacher pages.** The top bar has Overview · Classes · Assignments · Guide ·
   Settings; detail pages carry breadcrumbs back to where they belong.
-  - `TeacherOverview.jsx` (Home): KPI tiles, Needs attention, Due soon, Topics
+  - `TeacherOverview.jsx` (Overview): KPI tiles, Needs attention, Due soon, Topics
     to revisit, and the `ProficiencyTrend.jsx` familiarity-over-time chart.
   - `ClassList.jsx` / `ClassDetail.jsx`: the class page has Students, Progress
     (`ClassProgressGrid.jsx`, the students x topics grid with "Hide names" for

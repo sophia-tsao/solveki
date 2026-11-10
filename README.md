@@ -29,11 +29,13 @@ carrying its cards until the due date (with several open, the practice page
 lists them to pick from), so assignment work is graded and scheduled by the same SM-2 engine as normal
 practice. Students who get the topics right finish at the teacher's count;
 students who struggle get extra practice, up to 1.5 times as many cards.
-Teachers track progress through a
-familiarity-over-time view (the share of topics in each proficiency band, for
-all students or a single class), a per-assignment report of each student's
-completion and proficiency on the assigned topics, and a per-student view of
-their SM-2 progress and assignment history.
+Teachers track progress from an overview that leads with what needs them
+(this week's numbers against a weekly goal, a ranked list of overdue, quiet or
+struggling students and trouble-spot topics, and what's due soon), a class page
+with a students × topics progress grid, a per-assignment report with status
+counters that filter each student's completion, accuracy and proficiency on
+the assigned topics, and a per-student view of their SM-2 progress, assignment
+history and how they compare with their class.
 
 Problems are produced by [mathgenerator](https://github.com/lukew3/mathgenerator),
 a library of parameterized math-problem generators (a pip dependency), plus a
@@ -139,11 +141,13 @@ The backend exposes a small JSON API under the app's URLs, including:
 - `GET /diagnostic/config/`, `POST /diagnostic/start/`, `POST /diagnostic/submit/`
   — the onboarding diagnostic (infers level, then selects and seeds topics)
 - **Teacher — classes:** `GET|POST /classes/`, `GET|PATCH|DELETE /classes/<id>/`,
-  `GET /classes/<id>/students/`, `DELETE /classes/<id>/students/<sid>/`
+  `GET /classes/<id>/students/`, `DELETE /classes/<id>/students/<sid>/`,
+  `GET /classes/<id>/progress/` (students × topics grid)
 - **Teacher — assignments:** `GET|POST /assignments/`,
   `GET|PATCH|DELETE /assignments/<id>/`, `POST /assignments/<id>/assign/`,
-  `GET /assignments/<id>/results/`
-- **Teacher — analytics:** `GET /teacher/overview/`,
+  `GET /assignments/<id>/results/`, `POST /assignments/<id>/duplicate/`
+- **Teacher — analytics:** `GET /teacher/overview/`, `GET /teacher/overview/summary/`
+  (KPIs, needs attention, due soon), `GET /teacher/overview/focus/`,
   `GET /teacher/proficiency-history/`, `GET /teacher/students/<sid>/`
 - **Student — classes & assignments:** `POST /classes/join/`, `GET /classes/mine/`,
   `GET /assignments/mine/`, `POST /assignments/<id>/play/` (builds the

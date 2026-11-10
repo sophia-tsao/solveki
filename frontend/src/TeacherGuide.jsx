@@ -50,9 +50,11 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
       <section className="guide-section">
         <h2>1. Create a class</h2>
         <p>
-          A class is just a roster. Open <strong>Classes → New class</strong>, name it, and
-          Solveki hands you a unique 6-character join code. Share the code; students enter it
-          once to enroll. Open the class anytime to see who's joined or remove students.
+          A class is just a roster. On <strong>Classes</strong>, type a name and choose
+          {' '}<strong>Create class</strong>; Solveki hands you a unique 6-character join code
+          (there's a Copy button on the class page). Share the code; students enter it once to
+          enroll. The class page shows who's joined, and its <strong>Settings</strong> tab
+          renames or archives the class.
         </p>
         <div className="tg-flow" aria-label="How students join a class">
           <span className="tg-pill">You create class</span>
@@ -163,7 +165,8 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
           <span>
             Your report shows where each student stands on the assigned topics
             right now, and flags anyone past the due date who hasn't finished
-            their cards.
+            their cards. To reuse an assignment, open its ⋯ menu on the
+            Assignments page and choose Duplicate.
           </span>
         </div>
       </section>
@@ -171,11 +174,14 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
       {/* 4. Progress */}
       <section className="guide-section">
         <h2>4. View progress</h2>
-        <p>Progress drills down from the whole picture to a single student, three levels deep.</p>
+        <p>
+          Progress drills down from what needs you today to a single student. Every page has
+          breadcrumbs back up, and every table sorts by clicking a column header.
+        </p>
         <div className="tg-flow" aria-label="How to drill into progress">
-          <span className="tg-pill">Overview: all classes</span>
+          <span className="tg-pill">Overview: what needs you</span>
           <span className="tg-arrow">→</span>
-          <span className="tg-pill">An assignment: who's finished</span>
+          <span className="tg-pill">A class or assignment</span>
           <span className="tg-arrow">→</span>
           <span className="tg-pill">A student: topics &amp; history</span>
         </div>
@@ -184,21 +190,54 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
             <span className="guide-step-num">1</span>
             <div className="guide-step-body">
               <strong>Overview</strong>
-              <p>Your total student count plus a familiarity-over-time graph for all your students (switch it to a single class), so you can watch topics climb from New toward Proficient.</p>
+              <p>
+                This week in numbers: students on track for their weekly goal (three days&rsquo;
+                worth of their daily cards), cards answered, first-try accuracy and overdue work,
+                each compared with last week. <em>Needs attention</em> lists who is overdue or has
+                gone quiet, who needs help, topics many students are missing (with a one-click
+                follow-up assignment), and work due soon that students haven&rsquo;t started.
+                Below are what&rsquo;s due this week, topics to revisit, and the familiarity
+                trend. Switch it all to one class with the class picker.
+              </p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">2</span>
             <div className="guide-step-body">
-              <strong>Assignment results</strong>
-              <p>Open any assignment to see how many students have finished and the class's current familiarity mix on its topics. Per student, you'll see cards answered toward the total, their familiarity on the assigned topics, their due date, and whether they're overdue. Filter by class if it went to more than one.</p>
+              <strong>Class page</strong>
+              <p>
+                <em>Students</em> lists each student&rsquo;s familiarity, cards and accuracy this
+                week, when they last practiced and any overdue work. <em>Progress</em> is a grid of
+                every student against an assignment&rsquo;s topics: each cell shows their band
+                (with its first letter), and a red ring marks a topic they missed lately. Tick
+                {' '}<em>Hide names</em> before showing it on a projector.
+              </p>
             </div>
           </li>
           <li>
             <span className="guide-step-num">3</span>
             <div className="guide-step-body">
+              <strong>Assignment results</strong>
+              <p>
+                The counters across the top (Done, In progress, Not started, Overdue, Needs help)
+                filter the student table; click one again to clear it. A student who
+                hasn&rsquo;t answered a card yet counts as not started. Per student you&rsquo;ll
+                see cards answered toward what they need, first-try accuracy, topics they&rsquo;re
+                solid on, and their familiarity over time. The <em>Topics</em> tab shows what the
+                class struggled with and the band mix per topic.
+              </p>
+            </div>
+          </li>
+          <li>
+            <span className="guide-step-num">4</span>
+            <div className="guide-step-body">
               <strong>Student detail</strong>
-              <p>Click a student to see their familiarity trend, their assignments with cards answered, and per-topic progress (the same topic view they see on their own dashboard).</p>
+              <p>
+                Alerts name the student&rsquo;s overdue work, their practice is compared with the
+                class median, and their topics are listed weakest first with accuracy and next
+                review. Step through the class with Prev / Next, or Print report for a parent
+                conference.
+              </p>
             </div>
           </li>
         </ol>
