@@ -188,7 +188,16 @@ function App() {
         {page === "assignments" && <Assignments onStarted={(aid) => navigate("math", aid)} />}
         {page === "student-classes" && <StudentClasses />}
         {/* Teacher pages */}
-        {page === "teacher-overview" && <TeacherOverview onOpenClass={(cid) => navigate("class-detail", cid)} />}
+        {page === "teacher-overview" && (
+          <TeacherOverview
+            userName={user.name}
+            onOpenClasses={() => navigate("classes")}
+            onOpenStudent={(sid, cid) => navigate("student-detail", sid, { class: cid })}
+            onOpenAssignment={(aid, p = {}) => navigate("assignment-detail", aid, p)}
+            onCreateAssignment={() => navigate("assignment-builder")}
+            onFollowUp={(tid, cid) => navigate("assignment-builder", null, { topic: tid, class: cid })}
+          />
+        )}
         {page === "classes" && <ClassList onOpenClass={(cid) => navigate("class-detail", cid)} />}
         {page === "class-detail" && (
           <ClassDetail
@@ -219,7 +228,15 @@ function App() {
             onEdit={(aid) => navigate("assignment-builder", aid)}
           />
         )}
-        {page === "assignment-builder" && <AssignmentBuilder assignmentId={id} onDone={() => navigate("teacher-assignments")} />}
+        {page === "assignment-builder" && (
+          <AssignmentBuilder
+            key={`${id}-${params.topic || ""}-${params.class || ""}`}
+            assignmentId={id}
+            initialTopicId={paramId("topic")}
+            initialClassId={paramId("class")}
+            onDone={() => navigate("teacher-assignments")}
+          />
+        )}
         {page === "assignment-detail" && (
           <AssignmentDetail
             key={id}

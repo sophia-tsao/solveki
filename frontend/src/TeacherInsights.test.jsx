@@ -386,104 +386,110 @@ describe('TeacherOverview', () => {
     weak_spots: [{ topic_id: 3, topic_name: 'Ratios', accuracy: 20, missed_recent: 3 }],
     windows: { new_days: 14, missed_days: 14 },
   };
+  const SUMMARY = {
+    kpis: {
+      students: 24, on_track: 15, on_track_prev: 12, goal_cards: 30, active: 18,
+      cards_7d: 412, cards_per_active: 23, accuracy_7d: 78, accuracy_prev_7d: 82, overdue: 5,
+    },
+    needs_attention: [
+      { type: 'student', severity: 'crit', student_id: 4, name: 'Diego Ramos', class_id: 5,
+        overdue: ['Unit 4 review', 'Exponents'], inactive_days: 8 },
+      { type: 'trouble_spot', severity: 'info', topic_id: 3, topic_name: 'Ratios', accuracy: 20,
+        students: [{ id: 4, name: 'Diego Ramos' }, { id: 6, name: 'Ben Ortiz' }] },
+      { type: 'not_started', severity: 'warn', assignment_id: 9, title: 'Quiz prep', count: 3,
+        due_at: '2026-10-25T23:59:00Z', class_name: 'P1', class_id: 5 },
+    ],
+    due_soon: [{
+      id: 9, title: 'Quiz prep', next_due_at: '2026-10-25T23:59:00Z',
+      classes: [{ class_id: 5, class_name: 'P1' }],
+      counts: { assigned: 12, done: 7, in_progress: 2, not_started: 3, overdue: 0, needs_help: 0 },
+    }],
+  };
 
-  function route(focus) {
-    apiFetch.mockImplementation(async (url) => (
-      url.startsWith('/teacher/overview/focus/')
-        ? json(focus)
-        : json({ classes: [{ id: 5, name: 'P1', student_count: 4 }], total_students: 4 })
-    ));
+  function route({ focus = FOCUS, summary = SUMMARY, classes = [{ id: 5, name: 'P1', student_count: 4 }] } = {}) {
+    apiFetch.mockImplementation(async (url) => {
+      if (url.startsWith('/teacher/overview/focus/')) return json(focus);
+      if (url.startsWith('/teacher/overview/summary/')) return json(summary);
+      return json({ classes, total_students: 24 });
+    });
   }
 
-  // Rest the pointer on a topic row and wait out the hover delay.
-  async function hover(region, name) {
-    fireEvent.mouseEnter(within(region).getByText(name).closest('li'));
-    return screen.findByRole('tooltip', {}, { timeout: 2000 });
-  }
+  const props = (extra = {}) => ({
+    userName: 'Sophia Tsao', onOpenClasses: vi.fn(), onOpenStudent: vi.fn(),
+    onOpenAssignment: vi.fn(), onCreateAssignment: vi.fn(), onFollowUp: vi.fn(), ...extra,
+  });
 
-  it('shows each topic as a name over a bar', async () => {
-    route(FOCUS);
-    renderWithClient(<TeacherOverview onOpenClass={() => {}} />);
+  it('leads with the week in numbers', async () => {
+    route();
+    renderWithClient(<TeacherOverview {...props()} />);
 
-    const fresh = await screen.findByRole('region', { name: 'Newly taught' });
-    expect(within(fresh).getByText('Fractions')).toBeInTheDocument();
-    expect(within(fresh).getByRole('img'))
+    expect(await screen.findByRole('heading', { name: /Sophia$/ })).toBeInTheDocument();
+    const tile = (label) => screen.getByText(label).closest('.kpi-tile');
+    expect(await screen.findByText('On track for weekly goal')).toBeInTheDocument();
+    expect(tile('On track for weekly goal')).toHaveTextContent('15/ 24');
+    expect(tile('On track for weekly goal')).toHaveTextContent('▲ 3 vs last week');
+    expect(tile('First-try accuracy (7 days)')).toHaveTextContent('78%▼ 4 pts vs last week');
+    expect(tile('Overdue')).toHaveTextContent('5');
+  });
+
+  it('lists what needs attention, each with its next step', async () => {
+    route();
+    const p = props();
+    renderWithClient(<TeacherOverview {...p} />);
+
+    const box = (await screen.findByRole('heading', { name: 'Needs attention' })).closest('section');
+    await within(box).findByText('Trouble spot: Ratios');
+    expect(within(box).getByText(/2 assignments overdue \(Unit 4 review, Exponents\) · no practice in 8 days/)).toBeInTheDocument();
+    fireEvent.click(within(box).getByRole('button', { name: 'View student' }));
+    expect(p.onOpenStudent).toHaveBeenCalledWith(4, 5);
+
+    expect(within(box).getByText('Trouble spot: Ratios')).toBeInTheDocument();
+    expect(within(box).getByText('Ben Ortiz')).toBeInTheDocument();
+    fireEvent.click(within(box).getByRole('button', { name: 'Assign follow-up' }));
+    expect(p.onFollowUp).toHaveBeenCalledWith(3, null);
+
+    fireEvent.click(within(box).getByRole('button', { name: 'See who' }));
+    expect(p.onOpenAssignment).toHaveBeenCalledWith(9, { status: 'not_started', class: 5 });
+  });
+
+  it('shows what is due soon and the topics to revisit, weakest first', async () => {
+    route();
+    renderWithClient(<TeacherOverview {...props()} />);
+
+    const due = (await screen.findByRole('heading', { name: 'Due soon' })).closest('section');
+    expect(await within(due).findByText('7/12')).toBeInTheDocument();
+
+    const topics = screen.getByRole('heading', { name: 'Topics to revisit' }).closest('section');
+    await within(topics).findByText('Ratios');
+    const names = within(topics).getAllByRole('row').slice(1).map((r) => r.querySelector('.home-topic-name').textContent);
+    expect(names).toEqual(['Ratios', 'Fractions']);
+    expect(within(topics).getByText('New')).toBeInTheDocument();
+    expect(within(topics).getByRole('img'))
       .toHaveAccessibleName('New: 1, Learning: 0, Familiar: 2, Proficient: 1');
-
-    const weak = screen.getByRole('region', { name: 'Weak spots' });
-    expect(within(weak).getByRole('img')).toHaveAccessibleName('Average accuracy: 20%');
-    expect(within(weak).getByText('Bars show average accuracy')).toBeInTheDocument();
-    // No numbered lists, and no native hover text.
-    expect(document.querySelector('.focus-col ol')).toBeNull();
-    expect(document.querySelector('.focus-cols [title]')).toBeNull();
-    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
-  it('opens a newly taught card after a one-second hover', async () => {
-    route(FOCUS);
-    renderWithClient(<TeacherOverview onOpenClass={() => {}} />);
-    const fresh = await screen.findByRole('region', { name: 'Newly taught' });
-
-    fireEvent.mouseEnter(within(fresh).getByText('Fractions').closest('li'));
-    // Not before the delay.
-    await new Promise((r) => setTimeout(r, 500));
-    expect(screen.queryByRole('tooltip')).toBeNull();
-
-    const card = await screen.findByRole('tooltip', {}, { timeout: 2000 });
-    expect(within(card).getByText(/^First assigned /)).toBeInTheDocument();
-    expect(within(card).getByText('Average accuracy 67%')).toBeInTheDocument();
-    // The percentages go in the topic's own bar; the card has no bar of its own.
-    expect(within(card).queryByRole('img')).toBeNull();
-    expect(within(fresh).getByRole('img'))
-      .toHaveAccessibleName('New: 25%, Learning: 0%, Familiar: 50%, Proficient: 25%');
-    expect(within(fresh).getByText('50%')).toBeInTheDocument();
-  });
-
-  it('opens the card at once when a topic is clicked', async () => {
-    route(FOCUS);
-    renderWithClient(<TeacherOverview onOpenClass={() => {}} />);
-    const fresh = await screen.findByRole('region', { name: 'Newly taught' });
-
-    fireEvent.click(within(fresh).getByText('Fractions').closest('li'));
-    const card = screen.getByRole('tooltip');
-    expect(within(card).getByText('Average accuracy 67%')).toBeInTheDocument();
-    expect(within(fresh).getByText('50%')).toBeInTheDocument();
-  });
-
-  it('cancels the card when the pointer leaves early', async () => {
-    route(FOCUS);
-    renderWithClient(<TeacherOverview onOpenClass={() => {}} />);
-    const fresh = await screen.findByRole('region', { name: 'Newly taught' });
-
-    const row = within(fresh).getByText('Fractions').closest('li');
-    fireEvent.mouseEnter(row);
-    fireEvent.mouseLeave(row);
-    await new Promise((r) => setTimeout(r, 1200));
-    expect(screen.queryByRole('tooltip')).toBeNull();
-  });
-
-  it('shows who missed a weak spot and its accuracy in the bar', async () => {
-    route(FOCUS);
-    renderWithClient(<TeacherOverview onOpenClass={() => {}} />);
-    const weak = await screen.findByRole('region', { name: 'Weak spots' });
-
-    const card = await hover(weak, 'Ratios');
-    expect(within(card).getByText('3 students answered incorrectly in the past 2 weeks')).toBeInTheDocument();
-    expect(within(card).queryByRole('img')).toBeNull();
-    expect(within(weak).getByText('20%')).toBeInTheDocument();
-  });
-
-  it('shows empty states and scopes the columns by class', async () => {
-    route({ ...FOCUS, newly_taught: [], weak_spots: [] });
-    renderWithClient(<TeacherOverview onOpenClass={() => {}} />);
-
-    expect(await screen.findByText('No assignments added new topics in the last 14 days.')).toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'About to be forgotten' })).toBeNull();
-    expect(screen.getByText('No missed answers yet.')).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Show'), { target: { value: '5' } });
+  it('scopes everything to one class', async () => {
+    route();
+    renderWithClient(<TeacherOverview {...props()} />);
+    fireEvent.change(await screen.findByLabelText('Show'), { target: { value: '5' } });
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
-      expect.stringMatching(/^\/teacher\/overview\/focus\/\?.*scope=class&class_id=5/),
+      expect.stringMatching(/^\/teacher\/overview\/summary\/\?.*scope=class&class_id=5/),
     ));
+    expect(apiFetch).toHaveBeenCalledWith(expect.stringMatching(/^\/teacher\/overview\/focus\/\?.*scope=class&class_id=5/));
+  });
+
+  it('says when nothing needs attention, and welcomes a teacher with no classes', async () => {
+    route({ summary: { ...SUMMARY, needs_attention: [], due_soon: [] }, focus: { ...FOCUS, newly_taught: [], weak_spots: [] } });
+    const { unmount } = renderWithClient(<TeacherOverview {...props()} />);
+    expect(await screen.findByText(/Nothing needs you right now/)).toBeInTheDocument();
+    expect(screen.getByText('Nothing due in the next week.')).toBeInTheDocument();
+    expect(await screen.findByText(/No new topics in the last 14 days/)).toBeInTheDocument();
+    unmount();
+
+    route({ classes: [] });
+    const p = props();
+    renderWithClient(<TeacherOverview {...p} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Create a class' }));
+    expect(p.onOpenClasses).toHaveBeenCalled();
   });
 });

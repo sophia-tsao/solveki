@@ -1660,3 +1660,130 @@
 .class-settings {
   max-width: 560px;
 }
+
+/* ---- Teacher home ---- */
+
+.home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 0.875rem;
+  margin-bottom: 0.875rem;
+  align-items: start;
+}
+
+.home-grid.even {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 860px) {
+  .home-grid,
+  .home-grid.even {
+    grid-template-columns: 1fr;
+  }
+}
+
+.home-alerts,
+.home-due {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.home-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.home-alert:last-child {
+  border-bottom: 0;
+}
+
+.home-alert-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.8125rem;
+}
+
+.home-alert-icon.crit { background: var(--crit-bg); color: var(--crit); }
+.home-alert-icon.warn { background: var(--warn-bg); color: var(--warn); }
+.home-alert-icon.info { background: var(--brand-tint); color: var(--brand-ink); }
+
+.home-alert-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-alert-title {
+  font-weight: 600;
+}
+
+.home-alert-detail {
+  color: var(--ink-3);
+  font-size: 0.78rem;
+  margin-top: 0.1rem;
+}
+
+.alert-pill {
+  margin-left: 0.3rem;
+}
+
+.home-due li {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.home-due li:last-child {
+  border-bottom: 0;
+}
+
+.home-due-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-due-row:hover {
+  background: var(--bg);
+}
+
+.home-due-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-due-title {
+  font-weight: 600;
+}
+
+.home-due-bar {
+  width: 42%;
+  flex: none;
+}
+
+.home-topic-name {
+  font-weight: 600;
+}
+
+.home-new-chip {
+  margin-left: 0.4rem;
+  font-size: 0.68rem;
+}
+
+.home-trend .ptrend {
+  margin: 0;
+}
