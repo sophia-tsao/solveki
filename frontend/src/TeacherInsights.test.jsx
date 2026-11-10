@@ -180,17 +180,78 @@ describe('AssignmentDetail', () => {
 });
 
 describe('ClassDetail', () => {
-  it('gives each student a familiarity bar', async () => {
-    apiFetch.mockImplementation(async (url) => (
-      url.endsWith('/students/')
-        ? json({ students: [{ id: 3, name: 'Ada', email: 'a@x.org', joined_at: '2026-10-01T00:00:00Z', proficiency: BANDS_MIXED }] })
-        : json({ id: 1, name: 'Period 1', join_code: 'ABC234', student_count: 1 })
-    ));
+  const CLASS = { id: 1, name: 'Period 1', join_code: 'ABC234', student_count: 1 };
+  const PROGRESS = {
+    assignment_id: 7,
+    assignments: [{ id: 7, title: 'Unit 4' }],
+    topics: [{ topic_id: 1, topic_name: 'Slope' }, { topic_id: 2, topic_name: 'Systems' }],
+    students: [
+      { id: 3, name: 'Ada', last_active: '2026-10-24', cells: { 1: { band: 'familiar', missed_recent: false }, 2: { band: 'new', missed_recent: true } } },
+      { id: 4, name: 'Ben', last_active: null, cells: { 1: null, 2: null } },
+    ],
+    topic_summary: { 1: 50, 2: 0 },
+  };
+
+  function route(extra = {}) {
+    apiFetch.mockImplementation(async (url, opts) => {
+      if (opts?.method === 'PATCH') return json({ ...CLASS, ...JSON.parse(opts.body) });
+      if (url.startsWith('/classes/1/students/')) {
+        return json({ students: [{
+          id: 3, name: 'Ada', email: 'a@x.org', joined_at: '2026-10-01T00:00:00Z', proficiency: BANDS_MIXED,
+          cards_7d: 12, accuracy_7d: 80, last_active: '2026-10-23', overdue_count: 2,
+        }] });
+      }
+      if (url.startsWith('/classes/1/progress/')) return json(PROGRESS);
+      if (url.startsWith('/assignments/')) return json({ assignments: extra.assignments || [] });
+      return json(CLASS);
+    });
+  }
+
+  it('lists students with their familiarity, week and overdue work', async () => {
+    route();
     renderWithClient(<ClassDetail classId={1} onOpenStudent={() => {}} />);
 
-    const row = (await screen.findByRole('cell', { name: 'Ada' })).closest('tr');
+    const row = (await screen.findByRole('button', { name: 'Ada' })).closest('tr');
     expect(within(row).getByRole('img'))
       .toHaveAccessibleName('New: 1, Learning: 0, Familiar: 2, Proficient: 1');
+    expect(within(row).getByText('12')).toBeInTheDocument();
+    expect(within(row).getByText('80%')).toBeInTheDocument();
+    expect(within(row).getByText('Yesterday')).toBeInTheDocument();
+    expect(within(row).getByText('2 overdue')).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith('/classes/1/students/?today=2026-10-24');
+  });
+
+  it('shows the students x topics grid, and hides names for projecting', async () => {
+    route();
+    renderWithClient(<ClassDetail classId={1} onOpenStudent={() => {}} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Progress' }));
+
+    expect(await screen.findByLabelText('Ada, Slope: Familiar')).toHaveTextContent('F');
+    expect(screen.getByLabelText('Ada, Systems: New, missed lately')).toHaveClass('miss');
+    expect(screen.getByLabelText('Ben, Slope: Not started')).toHaveTextContent('–');
+    expect(screen.getByText('50%')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Hide names (for projecting)'));
+    expect(screen.queryByRole('button', { name: 'Ada' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Student 1' })).toBeInTheDocument();
+  });
+
+  it('renames and archives the class from settings, archiving only after confirm', async () => {
+    route();
+    const onBack = vi.fn();
+    renderWithClient(<ClassDetail classId={1} onBack={onBack} onOpenStudent={() => {}} />);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Settings' }));
+
+    fireEvent.change(await screen.findByLabelText('Class name'), { target: { value: 'Period 2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save name' }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/classes/1/', expect.objectContaining({
+      method: 'PATCH', body: JSON.stringify({ name: 'Period 2' }),
+    })));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive class' }));
+    const dialog = screen.getByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Archive class' }));
+    await waitFor(() => expect(onBack).toHaveBeenCalled());
   });
 });
 

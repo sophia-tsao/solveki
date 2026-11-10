@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
+import PageHeader from './ui/PageHeader.jsx';
+import { plural } from './ui/format.js';
 import './Teacher.css';
 
 function ClassList({ onOpenClass }) {
@@ -30,40 +32,55 @@ function ClassList({ onOpenClass }) {
     onSuccess: () => {
       setName('');
       queryClient.invalidateQueries({ queryKey: ['classes'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher'] });
     },
   });
 
   return (
     <div className="teacher-page">
-      <h1>Classes</h1>
-      <div className="teacher-header">
-        <input
-          className="teacher-field"
-          style={{ flex: 1, padding: '0.5rem 0.75rem', border: '1px solid #ccc', borderRadius: 8 }}
-          placeholder="New class name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button
-          className="teacher-button"
-          disabled={!name.trim() || create.isPending}
-          onClick={() => create.mutate(name.trim())}
-        >
-          Create class
-        </button>
-      </div>
+      <PageHeader
+        title="Classes"
+        sub={data && plural(data.classes.length, 'class', 'classes')}
+        actions={(
+          <form
+            className="teacher-toolbar"
+            style={{ margin: 0 }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (name.trim()) create.mutate(name.trim());
+            }}
+          >
+            <input
+              className="teacher-input"
+              placeholder="New class name"
+              aria-label="New class name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+            <button type="submit" className="teacher-button" disabled={!name.trim() || create.isPending}>
+              Create class
+            </button>
+          </form>
+        )}
+      />
+      {create.error && <p className="teacher-error">{create.error.message}</p>}
 
       {isPending && <p>Loading…</p>}
       {error && <p className="teacher-error">Failed to load classes.</p>}
       {data && (data.classes.length === 0 ? (
-        <p className="teacher-empty">No classes yet. Create one above.</p>
+        <div className="teacher-box teacher-empty-state">
+          <h2>No classes yet</h2>
+          <p>Create a class above, then share its join code so students can join.</p>
+        </div>
       ) : (
         <div className="teacher-cards">
           {data.classes.map((c) => (
-            <button key={c.id} className="teacher-card" onClick={() => onOpenClass(c.id)}>
+            <button key={c.id} className="teacher-card class-card" onClick={() => onOpenClass(c.id)}>
               <div className="teacher-card-title">{c.name}</div>
-              <div className="teacher-card-stat">{c.student_count} students</div>
-              <div className="teacher-card-stat">Code: <span className="teacher-code">{c.join_code}</span></div>
+              <div className="teacher-card-stat">{plural(c.student_count, 'student')}</div>
+              <div className="teacher-card-stat">
+                Join code <span className="teacher-code">{c.join_code}</span>
+              </div>
             </button>
           ))}
         </div>
