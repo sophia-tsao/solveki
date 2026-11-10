@@ -641,3 +641,93 @@ describe('MathProblem — completion confetti', () => {
     expect(c2.querySelector('.confetti')).not.toBeInTheDocument();
   });
 });
+
+describe('MathProblem — assignment decks', () => {
+  it('shows no assignment title on the review deck', async () => {
+    apiFetch.mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, topic_name: 'Fractions' }));
+    const { container } = renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    expect(container.querySelector('.math-problem-assignment')).toBeNull();
+  });
+
+  const CHOICES = [
+    { assignment_id: 7, title: 'Unit 3', due_at: null, completion_pct: 40, cards_answered: 2 },
+    { assignment_id: 9, title: 'Quiz prep', due_at: null, completion_pct: 0, cards_answered: 0 },
+  ];
+
+  it('lists the open assignments to pick from when there are several', async () => {
+    const user = userEvent.setup();
+    const onOpenAssignment = vi.fn();
+    apiFetch.mockResolvedValueOnce(deckResponse({ choose: CHOICES }));
+    renderWithClient(<MathProblem onOpenAssignment={onOpenAssignment} />);
+
+    expect(await screen.findByText('Choose an assignment')).toBeInTheDocument();
+    expect(screen.getByText('Unit 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep practicing' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Practice' }));
+    expect(onOpenAssignment).toHaveBeenCalledWith(9);
+  });
+
+  it("loads the routed assignment's deck and links back to the list", async () => {
+    const user = userEvent.setup();
+    const onOpenAssignment = vi.fn();
+    apiFetch.mockResolvedValueOnce(deckResponse({
+      ...ACTIVE_DECK, assignment: { id: 7, title: 'Unit 3', open: true }, open_assignments: 2,
+    }));
+    renderWithClient(<MathProblem assignmentId={7} onOpenAssignment={onOpenAssignment} />);
+
+    await findQuestion(1, 3);
+    expect(apiFetch).toHaveBeenCalledWith('/deck/?today=2026-07-20&assignment=7');
+    expect(screen.getByText('Unit 3')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'All assignments' }));
+    expect(onOpenAssignment).toHaveBeenCalledWith(null);
+  });
+
+  it('leaves the only open assignment for the Assignments page, and a finished one for practice', async () => {
+    const user = userEvent.setup();
+    const onExit = vi.fn();
+    const onOpenAssignment = vi.fn();
+    apiFetch.mockResolvedValueOnce(deckResponse({
+      ...ACTIVE_DECK, assignment: { id: 7, title: 'Unit 3', open: true }, open_assignments: 1,
+    }));
+    const { unmount } = renderWithClient(
+      <MathProblem assignmentId={7} onExit={onExit} onOpenAssignment={onOpenAssignment} />,
+    );
+    await findQuestion(1, 3);
+    await user.click(screen.getByRole('button', { name: 'Exit assignment' }));
+    expect(onExit).toHaveBeenCalled();
+    unmount();
+
+    apiFetch.mockResolvedValueOnce(deckResponse({
+      ...ACTIVE_DECK, assignment: { id: 8, title: 'Done HW', open: false }, open_assignments: 0,
+    }));
+    renderWithClient(<MathProblem assignmentId={8} onExit={onExit} onOpenAssignment={onOpenAssignment} />);
+    await findQuestion(1, 3);
+    await user.click(screen.getByRole('button', { name: 'Exit assignment' }));
+    expect(onOpenAssignment).toHaveBeenCalledWith(null);
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps answering on the one open assignment the backend picked', async () => {
+    const user = userEvent.setup();
+    const deck = { ...ACTIVE_DECK, assignment: { id: 7, title: 'Unit 3', open: true }, open_assignments: 1 };
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(deck))
+      .mockResolvedValueOnce(CHECK_CORRECT)
+      .mockResolvedValueOnce(deckResponse({ ...deck, current_number: 2 }));
+    renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    // The card names the assignment; with only one open there's no list to go back to.
+    expect(screen.getByText('Unit 3')).toHaveClass('math-problem-assignment');
+    expect(screen.queryByRole('button', { name: 'All assignments' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Exit assignment' })).toBeInTheDocument();
+
+    await user.type(screen.getByRole('textbox'), '4');
+    await user.click(screen.getByRole('button', { name: /submit|check/i }));
+    await findQuestion(2, 3, 2000);
+    const urls = apiFetch.mock.calls.map(([url]) => url);
+    expect(urls).toContain('/deck/check/?today=2026-07-20&assignment=7');
+    expect(urls).toContain('/deck/advance/?today=2026-07-20&assignment=7');
+  });
+
+});
