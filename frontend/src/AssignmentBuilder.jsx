@@ -3,11 +3,21 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
 import { createLogger } from './logger.js';
 import AssignmentTopicPicker from './AssignmentTopicPicker.jsx';
+import PageHeader from './ui/PageHeader.jsx';
 import './Teacher.css';
 
 const log = createLogger('assignment-builder');
 
-function AssignmentBuilder({ assignmentId, onDone }) {
+// An ISO timestamp as the local "YYYY-MM-DDTHH:mm" a datetime-local input shows.
+function toLocalInput(iso) {
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// `initialTopicId` / `initialClassId` prefill a new assignment, e.g. a
+// follow-up on a trouble spot from the teacher home.
+function AssignmentBuilder({ assignmentId, initialTopicId = null, initialClassId = null, onDone }) {
   const queryClient = useQueryClient();
   const editing = assignmentId != null;
 
@@ -15,8 +25,10 @@ function AssignmentBuilder({ assignmentId, onDone }) {
   const [description, setDescription] = useState('');
   const [deckSize, setDeckSize] = useState(10);
   const [allowLate, setAllowLate] = useState(true);
-  const [selected, setSelected] = useState({}); // topic_id -> 1 (presence = selected)
-  const [classDue, setClassDue] = useState({}); // class_id -> due_at (datetime-local string) | null
+  // topic_id -> 1 (presence = selected)
+  const [selected, setSelected] = useState(() => (initialTopicId ? { [initialTopicId]: 1 } : {}));
+  // class_id -> due_at (datetime-local string) | null
+  const [classDue, setClassDue] = useState(() => (initialClassId ? { [initialClassId]: null } : {}));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -51,7 +63,7 @@ function AssignmentBuilder({ assignmentId, onDone }) {
     for (const t of a.topics || []) sel[t.topic_id] = 1;
     setSelected(sel);
     const due = {};
-    for (const c of a.classes || []) due[c.class_id] = c.due_at ? c.due_at.slice(0, 16) : null;
+    for (const c of a.classes || []) due[c.class_id] = c.due_at ? toLocalInput(c.due_at) : null;
     setClassDue(due);
   }, [existingQuery.data]);
 
@@ -114,7 +126,8 @@ function AssignmentBuilder({ assignmentId, onDone }) {
       if (!assignRes.ok) throw new Error(`Failed to assign to classes (${assignRes.status})`);
 
       log.info('Saved assignment', id);
-      queryClient.invalidateQueries({ queryKey: ['teacher', 'assignments'] });
+      queryClient.invalidateQueries({ queryKey: ['teacher'] });
+      queryClient.invalidateQueries({ queryKey: ['assignment', id] });
       onDone();
     } catch (err) {
       setError(err.message);
@@ -127,7 +140,13 @@ function AssignmentBuilder({ assignmentId, onDone }) {
 
   return (
     <div className="teacher-page teacher-page-narrow">
-      <h1>{editing ? 'Edit assignment' : 'New assignment'}</h1>
+      <PageHeader
+        crumbs={[
+          { label: 'Assignments', onClick: onDone },
+          { label: editing ? 'Edit' : 'New' },
+        ]}
+        title={editing ? 'Edit assignment' : 'New assignment'}
+      />
 
       <div className="tg-note info">
         <span className="tg-note-icon">ℹ</span>

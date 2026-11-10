@@ -1501,3 +1501,37 @@
 .teacher-page .teacher-box-body > h2.ad-section-title {
   margin-top: 0;
 }
+
+/* A table row that opens its item on click. */
+.teacher-row-link {
+  cursor: pointer;
+}
+
+.teacher-row-link:hover td {
+  background: var(--bg);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* An empty page: why it's empty and the one thing to do next. */
+.teacher-empty-state {
+  padding: 2rem 1.5rem;
+  text-align: center;
+}
+
+.teacher-page .teacher-empty-state h2 {
+  margin: 0 0 0.35rem;
+}
+
+.teacher-empty-state p {
+  margin: 0 auto 1rem;
+  color: var(--ink-3);
+  max-width: 460px;
+}
