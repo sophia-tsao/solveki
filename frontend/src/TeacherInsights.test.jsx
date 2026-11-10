@@ -284,7 +284,7 @@ describe('StudentDetail', () => {
     expect(apiFetch).toHaveBeenCalledWith('/teacher/students/3/?today=2026-10-24');
   });
 
-  it('shows a dash for accuracy when nothing was answered this week', async () => {
+  it('shows a dash for accuracy and flags a quiet week', async () => {
     apiFetch.mockResolvedValueOnce(json({
       student: { id: 3, name: 'Ada', email: 'a@x.org' },
       topics: [], upcoming: [], assignments: [],
@@ -294,9 +294,10 @@ describe('StudentDetail', () => {
     renderWithClient(<StudentDetail studentId={3} />);
 
     expect(await screen.findByText('No current streak')).toBeInTheDocument();
-    expect(screen.getByText('—')).toBeInTheDocument();
+    const accuracy = screen.getByText('First-try accuracy (7 days)').closest('.kpi-tile');
+    expect(within(accuracy).getByText('—')).toBeInTheDocument();
     expect(screen.getByText('0s')).toBeInTheDocument();
-    expect(screen.getByText(/no practice in the last 7 days/)).toBeInTheDocument();
+    expect(screen.getByText('No practice in the last 7 days')).toBeInTheDocument();
   });
 
   it('shows the most recent assignments first, the rest behind "View more"', async () => {
@@ -309,21 +310,23 @@ describe('StudentDetail', () => {
       student: { id: 3, name: 'Ada', email: 'a@x.org' },
       topics: [], upcoming: [],
       assignments: [
-        assignment(1, 10, { overdue: true }), assignment(2, 20), assignment(3, 12),
-        assignment(4, 15), assignment(5, 18),
+        assignment(1, 10, { overdue: true, due_at: '2026-10-20T12:00:00Z' }), assignment(2, 20), assignment(3, 12),
+        assignment(4, 15), assignment(5, 18), assignment(6, 19), assignment(7, 11),
       ],
       activity: { days, days_practiced: 3, streak: 3, week: { cards_answered: 5, seconds: 60, accuracy: 80 } },
       struggled: [],
     }));
     renderWithClient(<StudentDetail studentId={3} />);
 
-    await screen.findByText('Set 2');
-    const titles = () => screen.getAllByText(/^Set \d$/).map((el) => el.textContent);
-    expect(titles()).toEqual(['Set 2', 'Set 5', 'Set 4']);
-    expect(screen.getByText(/1 overdue assignment/)).toBeInTheDocument();
+    await screen.findByRole('button', { name: 'Set 2' });
+    const titles = () => screen.getAllByRole('button', { name: /^Set \d$/ }).map((el) => el.textContent);
+    expect(titles()).toEqual(['Set 2', 'Set 6', 'Set 5', 'Set 4', 'Set 3']);
+    // The alert names the overdue work.
+    expect(screen.getByText('1 overdue assignment')).toBeInTheDocument();
+    expect(screen.getByText(/Set 1 \(due Oct 20\)/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'View more (2)' }));
-    expect(titles()).toEqual(['Set 2', 'Set 5', 'Set 4', 'Set 3', 'Set 1']);
+    expect(titles()).toEqual(['Set 2', 'Set 6', 'Set 5', 'Set 4', 'Set 3', 'Set 7', 'Set 1']);
   });
 
   it('opens an assignment from its row', async () => {
@@ -339,16 +342,16 @@ describe('StudentDetail', () => {
     const onOpenAssignment = vi.fn();
     renderWithClient(<StudentDetail studentId={3} onOpenAssignment={onOpenAssignment} />);
 
-    fireEvent.click(await screen.findByText('Fractions'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Fractions' }));
     expect(onOpenAssignment).toHaveBeenCalledWith(9);
   });
 
-  it('groups topics by proficiency without the pie chart', async () => {
+  it('lists topics with band, accuracy and next review, weakest first', async () => {
     apiFetch.mockResolvedValueOnce(json({
       student: { id: 3, name: 'Ada', email: 'a@x.org' },
       topics: [
-        { id: 1, topic_name: 'Ratios', interval: 1 },
-        { id: 2, topic_name: 'Slope', interval: 30 },
+        { id: 2, topic_name: 'Slope', interval: 30, accuracy_30d: 90, due_date: '2026-11-20' },
+        { id: 1, topic_name: 'Ratios', interval: 1, accuracy_30d: 40, due_date: '2026-10-21' },
       ],
       upcoming: [], assignments: [],
       activity: { days, days_practiced: 3, streak: 3, week: { cards_answered: 5, seconds: 60, accuracy: 80 } },
@@ -356,24 +359,43 @@ describe('StudentDetail', () => {
     }));
     renderWithClient(<StudentDetail studentId={3} />);
 
-    expect(await screen.findByText('Topics by proficiency')).toBeInTheDocument();
-    expect(screen.getByText('Ratios')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Proficient' })).toBeInTheDocument();
-    expect(screen.queryByRole('img', { name: 'Topic proficiency mix' })).not.toBeInTheDocument();
+    const box = (await screen.findByRole('heading', { name: 'Topics' })).closest('section');
+    const rows = within(box).getAllByRole('row').slice(1);
+    expect(rows.map((r) => r.querySelector('.home-topic-name').textContent)).toEqual(['Ratios', 'Slope']);
+    expect(within(rows[0]).getByText('New')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('40%')).toBeInTheDocument();
+    expect(within(rows[0]).getByText('Overdue 3d')).toBeInTheDocument();
+    expect(within(rows[1]).getByText('Proficient')).toBeInTheDocument();
   });
 
-  it('previews a few topics per deck, the rest behind "Show more"', async () => {
-    const topics = ['A', 'B', 'C', 'D', 'E'].map((name, i) => ({ id: i, topic_name: name, interval: 1 }));
-    apiFetch.mockResolvedValueOnce(json({
-      student: { id: 3, name: 'Ada', email: 'a@x.org' },
-      topics, upcoming: [], assignments: [], activity: null, struggled: [],
-    }));
-    renderWithClient(<StudentDetail studentId={3} />);
+  it('breadcrumbs back to the class and steps through the roster', async () => {
+    apiFetch.mockImplementation(async (url) => (
+      url.startsWith('/classes/5/students/')
+        ? json({ students: [{ id: 4, name: 'Cy' }, { id: 3, name: 'Ada' }, { id: 2, name: 'Bo' }] })
+        : json({
+          student: { id: 3, name: 'Ada', email: 'a@x.org' },
+          classes: [{ id: 5, name: 'Period 1' }],
+          benchmarks: { class_id: 5, class_name: 'Period 1', cards_7d_median: 21, seconds_7d_median: 600, accuracy_30d_class: 78 },
+          topics: [], upcoming: [], assignments: [],
+          activity: { days, days_practiced: 3, streak: 3, week: { cards_answered: 5, seconds: 60, accuracy: 80 } },
+          struggled: [],
+        })
+    ));
+    const onOpenClass = vi.fn();
+    const onOpenStudent = vi.fn();
+    renderWithClient(
+      <StudentDetail studentId={3} classId={5} onOpenClass={onOpenClass} onOpenStudent={onOpenStudent} onOpenClasses={() => {}} />,
+    );
 
-    expect(await screen.findByText('D')).toBeInTheDocument();
-    expect(screen.queryByText('E')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Show 1 more' }));
-    expect(screen.getByText('E')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Period 1' }));
+    expect(onOpenClass).toHaveBeenCalledWith(5);
+    expect(screen.getByText('Last 7 days · class median 21')).toBeInTheDocument();
+    expect(screen.getByText('Class 78% over 30 days')).toBeInTheDocument();
+    expect(await screen.findByText('1 of 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Previous student' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Next student' }));
+    expect(onOpenStudent).toHaveBeenCalledWith(2, 5);
+    expect(apiFetch).toHaveBeenCalledWith('/teacher/students/3/?today=2026-10-24&class=5');
   });
 });
 

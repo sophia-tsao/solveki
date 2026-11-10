@@ -1787,3 +1787,75 @@
 .home-trend .ptrend {
   margin: 0;
 }
+
+/* ---- Student page ---- */
+
+.sd-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: var(--brand-ink);
+  font-weight: 650;
+}
+
+.sd-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.sd-alerts {
+  margin-bottom: 0.875rem;
+  border-color: #f5c2bd;
+}
+
+.sd-more {
+  margin: 0.25rem 0.5rem 0.5rem;
+}
+
+.band-chip {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.sd-topics {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* A one-page report for parent conferences: no app chrome or controls. */
+@media print {
+  .header,
+  .page-crumbs,
+  .page-header-actions,
+  .sd-more,
+  .ptrend-controls {
+    display: none !important;
+  }
+
+  .app-main:has(> .teacher-page) {
+    background: #fff;
+  }
+
+  .teacher-page {
+    max-width: none;
+    padding: 0;
+  }
+
+  .sd-topics {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .teacher-box,
+  .kpi-tile {
+    break-inside: avoid;
+  }
+}
