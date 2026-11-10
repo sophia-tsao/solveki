@@ -4,6 +4,7 @@ import logging
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
+from django.db.models import Count
 from django.http import JsonResponse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -11,12 +12,12 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
-    Assignment, AssignmentTopic, AssignmentClass, Classroom, ClassEnrollment,
+    AnswerRecord, Assignment, AssignmentTopic, AssignmentClass, Classroom, ClassEnrollment,
     DailyDeck, DailyTopicGrade, StudentAssignment, Topic, UserTopicSelection, TopicReview,
 )
 from .common import _require_auth, _require_teacher
 from .deck import _client_today, _get_or_create_today_deck, _interval_band, _scope_for
-from .insights import struggled_topics
+from .insights import BANDS, activity_by_student, empty_bands, is_overdue, struggled_topics
 from .. import practice
 
 logger = logging.getLogger(__name__)
@@ -119,20 +120,39 @@ _STATUS_LABEL = {
 
 
 _NO_PROGRESS = {
-    "status": "not_started", "cards_answered": 0, "completion_pct": 0,
+    "status": "not_started", "cards_answered": 0, "cards_needed": 0, "completion_pct": 0,
     "max_reached": False, "late": False,
 }
 
 
 def _progress_row(row):
-    """A `StudentAssignment`'s progress as shown to teachers and the student."""
+    """A `StudentAssignment`'s progress as shown to teachers and the student.
+
+    `cards_needed` is 0 until the student's first card on it (teachers see it
+    filled in with the deck size; see `_teacher_progress`).
+    """
     return {
         "status": _STATUS_LABEL.get(row.status, "not_started"),
         "cards_answered": row.cards_answered,
+        "cards_needed": row.cards_needed,
         "completion_pct": row.completion_pct,
         "max_reached": row.max_reached,
         "late": row.late,
     }
+
+
+def _teacher_progress(progress, deck_size):
+    """A progress dict as teachers see it.
+
+    An assignment starts "in progress" the moment it reaches a student, so for
+    teachers a student with no cards answered on it yet reads as not started.
+    `cards_needed` is filled in with the deck size until it's first set.
+    """
+    out = dict(progress)
+    if out["status"] != "done" and not out["cards_answered"]:
+        out["status"] = "not_started"
+    out["cards_needed"] = out.get("cards_needed") or deck_size
+    return out
 
 
 def _progress_by_assignment(student, assignment_ids=None):
@@ -273,8 +293,48 @@ def assignments(request):
         logger.info("Teacher %s created assignment %s", request.user.id, assignment.id)
         return JsonResponse(_serialize_assignment(assignment), status=201)
 
+    # Each row carries what the list shows without opening it: the classes it's
+    # assigned to with due dates, the next due date, its topic count, and how
+    # many students sit in each status. `?class=` narrows to one class.
     qs = Assignment.objects.filter(teacher=request.user).order_by("-created_at")
-    return JsonResponse({"assignments": [_serialize_assignment(a, include_topics=False) for a in qs]})
+    class_id = None
+    if request.GET.get("class"):
+        try:
+            class_id = int(request.GET["class"])
+        except (TypeError, ValueError):
+            return JsonResponse({"error": "class must be an id"}, status=400)
+        qs = qs.filter(class_links__classroom_id=class_id).distinct()
+    rows = list(qs)
+    summaries = assignment_summaries(rows, timezone.now(), class_id=class_id)
+    return JsonResponse({"assignments": [
+        {**_serialize_assignment(a, include_topics=False), **summaries[a.id]} for a in rows
+    ]})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def duplicate_assignment(request, assignment_id):
+    """Copy an assignment (its settings and topics, not its classes) as "<title> (copy)"."""
+    guard = _require_teacher(request)
+    if guard:
+        return guard
+    source, err = _get_owned_assignment(request, assignment_id)
+    if err:
+        return err
+    with transaction.atomic():
+        copy = Assignment.objects.create(
+            teacher=request.user,
+            title=f"{source.title} (copy)",
+            description=source.description,
+            deck_size=source.deck_size,
+            allow_late=source.allow_late,
+        )
+        AssignmentTopic.objects.bulk_create([
+            AssignmentTopic(assignment=copy, topic_id=tid)
+            for tid in source.assignment_topics.order_by("id").values_list("topic_id", flat=True)
+        ])
+    logger.info("Teacher %s duplicated assignment %s as %s", request.user.id, assignment_id, copy.id)
+    return JsonResponse(_serialize_assignment(copy), status=201)
 
 
 @csrf_exempt
@@ -353,13 +413,6 @@ def assign_to_classes(request, assignment_id):
 # Teacher: analytics
 # ---------------------------------------------------------------------------
 
-_BANDS = ("new", "learning", "familiar", "proficient")
-
-
-def _empty_bands():
-    return {b: 0 for b in _BANDS}
-
-
 def _band_timelines(starts, topic_ids, current, end):
     """Each student's familiarity band on the topics, day by day, as segments.
 
@@ -414,25 +467,156 @@ def _band_timelines(starts, topic_ids, current, end):
     return out
 
 
-def _student_due_map(assignment):
-    """Map each assigned student's id -> (class_id, due_at), earliest due wins.
+def _due_maps(assignment_ids):
+    """Per assignment: each assigned student's id -> (class_id, due_at), earliest due wins.
 
     A student reaches an assignment through a class they're enrolled in that the
     assignment was assigned to; if several match, the earliest-due link wins (the
     same rule as `_assignment_link_for_student`), giving one due date per student.
+    Two queries for any number of assignments.
     """
-    out = {}  # student_id -> (class_id, due_at)
-    links = (
-        AssignmentClass.objects.filter(assignment=assignment)
-        .select_related("classroom")
+    out = {aid: {} for aid in assignment_ids}
+    links = list(
+        AssignmentClass.objects.filter(assignment_id__in=assignment_ids)
         .order_by("due_at", "id")
+        .values_list("assignment_id", "classroom_id", "due_at")
     )
-    for link in links:
-        for student_id in ClassEnrollment.objects.filter(
-            classroom_id=link.classroom_id
-        ).values_list("student_id", flat=True):
+    roster = {}  # class id -> [student ids]
+    for cid, sid in ClassEnrollment.objects.filter(
+        classroom_id__in={cid for _, cid, _ in links}
+    ).values_list("classroom_id", "student_id"):
+        roster.setdefault(cid, []).append(sid)
+    for aid, cid, due_at in links:
+        for sid in roster.get(cid, []):
             # First link wins because links are already ordered earliest-due.
-            out.setdefault(student_id, (link.classroom_id, link.due_at))
+            out[aid].setdefault(sid, (cid, due_at))
+    return out
+
+
+def _student_due_map(assignment):
+    """`_due_maps` for one assignment."""
+    return _due_maps([assignment.id])[assignment.id]
+
+
+STATUS_COUNT_KEYS = ("assigned", "done", "in_progress", "not_started", "overdue", "needs_help")
+
+
+def _status_counts(due_map, rows_by_student, deck_size, now):
+    """Tally students by teacher-facing status for one assignment.
+
+    `rows_by_student` maps student id -> progress dict (`_progress_row`).
+    Overdue students are also counted under their status; needs help counts
+    students who finished only at the card cap.
+    """
+    counts = {k: 0 for k in STATUS_COUNT_KEYS}
+    for sid, (_, due_at) in due_map.items():
+        row = _teacher_progress(rows_by_student.get(sid, _NO_PROGRESS), deck_size)
+        counts["assigned"] += 1
+        counts[row["status"]] += 1
+        if is_overdue(due_at, row["status"], now):
+            counts["overdue"] += 1
+        if row["max_reached"]:
+            counts["needs_help"] += 1
+    return counts
+
+
+def overdue_by_student(assignments, now, class_id=None):
+    """Map student id -> the assignments they're overdue on, earliest due first.
+
+    Each entry is {"assignment_id", "title", "due_at"}. With `class_id`, only
+    students reaching an assignment through that class count. A fixed handful
+    of queries for any number of assignments.
+    """
+    by_id = {a.id: a for a in assignments}
+    due_maps = _due_maps(list(by_id))
+    rows = {
+        (row.assignment_id, row.student_id): _progress_row(row)
+        for row in StudentAssignment.objects.filter(assignment_id__in=list(by_id))
+    }
+    out = {}
+    for aid, due_map in due_maps.items():
+        for sid, (cid, due_at) in due_map.items():
+            if class_id is not None and cid != class_id:
+                continue
+            row = _teacher_progress(rows.get((aid, sid), _NO_PROGRESS), by_id[aid].deck_size)
+            if is_overdue(due_at, row["status"], now):
+                out.setdefault(sid, []).append({
+                    "assignment_id": aid, "title": by_id[aid].title, "due_at": due_at.isoformat(),
+                })
+    for items in out.values():
+        items.sort(key=lambda i: i["due_at"])
+    return out
+
+
+def assignment_summaries(assignments, now, class_id=None):
+    """List-view facts per assignment: its classes, next due date, topic count, status counts.
+
+    Maps assignment id -> {"classes", "next_due_at", "topic_count", "counts"}.
+    With `class_id`, the classes and counts cover only that class. A fixed
+    handful of queries for the whole list.
+    """
+    ids = [a.id for a in assignments]
+    due_maps = _due_maps(ids)
+    if class_id is not None:
+        due_maps = {aid: {s: v for s, v in m.items() if v[0] == class_id} for aid, m in due_maps.items()}
+    classes = {aid: [] for aid in ids}
+    for link in (
+        AssignmentClass.objects.filter(assignment_id__in=ids)
+        .select_related("classroom").order_by("due_at", "id")
+    ):
+        classes[link.assignment_id].append({
+            "class_id": link.classroom_id,
+            "class_name": link.classroom.name,
+            "due_at": link.due_at.isoformat() if link.due_at else None,
+            "available_at": link.available_at.isoformat() if link.available_at else None,
+        })
+    topic_counts = dict(
+        AssignmentTopic.objects.filter(assignment_id__in=ids)
+        .values("assignment_id").annotate(n=Count("id")).values_list("assignment_id", "n")
+    )
+    rows = {aid: {} for aid in ids}
+    for row in StudentAssignment.objects.filter(assignment_id__in=ids):
+        rows[row.assignment_id][row.student_id] = _progress_row(row)
+    out = {}
+    for a in assignments:
+        links = classes[a.id]
+        if class_id is not None:
+            links = [c for c in links if c["class_id"] == class_id]
+        dues = sorted(c["due_at"] for c in links if c["due_at"])
+        out[a.id] = {
+            "classes": links,
+            "next_due_at": dues[0] if dues else None,
+            "topic_count": topic_counts.get(a.id, 0),
+            "counts": _status_counts(due_maps[a.id], rows[a.id], a.deck_size, now),
+        }
+    return out
+
+
+def _assignment_work(student_ids, topic_ids, started_at):
+    """Each student's answers on the assignment's topics since it reached them.
+
+    Maps student id -> {"accuracy": first-try share (0-100, None before any
+    answer), "topics_solid": how many of the topics they're solid on by the
+    assignment's completion rule (`practice.is_solid`)}. One query.
+    """
+    outcomes = {sid: {tid: [] for tid in topic_ids} for sid in student_ids}
+    if student_ids and topic_ids:
+        for uid, tid, outcome, at in (
+            AnswerRecord.objects.filter(user_id__in=student_ids, topic_id__in=topic_ids)
+            .order_by("created_at", "id")
+            .values_list("user_id", "topic_id", "outcome", "created_at")
+        ):
+            since = started_at.get(uid)
+            if since is None or at >= since:
+                outcomes[uid][tid].append(outcome)
+    out = {}
+    for sid, by_topic in outcomes.items():
+        answers = [o for os_ in by_topic.values() for o in os_]
+        first = sum(1 for o in answers if o == "correct_first")
+        out[sid] = {
+            "accuracy": round(first / len(answers) * 100) if answers else None,
+            "topics_solid": sum(1 for os_ in by_topic.values() if practice.is_solid(os_)),
+        }
     return out
 
 
@@ -485,12 +669,16 @@ def assignment_results(request, assignment_id):
     progress = {}  # student_id -> progress dict (see `_progress_row`)
     created = timezone.localdate(assignment.created_at)
     starts = {sid: created for sid in student_ids}  # student_id -> first timeline day
+    started_at = {}  # student_id -> when the assignment reached them
     for row in StudentAssignment.objects.filter(assignment=assignment, student_id__in=student_ids):
         progress[row.student_id] = _progress_row(row)
         if row.started_at:
             starts[row.student_id] = timezone.localdate(row.started_at)
+            started_at[row.student_id] = row.started_at
     today = _client_today(request)
     timelines = _band_timelines(starts, topic_ids, intervals, today)
+    work = _assignment_work(student_ids, topic_ids, started_at)
+    activity = activity_by_student(student_ids, today)
 
     User = get_user_model()
     names = {
@@ -500,33 +688,38 @@ def assignment_results(request, assignment_id):
 
     now = timezone.now()
     students_out = []
-    totals = _empty_bands()
-    by_topic = {tid: _empty_bands() for tid in topic_ids}
+    totals = empty_bands()
+    by_topic = {tid: empty_bands() for tid in topic_ids}
     num_completed = 0
     for sid in student_ids:
         class_id, due_at = due_map[sid]
-        bands = _empty_bands()
+        bands = empty_bands()
         for tid in topic_ids:
             band = _interval_band(intervals.get((sid, tid), 0))
             bands[band] += 1
             by_topic[tid][band] += 1
-        row = progress.get(sid, _NO_PROGRESS)
+        row = _teacher_progress(progress.get(sid, _NO_PROGRESS), assignment.deck_size)
         done = row["status"] == "done"
         if done:
             num_completed += 1
-        for b in _BANDS:
+        for b in BANDS:
             totals[b] += bands[b]
+        last_active = activity[sid]["last_active"]
         students_out.append({
             "student_id": sid,
             "name": names.get(sid, "(unknown)"),
             "class_id": class_id,
             "due_at": due_at.isoformat() if due_at else None,
             **row,
-            "overdue": bool(due_at and due_at < now and not done),
+            "overdue": is_overdue(due_at, row["status"], now),
+            "accuracy": work[sid]["accuracy"],
+            "topics_solid": work[sid]["topics_solid"],
+            "last_active": last_active.isoformat() if last_active else None,
             "proficiency": bands,
             "timeline": timelines[sid],
         })
     students_out.sort(key=lambda s: s["name"].lower())
+    counts = _status_counts(due_map, progress, assignment.deck_size, now)
 
     return JsonResponse({
         "assignment": _serialize_assignment(assignment),
@@ -540,6 +733,7 @@ def assignment_results(request, assignment_id):
         ),
         "num_students": len(student_ids),
         "num_completed": num_completed,
+        "counts": counts,
         "band_totals": totals,
         # The span every student's timeline is drawn against.
         "timeline_range": {

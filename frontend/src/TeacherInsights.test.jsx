@@ -43,7 +43,8 @@ describe('AssignmentDetail', () => {
     }));
     renderWithClient(<AssignmentDetail assignmentId={7} onOpenStudent={() => {}} />);
 
-    const struggled = (await screen.findByText('Struggled with most')).parentElement;
+    fireEvent.click(await screen.findByRole('tab', { name: /Topics/ }));
+    const struggled = screen.getByText('Struggled with most').parentElement;
     expect(within(struggled).getByText('Decimals')).toBeInTheDocument();
     expect(within(struggled).getByText(/25% right first try · 8 answers · 3 students missed it/)).toBeInTheDocument();
 
@@ -119,8 +120,8 @@ describe('AssignmentDetail', () => {
     }));
     renderWithClient(<AssignmentDetail assignmentId={7} onOpenStudent={() => {}} />);
 
-    expect(await screen.findByText(/at least 10 cards \(up to 15 for students who struggle\)/)).toBeInTheDocument();
-    expect(screen.getByText(/no late work/)).toBeInTheDocument();
+    expect(await screen.findByText(/At least 10 cards \(up to 15 for students who struggle\)/)).toBeInTheDocument();
+    expect(screen.getByText(/10–15 cards · no late work/)).toBeInTheDocument();
     const row = (name) => screen.getByRole('cell', { name }).closest('tr');
     expect(within(row('Ada')).getByText('40%')).toBeInTheDocument();
     expect(within(row('Ben')).getByText('Needs help')).toBeInTheDocument();
@@ -135,7 +136,46 @@ describe('AssignmentDetail', () => {
       band_totals: {}, students: [],
     }));
     renderWithClient(<AssignmentDetail assignmentId={7} onOpenStudent={() => {}} />);
-    expect(await screen.findByText('No misses on these topics yet.')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('tab', { name: /Topics/ }));
+    expect(screen.getByText('No misses on these topics yet.')).toBeInTheDocument();
+  });
+
+  it('counts students by status and filters the table from the counters', async () => {
+    const student = (id, name, extra) => ({
+      student_id: id, name, class_id: 1, due_at: null, cards_answered: 0, cards_needed: 10,
+      completion_pct: 0, max_reached: false, late: false, overdue: false,
+      status: 'in_progress', proficiency: BANDS_MIXED, timeline: [], ...extra,
+    });
+    apiFetch.mockResolvedValueOnce(json({
+      assignment: { title: 'HW 1', deck_size: 10, max_cards: 15, allow_late: true, classes: [] },
+      topics: [], struggled: [], students: [
+        student(1, 'Ada', { status: 'not_started', overdue: true }),
+        student(2, 'Ben', { cards_answered: 4, completion_pct: 40, accuracy: 75, topics_solid: 1 }),
+        student(3, 'Cy', { status: 'done', completion_pct: 100, cards_answered: 15, max_reached: true }),
+      ],
+    }));
+    const onOpenStudent = vi.fn();
+    renderWithClient(<AssignmentDetail assignmentId={7} onOpenStudent={onOpenStudent} />);
+
+    const counters = await screen.findByRole('group', { name: 'Filter by status' });
+    const counter = (label) => within(counters).getByRole('button', { name: new RegExp(label) });
+    expect(counter('Assigned')).toHaveTextContent('3');
+    expect(counter('Overdue')).toHaveTextContent('1');
+    expect(counter('Needs help')).toHaveTextContent('1');
+
+    // Needs attention first: overdue, then needs help, then the rest.
+    const names = () => screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0].textContent);
+    expect(names()).toEqual(['Ada', 'Cy', 'Ben']);
+    expect(screen.getByText('4 of 10 cards')).toBeInTheDocument();
+    expect(screen.getByText('75%')).toBeInTheDocument();
+
+    fireEvent.click(counter('In progress'));
+    expect(names()).toEqual(['Ben']);
+    fireEvent.click(counter('In progress'));
+    expect(names()).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Ben' }));
+    expect(onOpenStudent).toHaveBeenCalledWith(2, 1);
   });
 });
 

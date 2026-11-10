@@ -1,5 +1,6 @@
 import datetime
 import logging
+import statistics
 
 from django.contrib.auth import get_user_model
 from django.db.models import Count, Q
@@ -9,19 +10,24 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
 from ..models import (
-    Classroom, ClassEnrollment, Topic, TopicReview, Settings,
+    Assignment, Classroom, ClassEnrollment, Topic, TopicReview, Settings,
     AssignmentClass, AssignmentTopic, StudentAssignment, AnswerRecord,
     DailyTopicGrade, UserTopicSelection,
 )
 from .common import _require_teacher
 from .deck import _client_today, _effective_due_dates, _interval_band, _ordered_topics
 from .dashboard import _topic_stats
-from .assignments import _NO_PROGRESS, _progress_by_assignment
-from .insights import STRUGGLE_DAYS, practice_activity, struggled_topics
+from .assignments import (
+    _NO_PROGRESS, _progress_by_assignment, _teacher_progress, assignment_summaries, overdue_by_student,
+)
+from .insights import (
+    BANDS, STRUGGLE_DAYS, activity_by_student, is_overdue, pooled_accuracy, practice_activity,
+    struggled_topics, weekly_goals,
+)
 
 logger = logging.getLogger(__name__)
 
-_BANDS = ("new", "learning", "familiar", "proficient")
+_BANDS = BANDS
 
 # Overview focus columns: how far back an assignment counts as newly taught,
 # how far back weak spots look (and how far back their "missed it" count
@@ -30,6 +36,20 @@ NEW_DAYS = 14
 WEAK_DAYS = 30
 MISSED_DAYS = 14
 FOCUS_LIMIT = 5
+
+# Home "needs attention": at most this many items; a student counts as
+# inactive after this many days without practice; "not started" alerts cover
+# assignments due within this many hours; "needs help" looks back this far;
+# trouble spots are topics under this first-try accuracy.
+ATTENTION_LIMIT = 6
+INACTIVE_DAYS = 7
+NOT_STARTED_HOURS = 48
+NEEDS_HELP_DAYS = 14
+TROUBLE_ACCURACY = 70
+TROUBLE_LIMIT = 2
+DUE_SOON_DAYS = 7
+DUE_SOON_LIMIT = 5
+_SEVERITY_ORDER = {"crit": 0, "warn": 1, "info": 2}
 
 
 @csrf_exempt
@@ -269,6 +289,175 @@ def overview_focus(request):
     })
 
 
+def _display_name(user):
+    return user.get_full_name() or user.username or user.email
+
+
+def _home_class_of(teacher, student_ids):
+    """Map student id -> the first (oldest) of the teacher's classes they're in."""
+    out = {}
+    for sid, cid in (
+        ClassEnrollment.objects.filter(student_id__in=student_ids, classroom__teacher=teacher)
+        .order_by("classroom__created_at", "classroom_id")
+        .values_list("student_id", "classroom_id")
+    ):
+        out.setdefault(sid, cid)
+    return out
+
+
+def _attention_items(teacher, student_ids, class_id, today, now, week, assignments, summaries):
+    """The ranked "needs attention" list for the teacher home (see `overview_summary`)."""
+    User = get_user_model()
+    names = {u.id: _display_name(u) for u in User.objects.filter(id__in=student_ids)}
+    home = {sid: class_id for sid in student_ids} if class_id else _home_class_of(teacher, student_ids)
+    ids = set(student_ids)
+    items = []
+
+    overdue = overdue_by_student(assignments, now, class_id=class_id)
+    for sid in student_ids:
+        late = overdue.get(sid, [])
+        last = week[sid]["last_active"]
+        idle = (today - last).days if last else None
+        # Only students who practiced before and stopped count as inactive, so
+        # a brand-new roster isn't all alerts.
+        inactive = idle is not None and idle >= INACTIVE_DAYS
+        if not late and not inactive:
+            continue
+        severity = "crit" if late and (inactive or len(late) > 1) else "warn"
+        items.append({
+            "type": "student", "severity": severity, "student_id": sid,
+            "name": names.get(sid, "(unknown)"), "class_id": home.get(sid),
+            "overdue": [a["title"] for a in late], "inactive_days": idle if inactive else None,
+            "_rank": (-len(late), -(idle or 0)),
+        })
+
+    for row in (
+        StudentAssignment.objects.filter(
+            assignment__in=assignments, student_id__in=ids, max_reached=True,
+            completed_at__gte=now - datetime.timedelta(days=NEEDS_HELP_DAYS),
+        ).select_related("assignment").order_by("-completed_at")
+    ):
+        if class_id and row.classroom_id != class_id:
+            continue
+        items.append({
+            "type": "needs_help", "severity": "warn", "student_id": row.student_id,
+            "name": names.get(row.student_id, "(unknown)"), "class_id": row.classroom_id,
+            "assignment_id": row.assignment_id, "title": row.assignment.title,
+            "_rank": (0, 0),
+        })
+
+    since = today - datetime.timedelta(days=WEAK_DAYS - 1)
+    spots = [w for w in _weak_spots(student_ids, since, today) if w["accuracy"] < TROUBLE_ACCURACY]
+    for spot in spots[:TROUBLE_LIMIT]:
+        missed_ids = (
+            AnswerRecord.objects.filter(
+                user_id__in=student_ids, topic_id=spot["topic_id"],
+                date__gte=today - datetime.timedelta(days=MISSED_DAYS - 1),
+            ).exclude(outcome="correct_first").values_list("user_id", flat=True).distinct()
+        )
+        students = sorted(
+            ({"id": sid, "name": names.get(sid, "(unknown)")} for sid in set(missed_ids)),
+            key=lambda st: st["name"].lower(),
+        )
+        items.append({
+            "type": "trouble_spot", "severity": "info", "topic_id": spot["topic_id"],
+            "topic_name": spot["topic_name"], "accuracy": spot["accuracy"], "students": students,
+            "_rank": (spot["accuracy"], 0),
+        })
+
+    soon = now + datetime.timedelta(hours=NOT_STARTED_HOURS)
+    for a in assignments:
+        info = summaries[a.id]
+        for link in info["classes"]:
+            due = link["due_at"] and datetime.datetime.fromisoformat(link["due_at"])
+            if not due or not (now <= due <= soon):
+                continue
+            waiting = info["counts"]["not_started"]
+            if waiting:
+                items.append({
+                    "type": "not_started", "severity": "warn", "assignment_id": a.id,
+                    "title": a.title, "count": waiting, "due_at": link["due_at"],
+                    "class_name": link["class_name"], "class_id": link["class_id"],
+                    "_rank": (-waiting, 0),
+                })
+            break
+
+    items.sort(key=lambda i: (_SEVERITY_ORDER[i["severity"]], i["_rank"]))
+    for item in items:
+        del item["_rank"]
+    return items[:ATTENTION_LIMIT]
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def overview_summary(request):
+    """The teacher home: headline numbers, what needs attention, and what's due soon.
+
+    Scoped like `proficiency_history` (``scope=all``, or ``scope=class`` with
+    ``class_id``), over the 7 days ending the client's ``today``:
+
+    - ``kpis``: students on track for their weekly goal (`insights.weekly_goals`)
+      and how many were last week, cards answered, cards per active student,
+      first-try accuracy this week and last, and overdue student-assignments;
+    - ``needs_attention``: up to `ATTENTION_LIMIT` items, most urgent first —
+      students overdue and/or gone quiet, students who finished at the card cap
+      without getting solid ("needs help"), trouble-spot topics with who
+      missed them, and assignments due soon that students haven't started;
+    - ``due_soon``: open assignments due in the next `DUE_SOON_DAYS` days.
+    """
+    guard = _require_teacher(request)
+    if guard:
+        return guard
+    student_ids, err = _resolve_history_students(request)
+    if err:
+        return err
+    today = _client_today(request)
+    now = timezone.now()
+    class_id = int(request.GET["class_id"]) if request.GET.get("scope") == "class" else None
+
+    week = activity_by_student(student_ids, today)
+    last_week = activity_by_student(student_ids, today - datetime.timedelta(days=7))
+    goals = weekly_goals(student_ids)
+    active = [sid for sid in student_ids if week[sid]["cards"] > 0]
+    cards = sum(week[sid]["cards"] for sid in student_ids)
+
+    assignments = Assignment.objects.filter(teacher=request.user)
+    if class_id:
+        assignments = assignments.filter(class_links__classroom_id=class_id)
+    assignments = list(assignments.distinct().order_by("-created_at"))
+    summaries = assignment_summaries(assignments, now, class_id=class_id)
+    ids = set(student_ids)
+    overdue = overdue_by_student(assignments, now, class_id=class_id)
+
+    due_soon = []
+    horizon = now + datetime.timedelta(days=DUE_SOON_DAYS)
+    for a in assignments:
+        info = summaries[a.id]
+        due = info["next_due_at"] and datetime.datetime.fromisoformat(info["next_due_at"])
+        if due and now <= due <= horizon and info["counts"]["assigned"]:
+            due_soon.append({"id": a.id, "title": a.title, **info})
+    due_soon.sort(key=lambda d: d["next_due_at"])
+
+    return JsonResponse({
+        "kpis": {
+            "students": len(student_ids),
+            "on_track": sum(1 for sid in student_ids if week[sid]["cards"] >= goals[sid]),
+            "on_track_prev": sum(1 for sid in student_ids if last_week[sid]["cards"] >= goals[sid]),
+            "goal_cards": statistics.median(goals.values()) if goals else None,
+            "active": len(active),
+            "cards_7d": cards,
+            "cards_per_active": round(cards / len(active)) if active else None,
+            "accuracy_7d": pooled_accuracy(week),
+            "accuracy_prev_7d": pooled_accuracy(last_week),
+            "overdue": sum(len(v) for sid, v in overdue.items() if sid in ids),
+        },
+        "needs_attention": _attention_items(
+            request.user, student_ids, class_id, today, now, week, assignments, summaries,
+        ),
+        "due_soon": due_soon[:DUE_SOON_LIMIT],
+    })
+
+
 def _resolve_history_students(request):
     """Resolve the student id set for a proficiency-history request, or an error.
 
@@ -495,18 +684,56 @@ def student_detail(request, student_id):
         if a.id in seen:
             continue
         seen.add(a.id)
-        row = progress.get(a.id, _NO_PROGRESS)
-        done = row["status"] == "done"
+        row = _teacher_progress(progress.get(a.id, _NO_PROGRESS), a.deck_size)
         assignments_out.append({
             "assignment_id": a.id,
             "title": a.title,
+            "class_id": link.classroom_id,
             "class_name": link.classroom.name,
             **row,
             "deck_size": a.deck_size,
             "assigned_at": link.assigned_at.isoformat(),
             "due_at": link.due_at.isoformat() if link.due_at else None,
-            "overdue": bool(link.due_at and link.due_at < now and not done),
+            "overdue": is_overdue(link.due_at, row["status"], now),
         })
+
+    # The teacher's classes the student is in (oldest first), and how the
+    # student compares with one of them: `?class=` if given, else the first.
+    classes = list(
+        Classroom.objects.filter(teacher=request.user, enrollments__student=student)
+        .order_by("created_at", "id").distinct()
+    )
+    try:
+        wanted = int(request.GET.get("class", ""))
+    except ValueError:
+        wanted = None
+    bench_class = next((c for c in classes if c.id == wanted), classes[0] if classes else None)
+    benchmarks = None
+    if bench_class is not None:
+        roster = list(
+            ClassEnrollment.objects.filter(classroom=bench_class).values_list("student_id", flat=True)
+        )
+        week = activity_by_student(roster, today)
+        month = activity_by_student(roster, today, days=STRUGGLE_DAYS)
+        benchmarks = {
+            "class_id": bench_class.id,
+            "class_name": bench_class.name,
+            "cards_7d_median": statistics.median(w["cards"] for w in week.values()),
+            "seconds_7d_median": statistics.median(w["seconds"] for w in week.values()),
+            "accuracy_30d_class": pooled_accuracy(month),
+            "accuracy_30d": month[student.id]["accuracy"] if student.id in month else None,
+        }
+
+    # Per-topic first-try accuracy over the same window as `struggled`.
+    month_start = today - datetime.timedelta(days=STRUGGLE_DAYS - 1)
+    topic_acc = {
+        row["topic_id"]: round(row["right"] / row["answers"] * 100)
+        for row in AnswerRecord.objects.filter(user=student, date__gte=month_start, date__lte=today)
+        .values("topic_id")
+        .annotate(answers=Count("id"), right=Count("id", filter=Q(outcome="correct_first")))
+    }
+    for t in topics:
+        t["accuracy_30d"] = topic_acc.get(t["id"])
 
     return JsonResponse({
         "student": {
@@ -514,6 +741,8 @@ def student_detail(request, student_id):
             "name": (student.get_full_name() or student.username or student.email),
             "email": student.email,
         },
+        "classes": [{"id": c.id, "name": c.name} for c in classes],
+        "benchmarks": benchmarks,
         "topics": topics,
         "upcoming": upcoming,
         "assignments": assignments_out,

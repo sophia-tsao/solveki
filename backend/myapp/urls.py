@@ -30,6 +30,7 @@ urlpatterns = [
     path('classes/mine/', views.my_classes, name="my_classes"),
     path('classes/<int:class_id>/', views.class_detail, name="class_detail"),
     path('classes/<int:class_id>/students/', views.class_students, name="class_students"),
+    path('classes/<int:class_id>/progress/', views.class_progress, name="class_progress"),
     path('classes/<int:class_id>/students/<int:student_id>/', views.remove_student, name="remove_student"),
 
     # Assignments: teacher authoring + analytics.
@@ -38,12 +39,14 @@ urlpatterns = [
     path('assignments/<int:assignment_id>/', views.assignment_detail, name="assignment_detail"),
     path('assignments/<int:assignment_id>/assign/', views.assign_to_classes, name="assign_to_classes"),
     path('assignments/<int:assignment_id>/results/', views.assignment_results, name="assignment_results"),
+    path('assignments/<int:assignment_id>/duplicate/', views.duplicate_assignment, name="duplicate_assignment"),
     # Student starting an assignment (routes them to their practice deck).
     path('assignments/<int:assignment_id>/play/', views.play_assignment, name="play_assignment"),
 
     # Teacher analytics.
     path('teacher/overview/', views.teacher_overview, name="teacher_overview"),
     path('teacher/overview/focus/', views.overview_focus, name="overview_focus"),
+    path('teacher/overview/summary/', views.overview_summary, name="overview_summary"),
     path('teacher/proficiency-history/', views.proficiency_history, name="proficiency_history"),
     path('teacher/students/<int:student_id>/', views.student_detail, name="student_detail"),
 ]

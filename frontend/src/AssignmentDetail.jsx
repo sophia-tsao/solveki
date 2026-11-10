@@ -5,14 +5,103 @@ import { BandLegend } from './BandBar.jsx';
 import { BandTimeline, TopicBandChart, fmtDay } from './AssignmentCharts.jsx';
 import AssignmentProgress from './AssignmentProgress.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
+import PageHeader from './ui/PageHeader.jsx';
+import StatusCounters from './ui/StatusCounters.jsx';
+import Tabs from './ui/Tabs.jsx';
+import { AssignmentStatusChips } from './ui/StatusChip.jsx';
+import { useSortable } from './ui/useSortable.js';
+import { fmtDueDate, fmtLastActive, fmtShortDate, plural } from './ui/format.js';
 import './Teacher.css';
 
-function fmtDue(iso) {
-  return iso ? new Date(iso).toLocaleString() : 'No due date';
+// Which status bucket(s) a student falls in, for the counters and filter.
+function buckets(s) {
+  const out = [s.status];
+  if (s.overdue) out.push('overdue');
+  if (s.max_reached) out.push('needs_help');
+  return out;
 }
 
-function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
-  const [classFilter, setClassFilter] = useState('');
+// Default order: who needs the teacher first.
+function attentionRank(s) {
+  if (s.overdue) return 0;
+  if (s.max_reached) return 1;
+  if (s.status === 'not_started') return 2;
+  if (s.status === 'in_progress') return 3;
+  return 4;
+}
+
+function StudentsTable({ students, range, today, showDue, onOpenStudent }) {
+  const { rows, headerProps, ariaSort } = useSortable(students, {
+    name: (s) => s.name.toLowerCase(),
+    status: attentionRank,
+    cards: (s) => (s.status === 'done' ? 100 : s.completion_pct ?? 0),
+    accuracy: (s) => s.accuracy,
+    solid: (s) => s.topics_solid,
+    last: (s) => s.last_active,
+    due: (s) => s.due_at,
+  });
+  const sorted = rows === students
+    ? [...students].sort((a, b) => attentionRank(a) - attentionRank(b) || a.name.localeCompare(b.name))
+    : rows;
+  const topicCount = (s) => (s.proficiency ? Object.values(s.proficiency).reduce((a, b) => a + b, 0) : 0);
+  const th = (key, label, extra = {}) => (
+    <th aria-sort={ariaSort(key)} {...extra}><button {...headerProps(key)}>{label}</button></th>
+  );
+  return (
+    <div className="teacher-box teacher-scroll">
+      <table className="teacher-table">
+        <thead>
+          <tr>
+            {th('name', 'Student')}
+            {th('status', 'Status')}
+            {th('cards', 'Cards')}
+            {th('accuracy', 'Accuracy', { className: 'num' })}
+            {th('solid', 'Topics solid')}
+            <th>
+              Familiarity
+              {range && <span className="tl-range">{fmtDay(range.start)} – {fmtDay(range.end)}</span>}
+            </th>
+            {th('last', 'Last active')}
+            {showDue && th('due', 'Due')}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((s) => (
+            <tr key={s.student_id}>
+              <td>
+                <button type="button" className="teacher-link" onClick={() => onOpenStudent(s.student_id, s.class_id)}>
+                  {s.name}
+                </button>
+              </td>
+              <td><AssignmentStatusChips row={s} /></td>
+              <td style={{ minWidth: '150px' }}>
+                <AssignmentProgress row={s} />
+                {s.cards_needed != null && (
+                  <span className="row-sub">{s.cards_answered ?? 0} of {s.cards_needed} cards</span>
+                )}
+              </td>
+              <td className="num">{s.accuracy == null ? '—' : `${s.accuracy}%`}</td>
+              <td>{s.topics_solid == null ? '—' : `${s.topics_solid} / ${topicCount(s)}`}</td>
+              <td style={{ minWidth: '180px', width: '28%' }}>
+                <BandTimeline segments={s.timeline} range={range} />
+              </td>
+              <td className={s.last_active == null ? 'teacher-muted' : undefined}>
+                {s.last_active === undefined ? '—' : fmtLastActive(s.last_active, today)}
+              </td>
+              {showDue && <td>{s.due_at ? fmtShortDate(s.due_at) : '—'}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function AssignmentDetail({ assignmentId, initialClass = null, initialStatus = null, onOpenStudent, onEdit, onBack }) {
+  const [classFilter, setClassFilter] = useState(initialClass ? String(initialClass) : '');
+  const [statusFilter, setStatusFilter] = useState(initialStatus || null);
+  const [tab, setTab] = useState('students');
+  const today = localDay();
 
   const { data, isPending, error } = useQuery({
     queryKey: ['assignment', assignmentId, 'results', classFilter],
@@ -27,98 +116,115 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
     enabled: assignmentId != null,
   });
 
-  const backButton = onBack && (
-    <button className="teacher-button secondary teacher-back" onClick={onBack}>
-      ← Back to assignments
-    </button>
-  );
+  const crumbs = [{ label: 'Assignments', onClick: onBack }];
+  if (isPending) return <div className="teacher-page"><PageHeader crumbs={crumbs} title="Loading…" /></div>;
+  if (error) {
+    return (
+      <div className="teacher-page">
+        <PageHeader crumbs={crumbs} title="Assignment" />
+        <p className="teacher-error">Failed to load results.</p>
+      </div>
+    );
+  }
 
-  if (isPending) return <div className="teacher-page">{backButton}<p>Loading…</p></div>;
-  if (error) return <div className="teacher-page">{backButton}<p className="teacher-error">Failed to load results.</p></div>;
-
-  const { assignment, topics, struggled, num_students, num_completed, students, timeline_range } = data;
+  const { assignment, topics, struggled, students, timeline_range } = data;
   const classes = assignment.classes || [];
+  const dues = [...new Set(students.map((s) => s.due_at || ''))];
+  const sharedDue = dues.length === 1 ? dues[0] : null;
+
+  const counts = {};
+  for (const s of students) for (const b of buckets(s)) counts[b] = (counts[b] || 0) + 1;
+  const shown = statusFilter ? students.filter((s) => buckets(s).includes(statusFilter)) : students;
+
+  const sub = [
+    plural(topics.length, 'topic'),
+    `${assignment.deck_size}–${assignment.max_cards ?? assignment.deck_size} cards`,
+    assignment.allow_late ? 'late work allowed' : 'no late work',
+    sharedDue !== null && students.length > 0 && (sharedDue ? `due ${fmtDueDate(sharedDue)}` : 'no due date'),
+  ].filter(Boolean).join(' · ');
 
   return (
     <div className="teacher-page">
-      {backButton}
-      <h1>{assignment.title}</h1>
-      {assignment.description && <p className="teacher-card-stat">{assignment.description}</p>}
-      <p className="teacher-card-stat">
-        {topics.length} topic{topics.length === 1 ? '' : 's'} · at least {assignment.deck_size} cards
-        {' '}(up to {assignment.max_cards} for students who struggle)
-        {!assignment.allow_late && ' · no late work'}
+      <PageHeader
+        crumbs={[...crumbs, { label: assignment.title }]}
+        title={assignment.title}
+        sub={sub}
+        actions={(
+          <>
+            {classes.length > 1 && (
+              <select
+                className="teacher-select"
+                aria-label="Class"
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+              >
+                <option value="">All classes</option>
+                {classes.map((c) => (
+                  <option key={c.class_id} value={c.class_id}>{c.class_name}</option>
+                ))}
+              </select>
+            )}
+            {onEdit && <button type="button" className="teacher-button secondary" onClick={onEdit}>Edit</button>}
+          </>
+        )}
+      />
+      {assignment.description && <p className="teacher-muted ad-description">{assignment.description}</p>}
+      <p className="teacher-help ad-rule">
+        At least {assignment.deck_size} cards (up to {assignment.max_cards ?? assignment.deck_size} for students
+        who struggle), spread over the days until it's due.
       </p>
 
-      <div className="teacher-header" style={{ marginTop: '0.5rem' }}>
-        <div className="teacher-field" style={{ margin: 0 }}>
-          <label>Class</label>
-          <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-            <option value="">All classes</option>
-            {classes.map((c) => (
-              <option key={c.class_id} value={c.class_id}>{c.class_name}</option>
-            ))}
-          </select>
-        </div>
-      </div>
+      <StatusCounters total={students.length} counts={counts} value={statusFilter} onChange={setStatusFilter} />
 
-      <div className="ad-summary">
-        <div className="teacher-card static">
-          <div className="teacher-card-title">Finished</div>
-          <div className="teacher-card-stat" style={{ fontSize: '1.5rem' }}>
-            {num_completed} / {num_students}
-          </div>
-        </div>
-        <StruggledTopics
-          topics={struggled}
-          showStudents
-          emptyText="No misses on these topics yet."
-        />
-      </div>
+      <Tabs
+        label="Results"
+        value={tab}
+        onChange={setTab}
+        tabs={[
+          { key: 'students', label: 'Students', count: students.length },
+          { key: 'topics', label: 'Topics', count: topics.length },
+        ]}
+      />
 
-      <h2>Familiarity by topic</h2>
-      <p className="teacher-help">Pick a topic to see how many assigned students sit in each band.</p>
-      {topics.length === 0
-        ? <p className="teacher-empty">This assignment has no topics.</p>
-        : <TopicBandChart topics={topics} />}
-
-      <h2>Per-student progress</h2>
-      {students.length === 0 ? (
-        <p className="teacher-empty">No students are assigned this yet.</p>
+      {tab === 'students' && (students.length === 0 ? (
+        <p className="teacher-empty">
+          No students are assigned this yet. Assign it to a class from Edit, and students who join get it too.
+        </p>
       ) : (
         <>
-          <p className="teacher-help">
-            Each bar shows a student’s familiarity on these topics over time; a new color is a switch
-            to a new band. Hover a bar to see the date.
-          </p>
-          <BandLegend />
-          <table className="teacher-table">
-            <thead>
-              <tr>
-                <th>Student</th><th>Completion</th>
-                <th>
-                  Familiarity over time
-                  {timeline_range && (
-                    <span className="tl-range">{fmtDay(timeline_range.start)} – {fmtDay(timeline_range.end)}</span>
-                  )}
-                </th>
-                <th>Due</th>
-              </tr>
-            </thead>
-            <tbody>
-              {students.map((s) => (
-                <tr key={s.student_id}>
-                  <td className="clickable" onClick={() => onOpenStudent(s.student_id)}>{s.name}</td>
-                  <td><AssignmentProgress row={s} flags /></td>
-                  <td style={{ minWidth: '220px', width: '40%' }}>
-                    <BandTimeline segments={s.timeline} range={timeline_range} />
-                  </td>
-                  <td>{fmtDue(s.due_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="teacher-toolbar">
+            <BandLegend />
+            {statusFilter && (
+              <button type="button" className="teacher-button ghost small push" onClick={() => setStatusFilter(null)}>
+                Showing {shown.length} of {students.length} · Clear filter
+              </button>
+            )}
+          </div>
+          {shown.length === 0 ? (
+            <p className="teacher-empty">No students in this group.</p>
+          ) : (
+            <StudentsTable
+              students={shown}
+              range={timeline_range}
+              today={today}
+              showDue={sharedDue === null}
+              onOpenStudent={onOpenStudent}
+            />
+          )}
         </>
+      ))}
+
+      {tab === 'topics' && (
+        <div className="ad-topics">
+          <StruggledTopics topics={struggled} showStudents emptyText="No misses on these topics yet." />
+          <section className="teacher-box teacher-box-body">
+            <h2 className="ad-section-title">Familiarity by topic</h2>
+            <p className="teacher-help">Pick a topic to see how many assigned students sit in each band.</p>
+            {topics.length === 0
+              ? <p className="teacher-empty">This assignment has no topics.</p>
+              : <TopicBandChart topics={topics} />}
+          </section>
+        </div>
       )}
     </div>
   );

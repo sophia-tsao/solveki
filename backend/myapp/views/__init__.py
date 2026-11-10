@@ -36,6 +36,7 @@ from .classes import (
     classes,
     class_detail,
     class_students,
+    class_progress,
     remove_student,
     join_class,
     my_classes,
@@ -45,10 +46,11 @@ from .assignments import (
     assignment_detail,
     assign_to_classes,
     assignment_results,
+    duplicate_assignment,
     my_assignments,
     play_assignment,
 )
-from .teacher import teacher_overview, overview_focus, student_detail, proficiency_history
+from .teacher import teacher_overview, overview_focus, overview_summary, student_detail, proficiency_history
 
 def __getattr__(name):
     """Lazily expose ``mathgenerator`` as ``myapp.views.mathgenerator``.
@@ -93,6 +95,7 @@ __all__ = [
     "classes",
     "class_detail",
     "class_students",
+    "class_progress",
     "remove_student",
     "join_class",
     "my_classes",
@@ -100,10 +103,12 @@ __all__ = [
     "assignment_detail",
     "assign_to_classes",
     "assignment_results",
+    "duplicate_assignment",
     "my_assignments",
     "play_assignment",
     "teacher_overview",
     "overview_focus",
+    "overview_summary",
     "student_detail",
     "proficiency_history",
 ]

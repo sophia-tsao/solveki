@@ -4,13 +4,15 @@ import secrets
 
 from django.db.models import Count
 from django.http import JsonResponse
+from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
 
-from ..models import AssignmentClass, Classroom, ClassEnrollment, Course
+from ..models import Assignment, AssignmentClass, AssignmentTopic, Classroom, ClassEnrollment, Course, Topic
 from .common import _require_auth, _require_teacher
-from .assignments import _start_assignment_for
-from .insights import band_counts_by_student
+from .assignments import _start_assignment_for, overdue_by_student
+from .deck import _client_today
+from .insights import activity_by_student, band_counts_by_student, band_matrix
 
 logger = logging.getLogger(__name__)
 
@@ -127,10 +129,13 @@ def class_detail(request, class_id):
 @csrf_exempt
 @require_http_methods(["GET"])
 def class_students(request, class_id):
-    """Roster for one class the teacher owns, with each student's band mix.
+    """Roster for one class the teacher owns, with each student's band mix and week.
 
     `proficiency` counts the student's selected topics per proficiency band, the
-    same mix their own dashboard donut shows.
+    same mix their own dashboard donut shows. `cards_7d` / `accuracy_7d` cover
+    today (the client's `?today=`) and the six days before, `last_active` is
+    the last day they practiced, and `overdue_count` how many of this class's
+    assignments they're past due on.
     """
     guard = _require_teacher(request)
     if guard:
@@ -139,18 +144,110 @@ def class_students(request, class_id):
     if err:
         return err
     enrollments = list(classroom.enrollments.select_related("student").order_by("joined_at"))
-    bands = band_counts_by_student([e.student_id for e in enrollments])
+    ids = [e.student_id for e in enrollments]
+    bands = band_counts_by_student(ids)
+    activity = activity_by_student(ids, _client_today(request))
+    class_assignments = list(Assignment.objects.filter(class_links__classroom=classroom).distinct())
+    overdue = overdue_by_student(class_assignments, timezone.now(), class_id=classroom.id)
     students = []
     for e in enrollments:
         u = e.student
+        act = activity[u.id]
         students.append({
             "id": u.id,
             "name": (u.get_full_name() or u.username or u.email),
             "email": u.email,
             "joined_at": e.joined_at.isoformat(),
             "proficiency": bands[u.id],
+            "cards_7d": act["cards"],
+            "accuracy_7d": act["accuracy"],
+            "last_active": act["last_active"].isoformat() if act["last_active"] else None,
+            "overdue_count": len(overdue.get(u.id, [])),
         })
     return JsonResponse({"students": students})
+
+
+def _progress_topics(request, classroom):
+    """The topics a class progress grid covers, plus the assignments to pick from.
+
+    `?assignment=<id>` picks one of this class's assignments; by default it's
+    the one most recently assigned to the class. Returns (topics, assignment
+    id or None, the class's assignments as [{id, title}], newest first).
+    """
+    links = list(
+        AssignmentClass.objects.filter(classroom=classroom)
+        .select_related("assignment").order_by("-assigned_at", "-id")
+    )
+    choices, seen = [], set()
+    for link in links:
+        if link.assignment_id not in seen:
+            seen.add(link.assignment_id)
+            choices.append({"id": link.assignment_id, "title": link.assignment.title})
+    picked = None
+    if request.GET.get("assignment"):
+        try:
+            wanted = int(request.GET["assignment"])
+        except (TypeError, ValueError):
+            wanted = None
+        picked = wanted if wanted in seen else None
+    elif choices:
+        picked = choices[0]["id"]
+    if picked is None:
+        return [], None, choices
+    topic_ids = list(
+        AssignmentTopic.objects.filter(assignment_id=picked).order_by("id").values_list("topic_id", flat=True)
+    )
+    by_id = {t.id: t for t in Topic.objects.filter(id__in=topic_ids, generator_name__isnull=False)}
+    return [by_id[tid] for tid in topic_ids if tid in by_id], picked, choices
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def class_progress(request, class_id):
+    """The class progress grid: every student's band on each of an assignment's topics.
+
+    Rows are the class roster (alphabetical), columns the topics of the picked
+    assignment (see `_progress_topics`). A cell is {"band", "missed_recent"}
+    once the student has answered the topic (see `insights.band_matrix`), or
+    null when they haven't started it. `topic_summary` gives, per topic, the
+    share of the class at Familiar or above.
+    """
+    guard = _require_teacher(request)
+    if guard:
+        return guard
+    classroom, err = _get_owned_class(request, class_id)
+    if err:
+        return err
+    today = _client_today(request)
+    topics, picked, choices = _progress_topics(request, classroom)
+    enrollments = list(classroom.enrollments.select_related("student"))
+    ids = [e.student_id for e in enrollments]
+    cells = band_matrix(ids, [t.id for t in topics], today)
+    activity = activity_by_student(ids, today)
+    students = []
+    for e in enrollments:
+        u = e.student
+        last = activity[u.id]["last_active"]
+        students.append({
+            "id": u.id,
+            "name": (u.get_full_name() or u.username or u.email),
+            "last_active": last.isoformat() if last else None,
+            "cells": {str(t.id): cells.get((u.id, t.id)) for t in topics},
+        })
+    students.sort(key=lambda r: r["name"].lower())
+    summary = {}
+    for t in topics:
+        strong = sum(
+            1 for sid in ids if (cells.get((sid, t.id)) or {}).get("band") in ("familiar", "proficient")
+        )
+        summary[str(t.id)] = round(strong / len(ids) * 100) if ids else None
+    return JsonResponse({
+        "assignment_id": picked,
+        "assignments": choices,
+        "topics": [{"topic_id": t.id, "topic_name": t.topic_name} for t in topics],
+        "students": students,
+        "topic_summary": summary,
+    })
 
 
 @csrf_exempt

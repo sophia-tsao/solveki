@@ -823,7 +823,8 @@ class AssignmentResultsTests(TestCase):
         self.client.force_login(self.teacher)
         res = self.client.get(f"/assignments/{a['id']}/results/").json()
         row = res["students"][0]
-        self.assertEqual(row["status"], "in_progress")
+        # Reached but no cards answered yet reads as not started for teachers.
+        self.assertEqual(row["status"], "not_started")
         self.assertTrue(row["overdue"])
 
     def test_report_breaks_bands_down_per_topic(self):

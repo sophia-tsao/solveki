@@ -1,17 +1,24 @@
 """Read-side helpers behind the teacher views' practice insights.
 
-Shared by the assignment report, class roster and student detail: per-student
-proficiency-band counts, the "struggled with most" topic ranking, and a
-student's recent practice activity (consistency, volume, time, accuracy).
+Shared by the assignment report, class roster, student detail and the
+teacher home: per-student proficiency-band counts, the "struggled with most"
+topic ranking, a student's recent practice activity (consistency, volume,
+time, accuracy), the same activity in bulk for a group, and the weekly goal.
 """
 import datetime
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Max, Q, Sum
 
-from ..models import AnswerRecord, DailyPractice, Topic, TopicReview
+from ..models import AnswerRecord, DailyPractice, Settings, Topic, TopicReview
 from .deck import _interval_band
 
-_BANDS = ("new", "learning", "familiar", "proficient")
+BANDS = ("new", "learning", "familiar", "proficient")
+_BANDS = BANDS
+
+# The weekly goal a student is "on track" against: this many days' worth of
+# their daily card setting over the last 7 days.
+WEEKLY_GOAL_DAYS = 3
+DEFAULT_QUESTIONS_PER_DAY = 10
 
 # How many days of practice the student detail's consistency strip covers.
 ACTIVITY_DAYS = 28
@@ -19,8 +26,16 @@ ACTIVITY_DAYS = 28
 STRUGGLE_DAYS = 30
 
 
-def _empty_bands():
-    return {b: 0 for b in _BANDS}
+def empty_bands():
+    return {b: 0 for b in BANDS}
+
+
+_empty_bands = empty_bands
+
+
+def is_overdue(due_at, status, now):
+    """Past its due date without being done (`status` as in `_progress_row`)."""
+    return bool(due_at and due_at < now and status != "done")
 
 
 def band_counts_by_student(student_ids):
@@ -145,3 +160,96 @@ def practice_activity(student, today):
             ),
         },
     }
+
+
+def activity_by_student(student_ids, today, days=7):
+    """Each student's practice over the `days` days ending `today`, in bulk.
+
+    Maps student id -> {"cards", "answers", "first_try", "seconds",
+    "accuracy", "last_active"}: cards counted like `practice_activity`'s
+    week (from `DailyPractice`), answers / first-try / seconds / accuracy
+    from `AnswerRecord` (accuracy None when nothing was answered), and
+    `last_active` the latest day on or before `today` they practiced at all
+    (None if never). Three grouped queries, whatever the group size.
+    """
+    start = today - datetime.timedelta(days=days - 1)
+    out = {
+        sid: {"cards": 0, "answers": 0, "first_try": 0, "seconds": 0, "accuracy": None, "last_active": None}
+        for sid in student_ids
+    }
+    if not out:
+        return out
+    for row in (
+        DailyPractice.objects.filter(user_id__in=student_ids, date__gte=start, date__lte=today)
+        .values("user_id").annotate(cards=Sum("answered"))
+    ):
+        out[row["user_id"]]["cards"] = row["cards"] or 0
+    for row in (
+        AnswerRecord.objects.filter(user_id__in=student_ids, date__gte=start, date__lte=today)
+        .values("user_id")
+        .annotate(
+            answers=Count("id"),
+            first_try=Count("id", filter=Q(outcome="correct_first")),
+            seconds=Sum("seconds"),
+        )
+    ):
+        rec = out[row["user_id"]]
+        rec["answers"] = row["answers"]
+        rec["first_try"] = row["first_try"]
+        rec["seconds"] = row["seconds"] or 0
+        rec["accuracy"] = round(row["first_try"] / row["answers"] * 100) if row["answers"] else None
+    for row in (
+        DailyPractice.objects.filter(user_id__in=student_ids, answered__gt=0, date__lte=today)
+        .values("user_id").annotate(last=Max("date"))
+    ):
+        out[row["user_id"]]["last_active"] = row["last"]
+    return out
+
+
+def pooled_accuracy(activity):
+    """First-try accuracy (0-100) over every answer in an `activity_by_student` map."""
+    answers = sum(a["answers"] for a in activity.values())
+    first = sum(a["first_try"] for a in activity.values())
+    return round(first / answers * 100) if answers else None
+
+
+def weekly_goals(student_ids):
+    """Map student id -> cards per week they need to be "on track"."""
+    per_day = dict(
+        Settings.objects.filter(user_id__in=student_ids).values_list("user_id", "questions_per_day")
+    )
+    return {
+        sid: WEEKLY_GOAL_DAYS * (per_day.get(sid) or DEFAULT_QUESTIONS_PER_DAY)
+        for sid in student_ids
+    }
+
+
+def band_matrix(student_ids, topic_ids, today, missed_days=14):
+    """Each student's standing on each topic, for the class progress grid.
+
+    Maps (student id, topic id) -> {"band", "missed_recent"} for pairs the
+    student has answered at least once: `band` from their SM-2 interval, and
+    `missed_recent` whether they got one of its cards wrong first try in the
+    last `missed_days` days. Pairs never practiced are absent ("not started").
+    """
+    if not student_ids or not topic_ids:
+        return {}
+    since = today - datetime.timedelta(days=missed_days - 1)
+    intervals = {
+        (uid, tid): interval
+        for uid, tid, interval in TopicReview.objects.filter(
+            user_id__in=student_ids, topic_id__in=topic_ids
+        ).values_list("user_id", "topic_id", "interval")
+    }
+    out = {}
+    for row in (
+        AnswerRecord.objects.filter(user_id__in=student_ids, topic_id__in=topic_ids, date__lte=today)
+        .values("user_id", "topic_id")
+        .annotate(missed=Count("id", filter=~Q(outcome="correct_first") & Q(date__gte=since)))
+    ):
+        key = (row["user_id"], row["topic_id"])
+        out[key] = {
+            "band": _interval_band(intervals.get(key, 0)),
+            "missed_recent": row["missed"] > 0,
+        }
+    return out
