@@ -537,9 +537,8 @@ page by editing the URL — and the backend enforces the same on every endpoint.
   the wrong-answer face. Course selection is in `CourseList.jsx` / `CourseBar.jsx`;
   `Dashboard.jsx`; the onboarding `Diagnostic.jsx`; `Assignments.jsx` (opening an
   assignment just routes to the practice page; its topics are already in the deck); `StudentClasses.jsx`.
-- **Teacher pages.** The top bar has Home · Classes · Assignments, with the guide
-  behind "?" and Settings / Log out in the account menu; detail pages light up
-  their area and carry breadcrumbs.
+- **Teacher pages.** The top bar has Overview · Classes · Assignments · Guide ·
+  Settings; detail pages carry breadcrumbs back to where they belong.
   - `TeacherOverview.jsx` (Home): KPI tiles, Needs attention, Due soon, Topics
     to revisit, and the `ProficiencyTrend.jsx` familiarity-over-time chart.
   - `ClassList.jsx` / `ClassDetail.jsx`: the class page has Students, Progress

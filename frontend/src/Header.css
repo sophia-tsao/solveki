@@ -1,120 +1,45 @@
 .header {
     display: flex;
     align-items: center;
-    gap: 28px;
-    padding: 0 24px;
-    height: 56px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--line);
-    font-family: var(--font-sans);
+    justify-content: space-between;
+    padding: 0 32px;
+    height: 68px;
+    background: #ffffff;
+    border-bottom: 1px solid #dde3ed;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.07);
 }
 
 .header-logo {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 18px;
+    font-size: 22px;
     font-weight: 700;
-    color: var(--brand);
-    letter-spacing: -0.01em;
-}
-
-.header-logo-mark {
-    display: inline-grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: 6px;
-    background: var(--brand);
-    color: #fff;
-    font-size: 13px;
+    color: #2563eb;
+    letter-spacing: -0.02em;
 }
 
 .header-nav {
     display: flex;
-    align-items: stretch;
-    align-self: stretch;
-    gap: 2px;
-    overflow-x: auto;
-}
-
-/* Students keep their nav on the right; teachers get tools there instead. */
-.header:not(.header-teacher) .header-nav {
-    margin-left: auto;
+    align-items: center;
+    gap: 8px;
 }
 
 .header-nav button {
     background: none;
     border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    padding: 0 12px;
-    font: 500 14px var(--font-sans);
-    color: var(--ink-2);
+    padding: 9px 18px;
+    font-size: 16px;
+    font-weight: 500;
+    color: #374151;
+    border-radius: 6px;
     cursor: pointer;
-    white-space: nowrap;
-    transition: color 0.15s ease, border-color 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
 .header-nav button:hover {
-    color: var(--ink);
+    background: #f8fafc;
+    color: #2563eb;
 }
 
 .header-nav button.active {
-    color: var(--ink);
-    border-bottom-color: var(--brand);
-}
-
-.header-nav button:focus-visible,
-.header-help:focus-visible,
-.header-avatar:focus-visible {
-    outline: 2px solid var(--brand);
-    outline-offset: -2px;
-}
-
-.header-tools {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.header-help {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 1px solid var(--line);
-    background: var(--surface);
-    color: var(--ink-2);
-    font: 600 14px var(--font-sans);
-    cursor: pointer;
-}
-
-.header-help:hover,
-.header-help.active {
-    border-color: var(--brand);
-    color: var(--brand);
-}
-
-.header-avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    border: 0;
-    background: #dbeafe;
-    color: var(--brand-ink);
-    font: 600 12px var(--font-sans);
-    cursor: pointer;
-}
-
-.header-avatar:hover,
-.header-avatar.active {
-    box-shadow: 0 0 0 2px var(--brand);
-}
-
-@media (max-width: 640px) {
-    .header {
-        gap: 12px;
-        padding: 0 12px;
-    }
+    background: #2563eb;
+    color: #ffffff;
 }

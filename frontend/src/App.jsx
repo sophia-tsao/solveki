@@ -170,7 +170,7 @@ function App() {
   const paramId = (key) => (params[key] && /^\d+$/.test(params[key]) ? Number(params[key]) : null);
   return (
     <div className="app-shell">
-      <Header currentPage={page} role={role} user={user} onLoggedOut={handleLoggedOut} linkClicked={(p) => navigate(p)} />
+      <Header currentPage={page} role={role} linkClicked={(p) => navigate(p)} />
       <main className="app-main">
         {/* Student pages */}
         {page === "math" && (

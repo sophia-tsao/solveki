@@ -26,27 +26,6 @@ describe('Header', () => {
     await user.click(screen.getByRole('button', { name: 'Dashboard' }));
     expect(linkClicked).toHaveBeenCalledWith('dashboard');
   });
-
-  it('gives teachers three areas, with the guide and settings to the side', async () => {
-    const linkClicked = vi.fn();
-    const user = userEvent.setup();
-    render(<Header role="teacher" user={{ name: 'Sophia Tsao' }} currentPage="teacher-overview" linkClicked={linkClicked} />);
-    const nav = screen.getByRole('navigation');
-    expect(Array.from(nav.querySelectorAll('button')).map((b) => b.textContent))
-      .toEqual(['Home', 'Classes', 'Assignments']);
-    await user.click(screen.getByRole('button', { name: 'Guide' }));
-    expect(linkClicked).toHaveBeenCalledWith('teacher-guide');
-    await user.click(screen.getByRole('button', { name: 'Account' }));
-    await user.click(screen.getByRole('menuitem', { name: 'Settings' }));
-    expect(linkClicked).toHaveBeenCalledWith('settings');
-    expect(screen.getByRole('button', { name: 'Account' })).toHaveTextContent('ST');
-  });
-
-  it('lights up the parent area on detail pages', () => {
-    render(<Header role="teacher" currentPage="student-detail" linkClicked={() => {}} />);
-    expect(screen.getByRole('button', { name: 'Classes' })).toHaveClass('active');
-    expect(screen.getByRole('button', { name: 'Home' })).not.toHaveClass('active');
-  });
 });
 
 describe('router', () => {
