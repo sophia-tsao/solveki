@@ -475,3 +475,29 @@
         transform: translate(var(--confetti-drift, 0px), 220px) rotate(calc(var(--confetti-rotate, 0deg) + 360deg));
     }
 }
+
+/* Above an assignment's deck, a way back to the list of open assignments
+   when there are others. Sits just over the card stack's top margin. */
+.math-problem-scope {
+    display: flex;
+    justify-content: flex-end;
+    width: 540px;
+    margin: 24px auto -24px;
+}
+
+.math-problem-scope-back {
+    padding: 0.35rem 0.85rem;
+    border: 1px solid #c7c7d1;
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+
+/* The assignment a card belongs to, above its topic. */
+.math-problem-assignment {
+    align-self: center;
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    text-align: center;
+}

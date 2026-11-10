@@ -43,6 +43,108 @@ _MAX_CARD_SECONDS = 10 * 60
 # client's MAX_ATTEMPTS (MathProblem.jsx).
 _MAX_ATTEMPTS = 2
 
+
+class DeckScope:
+    """Which of a student's decks for the day a request is about (see `_request_scope`).
+
+    - the default deck (`assignment_id` None): the student's own practice,
+      shown while no assignment is open;
+    - an open assignment's deck: that assignment's share of today, plus the
+      usual reviews and pool practice up to `questions_per_day`;
+    - a closed assignment's deck (`topic_ids` set): pool practice on just its
+      topics, to practice it again after it's done.
+
+    Each deck fills up to the student's setting on its own. Answers count the
+    same whichever deck they're in: toward the topic's day grade and every
+    open assignment on the topic.
+    """
+
+    def __init__(self, assignment_id=None, topic_ids=None):
+        self.assignment_id = assignment_id
+        self.topic_ids = topic_ids
+
+
+_DEFAULT_SCOPE = DeckScope()
+
+
+def _scope_for(user, assignment_id, open_rows=None):
+    """The `DeckScope` of `assignment_id`'s deck (the default deck for None)."""
+    if assignment_id is None:
+        return _DEFAULT_SCOPE
+    if open_rows is None:
+        open_rows = _open_assignments(user)
+    if any(row.assignment_id == assignment_id for row, _, _ in open_rows):
+        return DeckScope(assignment_id)
+    topic_ids = set(
+        AssignmentTopic.objects.filter(assignment_id=assignment_id, topic__generator_name__isnull=False)
+        .values_list("topic_id", flat=True)
+    )
+    return DeckScope(assignment_id, topic_ids)
+
+
+def _request_scope(request):
+    """The deck a deck request is for: `(scope, None)`, or `(None, response)` to send instead.
+
+    `?assignment=<id>` picks that assignment's deck, open or closed; it's a 404
+    unless the assignment has reached the student. Without it, the deck is the
+    one open assignment's, or the default deck when none is open. With several
+    open the student has to pick one, so the response lists them (`choose`).
+    """
+    user = request.user
+    raw = request.GET.get("assignment")
+    if raw:
+        try:
+            assignment_id = int(raw)
+        except ValueError:
+            return None, JsonResponse({"error": "Bad assignment id"}, status=400)
+        if not StudentAssignment.objects.filter(student=user, assignment_id=assignment_id).exists():
+            return None, JsonResponse({"error": "Assignment not found"}, status=404)
+        return _scope_for(user, assignment_id), None
+    open_rows = _open_assignments(user)
+    if not open_rows:
+        return _DEFAULT_SCOPE, None
+    if len(open_rows) == 1:
+        return _scope_for(user, open_rows[0][0].assignment_id, open_rows), None
+    return None, JsonResponse({"choose": _assignment_choices(open_rows)})
+
+
+def _assignment_choices(open_rows):
+    """The open assignments a student picks between, soonest due first (no due date last)."""
+    choices = [
+        {
+            "assignment_id": row.assignment_id,
+            "title": row.assignment.title,
+            "due_at": due_at.isoformat() if due_at else None,
+            "completion_pct": row.completion_pct,
+            "cards_answered": row.cards_answered,
+        }
+        for row, _, due_at in open_rows
+    ]
+    choices.sort(key=lambda c: (c["due_at"] is None, c["due_at"] or "", c["assignment_id"]))
+    return choices
+
+
+def _scope_assignments(user, scope):
+    """The open assignments whose cards `scope`'s deck carries (see `_open_assignments`).
+
+    The default deck carries any that are open (normally none: it's only shown
+    while none are); an assignment's deck carries just its own, if it's open.
+    """
+    rows = _open_assignments(user)
+    if scope.assignment_id is None:
+        return rows
+    return [r for r in rows if r[0].assignment_id == scope.assignment_id]
+
+
+def _pool_topics(user, scope):
+    """The usable topics `scope`'s deck draws pool practice from.
+
+    The student's selected topics, or a closed assignment's own topics.
+    """
+    if scope.topic_ids is not None:
+        return Topic.objects.filter(id__in=scope.topic_ids, generator_name__isnull=False)
+    return Topic.objects.filter(selections__user=user, generator_name__isnull=False)
+
 # Cap on a submitted answer's length; nothing typeable is longer than this.
 _MAX_ANSWER = 500
 
@@ -76,11 +178,9 @@ def _client_today(request):
     return timezone.localdate()
 
 
-def _has_topics(user):
-    """True if the user currently has at least one usable topic selected."""
-    return Topic.objects.filter(
-        selections__user=user, generator_name__isnull=False
-    ).exists()
+def _has_topics(user, scope=_DEFAULT_SCOPE):
+    """True if `scope`'s deck has at least one usable topic (see `_pool_topics`)."""
+    return _pool_topics(user, scope).exists()
 
 
 def _kind(problem):
@@ -313,7 +413,7 @@ def _effective_due_dates(user, topics, today):
     return due
 
 
-def _ordered_topics(user, today):
+def _ordered_topics(user, today, scope=_DEFAULT_SCOPE):
     """The user's selected, usable topics ordered by spaced-repetition priority.
 
     This is the one place that decides the *order* topics are reviewed in; the
@@ -331,11 +431,10 @@ def _ordered_topics(user, today):
 
     Ties break by topic id for a stable, deterministic order (no reliance on DB
     row order). Returns every usable selected topic (a Topic list, possibly
-    empty); callers slice or cycle it to the size they need.
+    empty); callers slice or cycle it to the size they need. A closed
+    assignment's deck orders its own topics instead (see `_pool_topics`).
     """
-    topics = list(
-        Topic.objects.filter(selections__user=user, generator_name__isnull=False)
-    )
+    topics = list(_pool_topics(user, scope))
     due = _effective_due_dates(user, topics, today)
     topics.sort(key=lambda t: (due[t.id], t.id))
     return topics
@@ -425,7 +524,7 @@ def _weighted_slot_counts(rotation, due, count, today):
     return {t.id: 1 + floors[t.id] for t in rotation}
 
 
-def _generate_problems(user, count, today, existing=()):
+def _generate_problems(user, count, today, existing=(), scope=_DEFAULT_SCOPE):
     """Generate exactly `count` problems for the deck, weighted by due priority.
 
     Distinct topics come first, most-due first (so a fresh or topped-up deck has
@@ -446,7 +545,7 @@ def _generate_problems(user, count, today, existing=()):
     """
     if count <= 0:
         return []
-    ordered = _ordered_topics(user, today)
+    ordered = _ordered_topics(user, today, scope)
     if not ordered:
         return []
     # Prefer topics not already in the deck, preserving due order within each
@@ -491,7 +590,7 @@ def _generate_problems(user, count, today, existing=()):
     return problems
 
 
-def _required_plan(user, today):
+def _required_plan(user, today, scope=_DEFAULT_SCOPE):
     """Cards each topic still needs today for assignments, reviews and lapses.
 
     Gathers the inputs for `practice.plan_required`:
@@ -505,11 +604,17 @@ def _required_plan(user, today):
     deck mid-day doesn't ask for them again. Returns `{topic_id: cards}` in
     priority order: assignment topics first, then lapses, then reviews. Topics
     outside assignments otherwise come only from the pool (`questions_per_day`).
+
+    Only the assignments `scope`'s deck carries count (`_scope_assignments`).
+    A closed assignment's deck has no required work: it's all pool practice on
+    the assignment's topics.
     """
+    if scope.topic_ids is not None:
+        return {}
     answered_today = Counter(
         AnswerRecord.objects.filter(user=user, date=today).values_list("topic_id", flat=True)
     )
-    open_rows = _open_assignments(user)
+    open_rows = _scope_assignments(user, scope)
     all_topic_ids = {tid for _, tids, _ in open_rows for tid in tids}
     eases = dict(
         TopicReview.objects.filter(user=user, topic_id__in=all_topic_ids).values_list("topic_id", "ease")
@@ -591,34 +696,38 @@ def _required_problems(plan):
     return problems
 
 
-def _build_cards(user, today, kept):
+def _build_cards(user, today, kept, scope=_DEFAULT_SCOPE):
     """The cards that follow `kept` (already answered) in today's deck.
 
     The required work comes first, then pool practice filling the deck up to
     `questions_per_day`, preferring topics not already in it.
     """
-    required = _required_problems(_required_plan(user, today))
+    required = _required_problems(_required_plan(user, today, scope))
     # Extra cards come on top of the setting (see `_deck_size_target`).
     kept_extra = sum(1 for p in kept if _kind(p) == _EXTRA)
     pool_count = Settings.load(user).questions_per_day + kept_extra - len(kept) - len(required)
     existing = _deck_topic_ids_of(kept + required)
-    pool = _generate_problems(user, pool_count, today, existing=existing)
+    pool = _generate_problems(user, pool_count, today, existing=existing, scope=scope)
     for problem in pool:
         problem["kind"] = _POOL
     return required + pool
 
 
-def _record_practice(user, deck, today):
+def _record_practice(user, today):
     """Update the durable per-day practice record after a deck advance.
 
     Stores how many problems the student has stepped past today (`answered`) and
-    the deck's current display size (`total`, matching `_deck_payload`), so the
-    dashboard calendar can later report completed / partial for the day even
-    after the `DailyDeck` itself is pruned. A row is created on the first advance
-    of the day, so a day with no row means the student never practiced.
+    the display size (`total`, matching `_deck_payload`) summed over the decks
+    they've opened today, so the dashboard calendar can later report completed /
+    partial for the day even after the `DailyDeck` rows are pruned. A row is
+    created on the first advance of the day, so a day with no row means the
+    student never practiced.
     """
-    total = _visible_total(user, deck)
-    answered = min(deck.current_index, total)
+    total = answered = 0
+    for deck in DailyDeck.objects.filter(user=user, date=today):
+        deck_total = _visible_total(user, deck)
+        total += deck_total
+        answered += min(deck.current_index, deck_total)
     DailyPractice.objects.update_or_create(
         user=user, date=today,
         defaults={"answered": answered, "total": total},
@@ -677,7 +786,7 @@ def _grade_topic(user, topic_id, today):
     )
 
 
-def _add_practice(user, deck, topic_id, today):
+def _add_practice(user, deck, topic_id, today, scope=_DEFAULT_SCOPE):
     """Add one more card on `topic_id` after an answer, if today's practice on it isn't enough.
 
     Three cases call for one:
@@ -689,8 +798,8 @@ def _add_practice(user, deck, topic_id, today):
       hard pass) on fewer than `practice.MIN_SESSION` cards: one slip on a
       lone card shouldn't reset a topic or cost it ease, so the student gets
       more cards to show it was a slip (more misses still count);
-    - it's in an open assignment due today that still needs more cards than the
-      student has answered.
+    - it's in the deck's open assignment (`_scope_assignments`), due today, and
+      that still needs more cards than the student has answered.
 
     Only when no unanswered card on the topic is left, and the deck is under
     `practice.DAILY_CAP`. The card goes one place after the next card, so the
@@ -718,7 +827,7 @@ def _add_practice(user, deck, topic_id, today):
     finishing = any(
         topic_id in topic_ids and _days_left(row, due_at, today) == 1
         and row.cards_needed > row.cards_answered
-        for row, topic_ids, due_at in _open_assignments(user)
+        for row, topic_ids, due_at in _scope_assignments(user, scope)
     )
     if not (learning or confirming or finishing):
         return
@@ -731,8 +840,8 @@ def _add_practice(user, deck, topic_id, today):
     deck.save(update_fields=["problems"])
 
 
-def _get_or_create_today_deck(user, today):
-    """Return the user's deck for today, creating a fresh one if none exists.
+def _get_or_create_today_deck(user, today, scope=_DEFAULT_SCOPE):
+    """Return the user's deck for today in `scope`, creating a fresh one if none exists.
 
     `today` is the client's local calendar day (see `_client_today`), so the
     deck resets at the user's midnight rather than the server's UTC midnight.
@@ -746,27 +855,30 @@ def _get_or_create_today_deck(user, today):
     change earlier in the day — the latter is why the deck must never be
     reported as "finished" at a smaller size than the user's setting.
     """
-    deck = DailyDeck.objects.filter(user=user, date=today).first()
+    deck = DailyDeck.objects.filter(user=user, date=today, assignment_id=scope.assignment_id).first()
     if deck is None:
-        # A new day: clear out this user's stale decks and build a fresh one.
+        # The first deck of a new day, or another of today's decks opened for
+        # the first time: clear out this user's stale decks and build it.
         DailyDeck.objects.filter(user=user).exclude(date=today).delete()
-        problems = _build_cards(user, today, [])
-        logger.info("Built new deck for user %s with %d problems", user.id, len(problems))
+        problems = _build_cards(user, today, [], scope)
+        logger.info(
+            "Built new deck for user %s (assignment %s) with %d problems",
+            user.id, scope.assignment_id, len(problems),
+        )
         return DailyDeck.objects.create(
-            user=user, date=today, problems=problems, current_index=0
+            user=user, date=today, assignment_id=scope.assignment_id,
+            problems=problems, current_index=0,
         )
     # A topic toggle or a new assignment since this deck was last loaded only
     # flagged it stale (see _mark_deck_stale); reconcile the unanswered tail now,
-    # on the practice-page load, rather than on every toggle. Refetch to pick up
-    # the regenerated problems and the cleared flag.
+    # on the practice-page load, rather than on every toggle.
     if deck.needs_regen:
-        _regenerate_deck_tail(user, today)
-        deck.refresh_from_db()
-    _top_up_pool(user, deck, Settings.load(user).questions_per_day, today)
+        _regenerate_deck(user, deck, today, scope)
+    _top_up_pool(user, deck, Settings.load(user).questions_per_day, today, scope)
     return deck
 
 
-def _top_up_pool(user, deck, per_day, today):
+def _top_up_pool(user, deck, per_day, today, scope=_DEFAULT_SCOPE):
     """Append pool cards until the deck can show what `per_day` calls for.
 
     Missing cards are the `_deck_size_target` beyond what's stored, i.e. the
@@ -775,7 +887,7 @@ def _top_up_pool(user, deck, per_day, today):
     missing = _deck_size_target(deck, per_day) - len(deck.problems)
     if missing <= 0:
         return
-    extra = _generate_problems(user, missing, today, existing=_deck_topic_ids(deck))
+    extra = _generate_problems(user, missing, today, existing=_deck_topic_ids(deck), scope=scope)
     if extra:
         for problem in extra:
             problem["kind"] = _POOL
@@ -787,23 +899,28 @@ def _top_up_pool(user, deck, per_day, today):
         )
 
 
+def _today_decks_with_scopes(user, today):
+    """Today's stored decks for `user`, each with its current `DeckScope`."""
+    decks = list(DailyDeck.objects.filter(user=user, date=today))
+    open_rows = _open_assignments(user) if decks else []
+    return [(deck, _scope_for(user, deck.assignment_id, open_rows)) for deck in decks]
+
+
 def _grow_today_deck(user, count, today):
-    """Grow today's deck so it shows `count` pool-filled cards, if it's currently smaller.
+    """Grow today's decks so each shows `count` pool-filled cards, if currently smaller.
 
     Appends freshly generated pool problems to the end so the student's
     progress (already-answered problems and `current_index`) is preserved.
-    Never shrinks the stored deck: a smaller `count` only hides unanswered pool
-    cards (see `_visible_total`). Does nothing if there's no deck for today yet
-    — that deck will be built at the new count on first access.
+    Never shrinks a stored deck: a smaller `count` only hides unanswered pool
+    cards (see `_visible_total`). Does nothing for decks not built yet today —
+    those will be built at the new count on first access.
     """
-    deck = DailyDeck.objects.filter(user=user, date=today).first()
-    if deck is None:
-        return
-    _top_up_pool(user, deck, count, today)
+    for deck, scope in _today_decks_with_scopes(user, today):
+        _top_up_pool(user, deck, count, today, scope)
 
 
 def _mark_deck_stale(user, today):
-    """Flag today's deck so its tail is rebuilt on the next practice-page load.
+    """Flag today's decks so their tails are rebuilt when next loaded.
 
     Called when the user's topic selection changes. This is deliberately cheap
     — a single boolean UPDATE, no problem generation — so a topic/course toggle
@@ -828,7 +945,13 @@ def _clear_needs_regen(deck):
 
 
 def _regenerate_deck_tail(user, today):
-    """Rebuild today's not-yet-answered problems from the current topics and assignments.
+    """Rebuild the not-yet-answered problems of each of today's decks (see `_regenerate_deck`)."""
+    for deck, scope in _today_decks_with_scopes(user, today):
+        _regenerate_deck(user, deck, today, scope)
+
+
+def _regenerate_deck(user, deck, today, scope):
+    """Rebuild a deck's not-yet-answered problems from the current topics and assignments.
 
     Problems the student has already worked through (everything before
     `current_index`) are kept; the rest are rebuilt by `_build_cards` — the
@@ -837,20 +960,16 @@ def _regenerate_deck_tail(user, today):
     Clears the `needs_regen` flag once the deck has been reconciled (this is the
     lazy handler for `_mark_deck_stale`, and for a new assignment).
 
-    Does nothing if there's no deck for today yet (it'll be built on first
-    access), or if no topics are currently selected. That last case matters:
-    swapping topic sets is two steps (deselect the old, select the new), and in
-    between nothing is selected. Regenerating then would produce an empty tail;
-    writing it back would truncate the deck down to just the answered cards and
-    strand the student on an already-"finished" deck. Leaving the deck untouched
-    lets the following selection rebuild the tail properly.
+    Does nothing if the deck has no usable topics. That matters: swapping topic
+    sets is two steps (deselect the old, select the new), and in between
+    nothing is selected. Regenerating then would produce an empty tail; writing
+    it back would truncate the deck down to just the answered cards and strand
+    the student on an already-"finished" deck. Leaving the deck untouched lets
+    the following selection rebuild the tail properly.
     """
-    deck = DailyDeck.objects.filter(user=user, date=today).first()
-    if deck is None:
-        return
     answered = deck.current_index
     kept = deck.problems[:answered]
-    new_tail = _build_cards(user, today, kept) if _has_topics(user) else []
+    new_tail = _build_cards(user, today, kept, scope) if _has_topics(user, scope) else []
     if not new_tail and len(deck.problems) > answered:
         # Nothing to rebuild from (no topics selected mid topic-swap, or the
         # day's practice is already answered). Preserve the deck rather than
@@ -873,11 +992,30 @@ def _regenerate_deck_tail(user, today):
     )
 
 
-def _deck_payload(user, deck):
+def _deck_payload(user, deck, scope=_DEFAULT_SCOPE):
+    """The deck's current card (or its finished / no-topics state), and which deck it is.
+
+    An assignment's deck also carries `assignment` (`{"id", "title", "open"}`,
+    `open` false when it's done, for practicing again), so the client keeps
+    sending it while it stays on this deck, and `open_assignments`, the
+    student's open assignment count, so the client knows where leaving the
+    deck goes: the list to pick another when there's more than one.
+    """
+    payload = _deck_state(user, deck, scope)
+    if deck.assignment_id is not None:
+        payload["assignment"] = {
+            "id": deck.assignment_id, "title": deck.assignment.title,
+            "open": scope.topic_ids is None,
+        }
+        payload["open_assignments"] = len(_open_assignments(user))
+    return payload
+
+
+def _deck_state(user, deck, scope):
     # "No topics" is driven by the live selection, not the deck contents, so
     # deselecting every topic shows the "pick a topic" screen immediately even
     # if the deck still holds problems from before the change.
-    if not _has_topics(user):
+    if not _has_topics(user, scope):
         return {"no_topics": True}
     # Present the deck capped to what today's practice shows (`_visible_total`):
     # all required and extra cards, and pool cards up to the setting. Growing
@@ -931,10 +1069,13 @@ def get_deck(request):
     auth = _require_auth(request)
     if auth:
         return auth
+    scope, response = _request_scope(request)
+    if response:
+        return response
     today = _client_today(request)
-    deck = _get_or_create_today_deck(request.user, today)
+    deck = _get_or_create_today_deck(request.user, today, scope)
     _snapshot_proficiency(request.user, today)
-    return JsonResponse(_deck_payload(request.user, deck))
+    return JsonResponse(_deck_payload(request.user, deck, scope))
 
 
 @csrf_exempt
@@ -971,9 +1112,14 @@ def advance_deck(request):
     auth = _require_auth(request)
     if auth:
         return auth
+    scope, response = _request_scope(request)
+    if response:
+        return response
     today = _client_today(request)
-    existing = DailyDeck.objects.filter(user=request.user, date=today).first()
-    deck = _get_or_create_today_deck(request.user, today)
+    existing = DailyDeck.objects.filter(
+        user=request.user, date=today, assignment_id=scope.assignment_id
+    ).first()
+    deck = _get_or_create_today_deck(request.user, today, scope)
 
     # An advance may only step the deck when it's a genuine "I finished the card
     # I'm looking at" — never a stray leftover timer. Two things must hold:
@@ -1011,8 +1157,8 @@ def advance_deck(request):
         deck.save(update_fields=["current_index", "attempts"])
         if graded:
             _count_assignment_card(request.user, topic_id, today)
-            _add_practice(request.user, deck, topic_id, today)
-        _record_practice(request.user, deck, today)
+            _add_practice(request.user, deck, topic_id, today, scope)
+        _record_practice(request.user, today)
         # Grading may have moved a topic between bands; recapture today's mix.
         _snapshot_proficiency(request.user, today)
         logger.debug(
@@ -1024,7 +1170,7 @@ def advance_deck(request):
             "Ignoring stale advance for user %s: client left card %s but deck is on %d",
             request.user.id, from_number, deck.current_index + 1,
         )
-    return JsonResponse(_deck_payload(request.user, deck))
+    return JsonResponse(_deck_payload(request.user, deck, scope))
 
 
 def _normalize_solution(solution):
@@ -1069,8 +1215,16 @@ def check_answer(request):
     auth = _require_auth(request)
     if auth:
         return auth
+    scope, response = _request_scope(request)
+    if response:
+        if response.status_code != 200:
+            return response
+        # Several assignments are open and none was named: there's no card.
+        return JsonResponse({"error": "stale card"}, status=409)
     today = _client_today(request)
-    deck = DailyDeck.objects.filter(user=request.user, date=today).first()
+    deck = DailyDeck.objects.filter(
+        user=request.user, date=today, assignment_id=scope.assignment_id
+    ).first()
     body = _advance_body(request)
     answer = body.get("answer")
     if not isinstance(answer, str) or not answer.strip():
@@ -1114,7 +1268,12 @@ def test_solution(request):
     auth = _require_auth(request)
     if auth:
         return auth
-    deck = DailyDeck.objects.filter(user=request.user, date=_client_today(request)).first()
+    scope, response = _request_scope(request)
+    if response:
+        raise Http404()
+    deck = DailyDeck.objects.filter(
+        user=request.user, date=_client_today(request), assignment_id=scope.assignment_id
+    ).first()
     if deck is None or deck.current_index >= len(deck.problems):
         raise Http404()
     return JsonResponse({"solution": _normalize_solution(deck.problems[deck.current_index]["solution"])})

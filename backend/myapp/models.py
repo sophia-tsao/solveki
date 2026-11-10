@@ -408,12 +408,20 @@ class StudentAssignment(models.Model):
 
 
 class DailyDeck(models.Model):
-    """A set of problems generated for a single day, for a single user."""
+    """A set of problems generated for a single day, for a single user.
+
+    A student has a default deck (`assignment` null), used while no assignment
+    is open, and one deck per assignment they open that day (see
+    `deck.DeckScope`).
+    """
     user = models.ForeignKey(django_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="decks")
     date = models.DateField()
     problems = models.JSONField(default=list)
     current_index = models.IntegerField(default=0)
     # Wrong answers submitted for the current card (see check_answer). Kept
+    assignment = models.ForeignKey(
+        "Assignment", null=True, blank=True, on_delete=models.CASCADE, related_name="decks"
+    )
     # server-side so the solution is only revealed once attempts run out, and
     # reset whenever the current card changes.
     attempts = models.IntegerField(default=0)
@@ -424,7 +432,14 @@ class DailyDeck(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["user", "date"], name="unique_user_date_deck"),
+            models.UniqueConstraint(
+                fields=["user", "date"], condition=models.Q(assignment__isnull=True),
+                name="unique_user_date_deck",
+            ),
+            models.UniqueConstraint(
+                fields=["user", "date", "assignment"], condition=models.Q(assignment__isnull=False),
+                name="unique_user_date_assignment_deck",
+            ),
         ]
 
     def __str__(self):

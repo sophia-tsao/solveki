@@ -166,11 +166,19 @@ function App() {
       <Header currentPage={page} role={role} linkClicked={(p) => navigate(p)} />
       <main className="app-main">
         {/* Student pages */}
-        {page === "math" && <MathProblem />}
+        {page === "math" && (
+          // Keyed by the assignment so switching decks starts from a clean card.
+          <MathProblem
+            key={id ?? "practice"}
+            assignmentId={id}
+            onOpenAssignment={(aid) => navigate("math", aid)}
+            onExit={() => navigate("assignments")}
+          />
+        )}
         {page === "dashboard" && <Dashboard />}
         {page === "courses" && <CourseList userId={user.id} onStartDiagnostic={() => navigate("diagnostic")} />}
         {page === "diagnostic" && <Diagnostic userId={user.id} onNavigate={(p) => navigate(p)} />}
-        {page === "assignments" && <Assignments onStarted={() => navigate("math")} />}
+        {page === "assignments" && <Assignments onStarted={(aid) => navigate("math", aid)} />}
         {page === "student-classes" && <StudentClasses />}
         {/* Teacher pages */}
         {page === "teacher-overview" && <TeacherOverview onOpenClass={(cid) => navigate("class-detail", cid)} />}

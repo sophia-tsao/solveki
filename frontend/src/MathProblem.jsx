@@ -6,6 +6,7 @@ import './MathProblem.css';
 import MathProblemDisplay from './MathProblemDisplay.jsx'
 import MathProblemResponse from './MathProblemResponse.jsx'
 import SolutionSteps from './SolutionSteps.jsx';
+import AssignmentChooser from './AssignmentChooser.jsx';
 import { apiFetch, localDay } from './auth.js';
 import { createLogger } from './logger.js';
 
@@ -148,13 +149,23 @@ function Confetti() {
   );
 }
 
-function MathProblem() {
+// The deck the practice page shows depends on the student's open assignments
+// (see deck.DeckScope): with none, their default deck; with one, its deck; with
+// several, a list to pick from (`onOpenAssignment`). `assignmentId` (from the
+// route) opens a specific assignment's deck, open or done. `onExit` leaves an
+// assignment's deck when the practice page would only reopen it.
+function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
   const [problem, setProblem] = useState(null);
   const [topicName, setTopicName] = useState(null);
   const [learnMoreUrl, setLearnMoreUrl] = useState(null);
   const [currentNumber, setCurrentNumber] = useState(null);
   const [total, setTotal] = useState(null);
-  const [status, setStatus] = useState('loading'); // loading | active | no_topics | completed
+  const [status, setStatus] = useState('loading'); // loading | active | no_topics | completed | choose
+  const [choices, setChoices] = useState([]); // the open assignments, when status is 'choose'
+  // The assignment ({ id, title, open }) whose deck this is, or null for the default
+  // deck, and how many assignments are open (to offer a way back to the list).
+  const [deckAssignment, setDeckAssignment] = useState(null);
+  const [openAssignments, setOpenAssignments] = useState(0);
   const [error, setError] = useState(null);
   const [flipped, setFlipped] = useState(false); // true rotates the card to its back
   const [result, setResult] = useState('correct'); // 'correct' | 'incorrect' — back-face content
@@ -189,6 +200,14 @@ function MathProblem() {
   // the day-rollover refetch on refocus, a reload of the completed screen, or a
   // topic change — must not, so reopening a finished deck stays quiet.
   const applyDeck = useCallback((result, { celebrating = false } = {}) => {
+    if (result.choose) {
+      log.debug(`Choosing between ${result.choose.length} open assignments`);
+      setChoices(result.choose);
+      setStatus('choose');
+      return;
+    }
+    setDeckAssignment(result.assignment ?? null);
+    setOpenAssignments(result.open_assignments ?? 0);
     if (result.no_topics) {
       log.debug('Deck has no selected topics');
       setStatus('no_topics');
@@ -230,10 +249,16 @@ function MathProblem() {
   // day because the deck resets at the user's midnight, not the server's UTC one.
   const [day, setDay] = useState(localDay);
 
+  // Once a deck is showing, every call names its assignment, so the student
+  // stays on it even if it's the one open assignment that just got finished.
+  const scopeId = assignmentId ?? deckAssignment?.id ?? null;
+  const scopeParam = scopeId != null ? `&assignment=${scopeId}` : '';
+
   const deckQuery = useQuery({
-    queryKey: ['deck', day],
+    queryKey: ['deck', day, assignmentId],
     queryFn: async () => {
-      const response = await apiFetch(`/deck/?today=${day}`);
+      const scope = assignmentId != null ? `&assignment=${assignmentId}` : '';
+      const response = await apiFetch(`/deck/?today=${day}${scope}`);
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       return response.json();
     },
@@ -272,7 +297,7 @@ function MathProblem() {
       if (typeof fromNumber === 'number') body.from_number = fromNumber;
       if (typeof seconds === 'number') body.seconds = seconds;
       if (report) body.report = report;
-      const response = await apiFetch(`/deck/advance/?today=${localDay()}`, {
+      const response = await apiFetch(`/deck/advance/?today=${localDay()}${scopeParam}`, {
         method: 'POST',
         ...(Object.keys(body).length ? { body: JSON.stringify(body) } : {}),
       });
@@ -294,7 +319,7 @@ function MathProblem() {
   // response ({ correct, attempts_left, solution? }), or null after a stale
   // card (409), in which case the deck is reloaded to resync.
   const checkAnswer = async (answer, fromNumber) => {
-    const response = await apiFetch(`/deck/check/?today=${localDay()}`, {
+    const response = await apiFetch(`/deck/check/?today=${localDay()}${scopeParam}`, {
       method: 'POST',
       body: JSON.stringify({ answer, from_number: fromNumber }),
     });
@@ -426,6 +451,32 @@ function MathProblem() {
 
   if (status === 'loading') return null;
 
+  if (status === 'choose') {
+    return <AssignmentChooser choices={choices} onOpen={onOpenAssignment} />;
+  }
+
+  // On an assignment's cards: its title. The review deck (no assignment) has
+  // none, since the student isn't working on an assignment.
+  const assignmentLabel = deckAssignment && (
+    <span className="math-problem-assignment">{deckAssignment.title}</span>
+  );
+  // Above an assignment's deck, a way out: to the list when there are others
+  // to switch to, otherwise to the practice page's review deck (or the other
+  // open assignment). For the only open assignment the practice page would
+  // just reopen it, so it leaves to the Assignments page instead.
+  const choosing = openAssignments > 1;
+  const onlyOpen = deckAssignment?.open && !choosing;
+  const scopeBar = deckAssignment && (
+    <div className="math-problem-scope">
+      <button
+        className="math-problem-scope-back"
+        onClick={() => (onlyOpen ? onExit() : onOpenAssignment(null))}
+      >
+        {choosing ? 'All assignments' : 'Exit assignment'}
+      </button>
+    </div>
+  );
+
   if (status === 'no_topics') {
     return (
       <div className="math-problem-card math-problem-card-centered">
@@ -436,14 +487,18 @@ function MathProblem() {
 
   if (status === 'completed') {
     return (
-      <div className="math-problem-stack">
-        {showConfetti && <Confetti />}
-        <div className="math-problem-card math-problem-card-centered">
-          <span className="math-problem-display">
-            You've finished all {total} question{total === 1 ? '' : 's'} for today. Come back tomorrow for a new set!
-          </span>
+      <>
+        {scopeBar}
+        <div className="math-problem-stack">
+          {showConfetti && <Confetti />}
+          <div className="math-problem-card math-problem-card-centered">
+            {assignmentLabel}
+            <span className="math-problem-display">
+              You've finished all {total} question{total === 1 ? '' : 's'} for today. Come back tomorrow for a new set!
+            </span>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -455,6 +510,8 @@ function MathProblem() {
   ));
 
   return (
+    <>
+    {scopeBar}
     <div className="math-problem-stack">
       {behindCards}
       {/* The flipper rotates 180° to reveal the back face (the result) when
@@ -476,6 +533,7 @@ function MathProblem() {
               style={{ width: `${(100 * (currentNumber - 1)) / Math.max(1, total)}%` }}
             />
           </div>
+          {assignmentLabel}
           {topicName && <span className="math-problem-topic">{topicName}</span>}
           <MathProblemDisplay problem={renderMixedLatex(problem)} />
           <span className="math-problem-attempt">Attempt {attempt} of {MAX_ATTEMPTS}</span>
@@ -537,6 +595,7 @@ function MathProblem() {
         </div>
       </div>
     </div>
+    </>
   );
 }
 

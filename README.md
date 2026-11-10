@@ -24,8 +24,9 @@ Teachers get a separate side of the app: create **classes** that students join
 with a code, author **assignments** (a set of topics plus the fewest cards to
 answer on them), and assign them to classes with due dates. Assigning it adds
 its topics to each enrolled student's own practice (and to anyone who joins the
-class later), and their daily decks carry its cards until the due date, so
-assignment work is graded and scheduled by the same SM-2 engine as normal
+class later), and each assignment gets its own daily deck for the student
+carrying its cards until the due date (with several open, the practice page
+lists them to pick from), so assignment work is graded and scheduled by the same SM-2 engine as normal
 practice. Students who get the topics right finish at the teacher's count;
 students who struggle get extra practice, up to 1.5 times as many cards.
 Teachers track progress through a
@@ -125,7 +126,8 @@ The backend exposes a small JSON API under the app's URLs, including:
 - `GET /deck/`, `POST /deck/advance/` — the daily practice deck; each card
   includes its topic name and "Learn more" link, but not its solution. Advancing
   may report an answer outcome that updates the topic's spaced-repetition
-  schedule.
+  schedule. `?assignment=<id>` picks an assignment's deck; without it, several
+  open assignments return a list to choose from.
 - `POST /deck/check/` — grade an answer to the current card on the server; the
   solution is only returned once the card's attempts run out
 - `GET /dashboard/` — selected/upcoming topics with their SM-2 state
@@ -144,8 +146,8 @@ The backend exposes a small JSON API under the app's URLs, including:
 - **Teacher — analytics:** `GET /teacher/overview/`,
   `GET /teacher/proficiency-history/`, `GET /teacher/students/<sid>/`
 - **Student — classes & assignments:** `POST /classes/join/`, `GET /classes/mine/`,
-  `GET /assignments/mine/`, `POST /assignments/<id>/play/` (routes the student to
-  their deck, which already has the assignment's topics)
+  `GET /assignments/mine/`, `POST /assignments/<id>/play/` (builds the
+  assignment's deck for today and routes the student to it)
 
 See [backend/myapp/urls.py](backend/myapp/urls.py) for the full list. The
 [bruno/](bruno/) collection contains ready-to-run requests against these
