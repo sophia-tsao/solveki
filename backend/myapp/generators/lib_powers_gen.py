@@ -20,6 +20,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num
 from ._steps import Steps, paren, tex_frac
 from .algebra1 import _elimination_steps, _typed_answer
@@ -31,6 +32,7 @@ def _signed_term(coeff, var):
 
 
 @register
+@with_variants
 def system_of_equations(max_coeff=6, min_sol=-8, max_sol=8):
     r"""Solve a System of Equations in R^2
 
@@ -74,6 +76,7 @@ def _combine_term(coeff, power):
 
 
 @register
+@with_variants
 def combine_like_terms(min_power=1, max_power=6):
     r"""Combine Like Terms
 
@@ -139,6 +142,7 @@ def combine_like_terms(min_power=1, max_power=6):
 
 
 @register
+@with_variants
 def power_of_powers(min_base=2, max_base=20, min_exp=2, max_exp=9):
     r"""Power of Powers
 
@@ -165,6 +169,7 @@ def power_of_powers(min_base=2, max_base=20, min_exp=2, max_exp=9):
 
 
 @register
+@with_variants
 def quotient_of_power_same_base(min_base=2, max_base=20, min_exp=2, max_exp=9):
     r"""Quotient of Powers with the Same Base
 
@@ -196,6 +201,7 @@ def quotient_of_power_same_base(min_base=2, max_base=20, min_exp=2, max_exp=9):
 
 
 @register
+@with_variants
 def quotient_of_power_same_power(min_base=2, max_base=12, min_exp=2, max_exp=6):
     r"""Quotient of Powers with the Same Power
 
@@ -246,6 +252,7 @@ def quotient_of_power_same_power(min_base=2, max_base=12, min_exp=2, max_exp=6):
 
 
 @register
+@with_variants
 def product_of_scientific_notations(min_exp=-9, max_exp=9):
     r"""Product of Scientific Notations
 

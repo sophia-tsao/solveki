@@ -17,6 +17,7 @@ from django.test import TestCase
 # populated registry.
 from myapp.generators import arithmetic  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -29,7 +30,7 @@ class PlaceValueTests(TestCase):
 
     def test_place_value(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_place_value"]
+        gen = classic(LOCAL_GENERATORS["arith_place_value"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -51,7 +52,7 @@ class RoundingTests(TestCase):
 
     def test_rounding(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_rounding"]
+        gen = classic(LOCAL_GENERATORS["arith_rounding"])
         places = {"ten": 10, "hundred": 100, "thousand": 1000}
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -72,7 +73,7 @@ class AddFractionsTests(TestCase):
 
     def test_add_fractions(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_add_fractions"]
+        gen = classic(LOCAL_GENERATORS["arith_add_fractions"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -93,7 +94,7 @@ class SubtractFractionsTests(TestCase):
 
     def test_subtract_fractions(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_subtract_fractions"]
+        gen = classic(LOCAL_GENERATORS["arith_subtract_fractions"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -115,7 +116,7 @@ class CompareDecimalsTests(TestCase):
 
     def test_compare_decimals(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_compare_decimals"]
+        gen = classic(LOCAL_GENERATORS["arith_compare_decimals"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -134,7 +135,7 @@ class AddDecimalsTests(TestCase):
 
     def test_add_decimals(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_add_decimals"]
+        gen = classic(LOCAL_GENERATORS["arith_add_decimals"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -151,7 +152,7 @@ class SubtractDecimalsTests(TestCase):
 
     def test_subtract_decimals(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_subtract_decimals"]
+        gen = classic(LOCAL_GENERATORS["arith_subtract_decimals"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -169,7 +170,7 @@ class MultiplyDecimalsTests(TestCase):
 
     def test_multiply_decimals(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_multiply_decimals"]
+        gen = classic(LOCAL_GENERATORS["arith_multiply_decimals"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -186,7 +187,7 @@ class OrderOfOperationsTests(TestCase):
 
     def test_order_of_operations(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_order_of_operations"]
+        gen = classic(LOCAL_GENERATORS["arith_order_of_operations"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -205,7 +206,7 @@ class NthMultipleTests(TestCase):
 
     def test_nth_multiple(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_nth_multiple"]
+        gen = classic(LOCAL_GENERATORS["arith_nth_multiple"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -223,7 +224,7 @@ class PowersOfTenTests(TestCase):
 
     def test_powers_of_ten(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_powers_of_ten"]
+        gen = classic(LOCAL_GENERATORS["arith_powers_of_ten"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -248,7 +249,7 @@ class LengthConversionTests(TestCase):
 
     def test_length_conversion(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_length_conversion"]
+        gen = classic(LOCAL_GENERATORS["arith_length_conversion"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -271,7 +272,7 @@ class ElapsedTimeTests(TestCase):
 
     def test_elapsed_time(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_elapsed_time"]
+        gen = classic(LOCAL_GENERATORS["arith_elapsed_time"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -292,7 +293,7 @@ class MoneyTests(TestCase):
 
     def test_money(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_money"]
+        gen = classic(LOCAL_GENERATORS["arith_money"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -314,7 +315,7 @@ class AreaOfRectangleTests(TestCase):
 
     def test_area_of_rectangle(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_area_of_rectangle"]
+        gen = classic(LOCAL_GENERATORS["arith_area_of_rectangle"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -330,7 +331,7 @@ class MinutesToHoursTests(TestCase):
 
     def test_conversion(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_minutes_to_hours"]
+        gen = classic(LOCAL_GENERATORS["arith_minutes_to_hours"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -350,7 +351,7 @@ class ElapsedTimeTests(TestCase):
 
     def test_arrival_time(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_elapsed_time"]
+        gen = classic(LOCAL_GENERATORS["arith_elapsed_time"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -373,7 +374,7 @@ class CompareNumbersTests(TestCase):
 
     def test_compare_numbers(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_compare_numbers"]
+        gen = classic(LOCAL_GENERATORS["arith_compare_numbers"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -388,7 +389,7 @@ class MissingNumberSequenceTests(TestCase):
 
     def test_missing_number_sequence(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_missing_number_sequence"]
+        gen = classic(LOCAL_GENERATORS["arith_missing_number_sequence"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             body = problem.split(":", 1)[1].strip().rstrip(".")
@@ -408,7 +409,7 @@ class EvenOrOddTests(TestCase):
 
     def test_even_or_odd(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_even_or_odd"]
+        gen = classic(LOCAL_GENERATORS["arith_even_or_odd"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -429,7 +430,7 @@ class OrdinalNumberTests(TestCase):
 
     def test_ordinal_number(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_ordinal_number"]
+        gen = classic(LOCAL_GENERATORS["arith_ordinal_number"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -445,7 +446,7 @@ class WordProblemWithin20Tests(TestCase):
 
     def test_word_problem_within_20(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_word_problem_within_20"]
+        gen = classic(LOCAL_GENERATORS["arith_word_problem_within_20"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             add = self.ADD.search(problem)
@@ -466,7 +467,7 @@ class AddSubtractWithin1000Tests(TestCase):
 
     def test_add_subtract_within_1000(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_add_subtract_within_1000"]
+        gen = classic(LOCAL_GENERATORS["arith_add_subtract_within_1000"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -484,7 +485,7 @@ class TellTimeFiveMinTests(TestCase):
 
     def test_tell_time_five_min(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_tell_time_five_min"]
+        gen = classic(LOCAL_GENERATORS["arith_tell_time_five_min"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -505,7 +506,7 @@ class CountMoneyValueTests(TestCase):
 
     def test_count_money_value(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_count_money_value"]
+        gen = classic(LOCAL_GENERATORS["arith_count_money_value"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -520,7 +521,7 @@ class CountMoneyValueTests(TestCase):
         # The solution used to be "$0.89" with no closing "$", which renders
         # as an unterminated math span wherever it's shown as LaTeX.
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_count_money_value"]
+        gen = classic(LOCAL_GENERATORS["arith_count_money_value"])
         for _ in range(200):
             solution = gen()[1]
             self.assertRegex(solution, r"^\$\d+\.\d{2}\$$")
@@ -534,7 +535,7 @@ class ArrayRepeatedAdditionTests(TestCase):
 
     def test_array_repeated_addition(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_array_repeated_addition"]
+        gen = classic(LOCAL_GENERATORS["arith_array_repeated_addition"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -551,7 +552,7 @@ class CompareThreeDigitTests(TestCase):
 
     def test_compare_three_digit(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_compare_three_digit"]
+        gen = classic(LOCAL_GENERATORS["arith_compare_three_digit"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -570,7 +571,7 @@ class EquivalentFractionTests(TestCase):
 
     def test_equivalent_fraction(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_equivalent_fraction"]
+        gen = classic(LOCAL_GENERATORS["arith_equivalent_fraction"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -590,7 +591,7 @@ class MissingFactorTests(TestCase):
 
     def test_missing_factor(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_missing_factor"]
+        gen = classic(LOCAL_GENERATORS["arith_missing_factor"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -611,7 +612,7 @@ class FractionOnNumberLineTests(TestCase):
 
     def test_fraction_on_number_line(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_fraction_on_number_line"]
+        gen = classic(LOCAL_GENERATORS["arith_fraction_on_number_line"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -630,7 +631,7 @@ class TwoStepWordProblemTests(TestCase):
 
     def test_two_step_word_problem(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_two_step_word_problem"]
+        gen = classic(LOCAL_GENERATORS["arith_two_step_word_problem"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -649,7 +650,7 @@ class FractionTimesWholeTests(TestCase):
 
     def test_fraction_times_whole(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_fraction_times_whole"]
+        gen = classic(LOCAL_GENERATORS["arith_fraction_times_whole"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -668,7 +669,7 @@ class MixedToImproperTests(TestCase):
 
     def test_mixed_to_improper(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_mixed_to_improper"]
+        gen = classic(LOCAL_GENERATORS["arith_mixed_to_improper"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -689,7 +690,7 @@ class LongDivisionRemainderTests(TestCase):
 
     def test_long_division_remainder(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_long_division_remainder"]
+        gen = classic(LOCAL_GENERATORS["arith_long_division_remainder"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -710,7 +711,7 @@ class AngleAdditionTests(TestCase):
 
     def test_angle_addition(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_angle_addition"]
+        gen = classic(LOCAL_GENERATORS["arith_angle_addition"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -727,7 +728,7 @@ class FactorPairsCountTests(TestCase):
 
     def test_factor_pairs_count(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_factor_pairs_count"]
+        gen = classic(LOCAL_GENERATORS["arith_factor_pairs_count"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -748,7 +749,7 @@ class AddUnlikeFractionsTests(TestCase):
 
     def test_add_unlike_fractions(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_add_unlike_fractions"]
+        gen = classic(LOCAL_GENERATORS["arith_add_unlike_fractions"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -771,7 +772,7 @@ class RoundDecimalTests(TestCase):
 
     def test_round_decimal(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_round_decimal"]
+        gen = classic(LOCAL_GENERATORS["arith_round_decimal"])
         quants = {"tenth": Decimal("0.1"), "hundredth": Decimal("0.01")}
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -798,7 +799,7 @@ class MetricUnitConversionTests(TestCase):
 
     def test_metric_unit_conversion(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_metric_unit_conversion"]
+        gen = classic(LOCAL_GENERATORS["arith_metric_unit_conversion"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -815,7 +816,7 @@ class DivideDecimalsTests(TestCase):
 
     def test_divide_decimals(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arith_divide_decimals"]
+        gen = classic(LOCAL_GENERATORS["arith_divide_decimals"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)

@@ -16,6 +16,7 @@ from django.test import TestCase
 
 from myapp.generators import algebra2  # noqa: F401 - registers alg2_* generators
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -54,7 +55,7 @@ class EvaluatePolynomialTests(TestCase):
     def test_evaluates_correctly(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_evaluate_polynomial"]
+        gen = classic(LOCAL_GENERATORS["alg2_evaluate_polynomial"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -77,7 +78,7 @@ class PolynomialDivisionTests(TestCase):
     def test_division_reconstructs_dividend(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_polynomial_division"]
+        gen = classic(LOCAL_GENERATORS["alg2_polynomial_division"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PROBLEM.search(problem)
@@ -106,7 +107,7 @@ class RemainderTheoremTests(TestCase):
     def test_remainder_equals_p_of_r(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_remainder_theorem"]
+        gen = classic(LOCAL_GENERATORS["alg2_remainder_theorem"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -126,7 +127,7 @@ class BuildPolynomialTests(TestCase):
     def test_roots_are_zeros_and_monic(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_build_polynomial_from_roots"]
+        gen = classic(LOCAL_GENERATORS["alg2_build_polynomial_from_roots"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             rm = self.PROBLEM.search(problem)
@@ -164,7 +165,7 @@ class AddComplexTests(TestCase):
     def test_addition_and_subtraction(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_add_complex"]
+        gen = classic(LOCAL_GENERATORS["alg2_add_complex"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.OPERANDS.search(problem)
@@ -192,7 +193,7 @@ class RationalExponentTests(TestCase):
     def test_value_matches(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_rational_exponent"]
+        gen = classic(LOCAL_GENERATORS["alg2_rational_exponent"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -215,7 +216,7 @@ class SolveRadicalTests(TestCase):
     def test_solution_satisfies_equation(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_radical_equation"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_radical_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -235,7 +236,7 @@ class SolveExponentialTests(TestCase):
     def test_base_to_x_equals_value(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_exponential_log"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_exponential_log"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -252,7 +253,7 @@ class EvaluateLogTests(TestCase):
     def test_log_value(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_evaluate_log"]
+        gen = classic(LOCAL_GENERATORS["alg2_evaluate_log"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -271,7 +272,7 @@ class InverseLinearTests(TestCase):
     def test_inverse_at_point(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_inverse_linear_function"]
+        gen = classic(LOCAL_GENERATORS["alg2_inverse_linear_function"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -292,7 +293,7 @@ class ZScoreTests(TestCase):
     def test_z_score(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_z_score"]
+        gen = classic(LOCAL_GENERATORS["alg2_z_score"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -310,7 +311,7 @@ class EmpiricalRuleTests(TestCase):
     def test_percent_matches_k(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_empirical_rule"]
+        gen = classic(LOCAL_GENERATORS["alg2_empirical_rule"])
         expected = {1: "68%", 2: "95%", 3: "99.7%"}
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -327,7 +328,7 @@ class SolveSystemMatrixTests(TestCase):
     def test_solution_satisfies_both_equations(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_system_matrix"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_system_matrix"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             eqs = self.EQ.findall(problem)
@@ -348,7 +349,7 @@ class LogProductRuleTests(TestCase):
 
     def test_sum(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_log_product_rule"]
+        gen = classic(LOCAL_GENERATORS["alg2_log_product_rule"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -364,7 +365,7 @@ class LogQuotientRuleTests(TestCase):
 
     def test_difference(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_log_quotient_rule"]
+        gen = classic(LOCAL_GENERATORS["alg2_log_quotient_rule"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -380,7 +381,7 @@ class LogPowerRuleTests(TestCase):
 
     def test_product(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_log_power_rule"]
+        gen = classic(LOCAL_GENERATORS["alg2_log_power_rule"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -396,7 +397,7 @@ class LogChangeOfBaseTests(TestCase):
 
     def test_change_of_base(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_log_change_of_base"]
+        gen = classic(LOCAL_GENERATORS["alg2_log_change_of_base"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -420,7 +421,7 @@ class RationalizeDenominatorTests(TestCase):
 
     def test_conjugate_denominator(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_rationalize_denominator"]
+        gen = classic(LOCAL_GENERATORS["alg2_rationalize_denominator"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             d = self.DENOM.search(problem)
@@ -449,7 +450,7 @@ class RadicalEquationConjugateTests(TestCase):
 
     def test_solution_satisfies_equation(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_radical_equation_conjugate"]
+        gen = classic(LOCAL_GENERATORS["alg2_radical_equation_conjugate"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -470,7 +471,7 @@ class FunctionCompositionTests(TestCase):
 
     def test_composition_value(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_function_composition"]
+        gen = classic(LOCAL_GENERATORS["alg2_function_composition"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -493,7 +494,7 @@ class SolveRationalEquationTests(TestCase):
 
     def test_root_is_genuine(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_rational_equation"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_rational_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -525,7 +526,7 @@ class RationalExpressionOpsTests(TestCase):
 
     def test_simplification_matches_numerically(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_rational_expression_ops"]
+        gen = classic(LOCAL_GENERATORS["alg2_rational_expression_ops"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -566,7 +567,7 @@ class ComplexDivisionTests(TestCase):
 
     def test_division_value(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_complex_division"]
+        gen = classic(LOCAL_GENERATORS["alg2_complex_division"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -593,7 +594,7 @@ class ComplexModulusTests(TestCase):
 
     def test_modulus_value(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_complex_modulus"]
+        gen = classic(LOCAL_GENERATORS["alg2_complex_modulus"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -620,7 +621,7 @@ class InverseNonlinearTests(TestCase):
 
     def test_inverse_composes_to_identity(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_inverse_nonlinear"]
+        gen = classic(LOCAL_GENERATORS["alg2_inverse_nonlinear"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -650,7 +651,7 @@ class RationalRootListTests(TestCase):
 
     def test_candidate_list(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_rational_root_list"]
+        gen = classic(LOCAL_GENERATORS["alg2_rational_root_list"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -673,7 +674,7 @@ class SolveSystemThreeTests(TestCase):
 
     def test_solution_satisfies_all_equations(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_system_three"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_system_three"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             eqs = self.EQ.findall(problem)
@@ -698,7 +699,7 @@ class MatrixOperationTests(TestCase):
 
     def test_entry_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_matrix_operation"]
+        gen = classic(LOCAL_GENERATORS["alg2_matrix_operation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -721,7 +722,7 @@ class SolvePolynomialFactoringTests(TestCase):
 
     def test_roots_are_complete_and_sorted(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_polynomial_factoring"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_polynomial_factoring"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -743,7 +744,7 @@ class ConicEquationTests(TestCase):
 
     def test_standard_form(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_conic_equation"]
+        gen = classic(LOCAL_GENERATORS["alg2_conic_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             a = int(self.A_VAL.search(problem).group("a"))
@@ -763,7 +764,7 @@ class PolynomialEndBehaviorTests(TestCase):
 
     def test_end_behavior(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_polynomial_end_behavior"]
+        gen = classic(LOCAL_GENERATORS["alg2_polynomial_end_behavior"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -798,7 +799,7 @@ class StepsTests(TestCase):
     def test_every_generator_has_steps_ending_on_the_answer(self):
         random.seed(0)
         for name in ALG2_GENERATORS:
-            gen = LOCAL_GENERATORS[name]
+            gen = classic(LOCAL_GENERATORS[name])
             for _ in range(STEP_SAMPLES):
                 problem, solution, steps = gen()
                 self.assertTrue(2 <= len(steps) <= 6, f"{name}: {len(steps)} steps for {problem!r}")
@@ -809,7 +810,7 @@ class StepsTests(TestCase):
         # "p(3) = 36-15-4" followed by "p(3) = 17".
         random.seed(0)
         for name in ("alg2_evaluate_polynomial", "alg2_remainder_theorem"):
-            gen = LOCAL_GENERATORS[name]
+            gen = classic(LOCAL_GENERATORS[name])
             for _ in range(STEP_SAMPLES):
                 problem, solution, steps = gen()
                 terms = steps[-3]["math"].split("=")[1]
@@ -818,7 +819,7 @@ class StepsTests(TestCase):
 
     def test_synthetic_division_quotient_matches_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_polynomial_division"]
+        gen = classic(LOCAL_GENERATORS["alg2_polynomial_division"])
         for _ in range(STEP_SAMPLES):
             problem, solution, steps = gen()
             quotient = steps[-2]["math"].removeprefix("q(x) = ")
@@ -826,7 +827,7 @@ class StepsTests(TestCase):
 
     def test_elimination_step_holds_at_the_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_system_matrix"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_system_matrix"])
         sol_re = re.compile(r"x=(-?\d+), y=(-?\d+)")
         for _ in range(STEP_SAMPLES):
             problem, solution, steps = gen()
@@ -840,7 +841,7 @@ class StepsTests(TestCase):
 
     def test_cramer_determinants_are_right(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_solve_system_three"]
+        gen = classic(LOCAL_GENERATORS["alg2_solve_system_three"])
         det_re = re.compile(r"\\begin\{vmatrix\}(.*?)\\end\{vmatrix\}.* = (-?\d+)$")
         for _ in range(STEP_SAMPLES):
             problem, solution, steps = gen()
@@ -854,7 +855,7 @@ class StepsTests(TestCase):
 
     def test_complex_division_numerator_is_the_conjugate_product(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["alg2_complex_division"]
+        gen = classic(LOCAL_GENERATORS["alg2_complex_division"])
         z_re = re.compile(r"\((-?\d+)([+-]\d*)i\)/\((-?\d+)([+-]\d*)i\)")
 
         def coeff(tok):

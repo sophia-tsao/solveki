@@ -27,6 +27,7 @@ from fractions import Fraction
 
 from ._format import frac, frac_from, pair
 from ._registry import register
+from ._variants import with_variants
 from ._steps import Steps, paren, tex_frac
 
 
@@ -80,6 +81,7 @@ def _joined(terms):
 
 
 @register
+@with_variants
 def expanding(max_coeff=9):
     r"""Expanding Factored Binomial
 
@@ -140,6 +142,7 @@ def expanding(max_coeff=9):
 
 
 @register
+@with_variants
 def power_rule_differentiation(min_power=1, max_power=8):
     r"""Power Rule Differentiation
 
@@ -236,6 +239,7 @@ _COMPARE_WORD = {">": "greater than", "<": "less than", "=": "equal to"}
 
 
 @register
+@with_variants
 def basic_algebra(max_coeff=9, max_const=10, max_rhs=20):
     r"""Solve a Two-Step Linear Equation
 
@@ -272,6 +276,7 @@ def basic_algebra(max_coeff=9, max_const=10, max_rhs=20):
 
 
 @register
+@with_variants
 def linear_equations(max_value=10, max_coeff=6):
     r"""Solve a System of Two Linear Equations
 
@@ -328,6 +333,7 @@ def linear_equations(max_value=10, max_coeff=6):
 
 
 @register
+@with_variants
 def intersection_of_two_lines(max_slope=5, max_intercept=10):
     r"""Intersection of Two Lines
 
@@ -411,6 +417,7 @@ def surds_comparison(max_square=30, max_cube=150):
 
 
 @register
+@with_variants
 def log(max_base=10, max_value=1000):
     r"""Evaluate a Logarithm
 
@@ -443,6 +450,7 @@ def log(max_base=10, max_value=1000):
 
 
 @register
+@with_variants
 def multiply_complex_numbers(max_part=9):
     r"""Multiply Two Complex Numbers
 
@@ -485,6 +493,7 @@ def multiply_complex_numbers(max_part=9):
 
 
 @register
+@with_variants
 def int_matrix_22_determinant(max_entry=9):
     r"""Determinant of a 2x2 Matrix
 
@@ -510,6 +519,7 @@ def int_matrix_22_determinant(max_entry=9):
 
 
 @register
+@with_variants
 def vector_dot(max_entry=9):
     r"""Dot Product of Two Vectors
 
@@ -549,6 +559,7 @@ def _ordinal(n):
 
 
 @register
+@with_variants
 def arithmetic_progression_term(max_first=20, max_diff=10, min_n=5, max_n=30):
     r"""Term of an Arithmetic Sequence
 
@@ -586,6 +597,7 @@ def _times(factors):
 
 
 @register
+@with_variants
 def combinations(min_n=4, max_n=12):
     r"""Combinations
 
@@ -625,6 +637,7 @@ def combinations(min_n=4, max_n=12):
 
 
 @register
+@with_variants
 def permutation(min_n=4, max_n=12, max_r=4):
     r"""Permutations
 

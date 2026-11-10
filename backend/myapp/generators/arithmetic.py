@@ -14,6 +14,7 @@ from math import gcd, lcm
 from ._registry import register
 from ._format import frac
 from ._steps import Steps, paren, tex_frac
+from ._variants import with_variants
 
 
 def _reduce(num, den):
@@ -235,6 +236,7 @@ def _compare_symbol_step(s, a, b, symbol):
 
 
 @register
+@with_variants
 def arith_place_value(min_length=3, max_length=5):
     r"""Place Value
 
@@ -270,6 +272,7 @@ def arith_place_value(min_length=3, max_length=5):
 
 
 @register
+@with_variants
 def arith_rounding(max_n=100000):
     r"""Rounding
 
@@ -302,6 +305,7 @@ def arith_rounding(max_n=100000):
 
 
 @register
+@with_variants
 def arith_add_fractions(max_den=12):
     r"""Add Fractions
 
@@ -328,6 +332,7 @@ def arith_add_fractions(max_den=12):
 
 
 @register
+@with_variants
 def arith_subtract_fractions(max_den=12):
     r"""Subtract Fractions
 
@@ -357,6 +362,7 @@ def arith_subtract_fractions(max_den=12):
 
 
 @register
+@with_variants
 def arith_compare_decimals(max_int=99):
     r"""Compare Decimals
 
@@ -399,6 +405,7 @@ def arith_compare_decimals(max_int=99):
 
 
 @register
+@with_variants
 def arith_add_decimals(max_int=99):
     r"""Add Decimals
 
@@ -419,6 +426,7 @@ def arith_add_decimals(max_int=99):
 
 
 @register
+@with_variants
 def arith_subtract_decimals(max_int=99):
     r"""Subtract Decimals
 
@@ -441,6 +449,7 @@ def arith_subtract_decimals(max_int=99):
 
 
 @register
+@with_variants
 def arith_multiply_decimals(max_int=12):
     r"""Multiply Decimals
 
@@ -470,6 +479,7 @@ def arith_multiply_decimals(max_int=12):
 
 
 @register
+@with_variants
 def arith_order_of_operations(max_val=12):
     r"""Order of Operations
 
@@ -523,6 +533,7 @@ def arith_order_of_operations(max_val=12):
 
 
 @register
+@with_variants
 def arith_nth_multiple(max_n=20, max_base=12):
     r"""Nth Multiple
 
@@ -548,6 +559,7 @@ def arith_nth_multiple(max_n=20, max_base=12):
 
 
 @register
+@with_variants
 def arith_powers_of_ten(max_k=3):
     r"""Powers of Ten
 
@@ -598,6 +610,7 @@ _LENGTH_SYSTEMS = {
 
 
 @register
+@with_variants
 def arith_length_conversion(max_value=20):
     r"""Length Conversion
 
@@ -635,6 +648,7 @@ def arith_length_conversion(max_value=20):
 
 
 @register
+@with_variants
 def arith_minutes_to_hours():
     r"""Convert Minutes to Hours and Minutes
 
@@ -666,6 +680,7 @@ def arith_minutes_to_hours():
 
 
 @register
+@with_variants
 def arith_elapsed_time():
     r"""Elapsed Time
 
@@ -709,6 +724,7 @@ def arith_elapsed_time():
 
 
 @register
+@with_variants
 def arith_money(max_cents=5000):
     r"""Money
 
@@ -732,6 +748,7 @@ def arith_money(max_cents=5000):
 
 
 @register
+@with_variants
 def arith_area_of_rectangle(max_side=50):
     r"""Area of a Rectangle
 
@@ -758,6 +775,7 @@ def arith_area_of_rectangle(max_side=50):
 
 
 @register
+@with_variants
 def arith_compare_numbers(max_n=20):
     r"""Compare Numbers
 
@@ -783,6 +801,7 @@ def arith_compare_numbers(max_n=20):
 
 
 @register
+@with_variants
 def arith_missing_number_sequence(length=5):
     r"""Missing Number in a Sequence
 
@@ -816,6 +835,7 @@ def arith_missing_number_sequence(length=5):
 
 
 @register
+@with_variants
 def arith_even_or_odd(max_n=100):
     r"""Even or Odd
 
@@ -835,6 +855,7 @@ def arith_even_or_odd(max_n=100):
 
 
 @register
+@with_variants
 def arith_ordinal_number(max_n=100):
     r"""Ordinal Numbers
 
@@ -865,6 +886,7 @@ def arith_ordinal_number(max_n=100):
 
 
 @register
+@with_variants
 def arith_word_problem_within_20():
     r"""Add and Subtract Word Problem within 20
 
@@ -903,6 +925,7 @@ def arith_word_problem_within_20():
 
 
 @register
+@with_variants
 def arith_add_subtract_within_1000():
     r"""Add and Subtract within 1000
 
@@ -929,6 +952,7 @@ def arith_add_subtract_within_1000():
 
 
 @register
+@with_variants
 def arith_tell_time_five_min():
     r"""Tell Time to the Nearest 5 Minutes
 
@@ -956,6 +980,7 @@ def arith_tell_time_five_min():
 
 
 @register
+@with_variants
 def arith_count_money_value():
     r"""Count Money Value
 
@@ -1000,6 +1025,7 @@ def arith_count_money_value():
 
 
 @register
+@with_variants
 def arith_array_repeated_addition(max_side=10):
     r"""Arrays and Repeated Addition
 
@@ -1026,6 +1052,7 @@ def arith_array_repeated_addition(max_side=10):
 
 
 @register
+@with_variants
 def arith_compare_three_digit():
     r"""Compare 3-Digit Numbers
 
@@ -1060,6 +1087,7 @@ def arith_compare_three_digit():
 
 
 @register
+@with_variants
 def arith_equivalent_fraction():
     r"""Equivalent Fractions
 
@@ -1090,6 +1118,7 @@ def arith_equivalent_fraction():
 
 
 @register
+@with_variants
 def arith_missing_factor(max_factor=12):
     r"""Missing Factor
 
@@ -1116,6 +1145,7 @@ def arith_missing_factor(max_factor=12):
 
 
 @register
+@with_variants
 def arith_fraction_on_number_line(max_parts=10):
     r"""Fraction on a Number Line
 
@@ -1176,6 +1206,7 @@ def arith_two_step_word_problem():
 
 
 @register
+@with_variants
 def arith_fraction_times_whole(max_den=9):
     r"""Multiply a Fraction by a Whole Number
 
@@ -1213,6 +1244,7 @@ def arith_fraction_times_whole(max_den=9):
 
 
 @register
+@with_variants
 def arith_mixed_to_improper(max_den=9):
     r"""Mixed and Improper Fractions
 
@@ -1245,6 +1277,7 @@ def arith_mixed_to_improper(max_den=9):
 
 
 @register
+@with_variants
 def arith_long_division_remainder():
     r"""Long Division with Remainder
 
@@ -1276,6 +1309,7 @@ def arith_long_division_remainder():
 
 
 @register
+@with_variants
 def arith_angle_addition():
     r"""Angle Addition
 
@@ -1304,6 +1338,7 @@ def arith_angle_addition():
 
 
 @register
+@with_variants
 def arith_factor_pairs_count(max_n=60):
     r"""Factor Pairs Count
 
@@ -1336,6 +1371,7 @@ def arith_factor_pairs_count(max_n=60):
 
 
 @register
+@with_variants
 def arith_add_unlike_fractions(max_den=12):
     r"""Add and Subtract Unlike Denominators
 
@@ -1368,6 +1404,7 @@ def arith_add_unlike_fractions(max_den=12):
 
 
 @register
+@with_variants
 def arith_round_decimal():
     r"""Round Decimals
 
@@ -1423,6 +1460,7 @@ _METRIC_CONVERSIONS = [
 
 
 @register
+@with_variants
 def arith_metric_unit_conversion():
     r"""Metric Unit Conversion
 
@@ -1459,6 +1497,7 @@ def arith_metric_unit_conversion():
 
 
 @register
+@with_variants
 def arith_divide_decimals():
     r"""Divide Decimals
 

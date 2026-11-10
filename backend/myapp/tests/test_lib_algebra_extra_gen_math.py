@@ -14,6 +14,7 @@ from django.test import TestCase
 
 from myapp.generators import lib_algebra_extra_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 1000
 
@@ -55,7 +56,7 @@ class ExpandingTests(TestCase):
 
     def test_product_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["expanding"]
+        gen = classic(LOCAL_GENERATORS["expanding"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             factors = self.FACTOR.findall(problem)
@@ -80,7 +81,7 @@ class ExpandingTests(TestCase):
 class PowerRuleDifferentiationTests(TestCase):
     def test_derivative_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["power_rule_differentiation"]
+        gen = classic(LOCAL_GENERATORS["power_rule_differentiation"])
         term_re = re.compile(r"(\d+)x\^\{(\d+)\}")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -109,7 +110,7 @@ OVERRIDE_SAMPLES = 2000
 
 def _override_samples(name):
     random.seed(0)
-    gen = LOCAL_GENERATORS[name]
+    gen = classic(LOCAL_GENERATORS[name])
     for _ in range(OVERRIDE_SAMPLES):
         yield gen()[:2]
 

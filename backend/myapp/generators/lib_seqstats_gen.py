@@ -28,6 +28,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num, frac_from as _frac_from
 from ._steps import Steps, paren, tex_frac
 
@@ -77,6 +78,7 @@ def _x_term(coef, exp):
 
 
 @register
+@with_variants
 def mean_median(min_val=1, max_val=100):
     r"""Mean and Median of a Series
 
@@ -124,6 +126,7 @@ def mean_median(min_val=1, max_val=100):
 
 
 @register
+@with_variants
 def data_summary(min_val=1, max_val=50):
     r"""Mean, Standard Deviation and Variance of a Data Set
 
@@ -172,6 +175,7 @@ def data_summary(min_val=1, max_val=50):
 
 
 @register
+@with_variants
 def arithmetic_progression_sum(min_a=-50, max_a=50, min_d=-12, max_d=12):
     r"""Sum of an Arithmetic Progression
 
@@ -213,6 +217,7 @@ def arithmetic_progression_sum(min_a=-50, max_a=50, min_d=-12, max_d=12):
 
 
 @register
+@with_variants
 def geometric_progression(min_a=1, max_a=9, min_r=2, max_r=5):
     r"""Nth Term of a Geometric Progression
 
@@ -246,6 +251,7 @@ def geometric_progression(min_a=1, max_a=9, min_r=2, max_r=5):
 
 
 @register
+@with_variants
 def definite_integral(min_coef=1, max_coef=20):
     r"""Definite Integral of a Quadratic
 
@@ -300,6 +306,7 @@ def definite_integral(min_coef=1, max_coef=20):
 
 
 @register
+@with_variants
 def power_rule_integration(max_terms=3, max_coef=9, max_exp=5):
     r"""Indefinite Integral of a Polynomial (Power Rule)
 
@@ -365,6 +372,7 @@ _Z_CRITICAL = {80: 1.282, 90: 1.645, 95: 1.96, 99: 2.576}
 
 
 @register
+@with_variants
 def confidence_interval():
     r"""Confidence Interval for a Mean
 
@@ -407,6 +415,7 @@ def confidence_interval():
 
 
 @register
+@with_variants
 def quadratic_equation(max_num=6, max_den=3):
     r"""Zeros of a Quadratic Equation
 

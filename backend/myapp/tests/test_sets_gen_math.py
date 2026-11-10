@@ -14,6 +14,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effect.
 from myapp.generators import sets_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -40,7 +41,7 @@ def _parse_set(text):
 class SetOperationTests(TestCase):
     def test_solution_matches_operation(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["set_operation"]
+        gen = classic(LOCAL_GENERATORS["set_operation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = PROBLEM.search(problem)

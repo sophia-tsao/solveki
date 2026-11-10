@@ -15,6 +15,7 @@ from fractions import Fraction
 from math import cos, pi
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num
 from ._steps import Steps
 from .precalculus import (_UNIT_ANGLES, _angle_latex, _approx, _exact_trig,
@@ -61,6 +62,7 @@ def _primitive_cycle(p, lo, hi):
 
 
 @register
+@with_variants
 def pc_periodic_values(min_period=3, max_period=7, min_value=-9, max_value=9,
                        min_input=20, max_input=99):
     r"""Values of a Periodic Function
@@ -143,6 +145,7 @@ def _model_context():
 
 
 @register
+@with_variants
 def pc_sinusoidal_model():
     r"""Sinusoidal Models in Context
 
@@ -213,6 +216,7 @@ _SHIFTS = [(0, 1), (1, 6), (1, 4), (1, 3), (1, 2)]
 
 
 @register
+@with_variants
 def pc_sinusoid_transformations(max_stretch=5, max_b=4, max_shift_up=5):
     r"""Sinusoid Transformations
 
@@ -322,6 +326,7 @@ def _tan_equation(a, b, c, d):
 
 
 @register
+@with_variants
 def pc_tangent_features(max_a=4, max_shift=60, max_d=5):
     r"""Tangent Function Features
 
@@ -420,6 +425,7 @@ def _interval(lo, lo_rel, hi_rel, hi):
 
 
 @register
+@with_variants
 def pc_trig_inequality():
     r"""Trigonometric Inequalities
 
@@ -525,6 +531,7 @@ _RECIPROCAL = {
 
 
 @register
+@with_variants
 def pc_reciprocal_trig_values():
     r"""Secant, Cosecant, and Cotangent Values
 
@@ -592,6 +599,7 @@ def _limacon(a, b, fn):
 
 
 @register
+@with_variants
 def pc_polar_graph_features(max_coeff=6, max_n=6):
     r"""Polar Graph Features
 
@@ -704,6 +712,7 @@ _QUARTERS = [(0, 1), (1, 2), (2, 3), (3, 4)]
 
 
 @register
+@with_variants
 def pc_polar_rate_of_change(max_a=5, max_b=5):
     r"""Rates of Change in Polar Functions
 

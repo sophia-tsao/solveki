@@ -15,6 +15,7 @@ from django.test import TestCase
 
 from myapp.generators import precalculus  # noqa: F401  (registers generators)
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 2000
 
@@ -78,7 +79,7 @@ class UnitCirclePointTests(TestCase):
 
     def test_point_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_unit_circle_point"]
+        gen = classic(LOCAL_GENERATORS["pc_unit_circle_point"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.ANG.search(problem)
@@ -97,7 +98,7 @@ class UnitCircleTrigTests(TestCase):
 
     def _check(self, name, fn):
         random.seed(0)
-        gen = LOCAL_GENERATORS[name]
+        gen = classic(LOCAL_GENERATORS[name])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.ANG.search(problem)
@@ -131,7 +132,7 @@ class TrigQuadraticTests(TestCase):
 
     def test_solutions_solve_the_quadratic(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_trig_quadratic"]
+        gen = classic(LOCAL_GENERATORS["pc_trig_quadratic"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             eq = self.EQ.search(problem).group("eq")
@@ -164,7 +165,7 @@ class TrigQuadraticTests(TestCase):
 class RationalVerticalAsymptoteTests(TestCase):
     def test_va(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_vertical_asymptotes"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_vertical_asymptotes"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -179,7 +180,7 @@ class RationalVerticalAsymptoteTests(TestCase):
 class RationalZerosTests(TestCase):
     def test_zeros(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_zeros"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_zeros"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -196,7 +197,7 @@ class RationalHolesTests(TestCase):
 
     def test_hole(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_holes"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_holes"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -225,7 +226,7 @@ class RationalHolesTests(TestCase):
 class RationalHorizontalAsymptoteTests(TestCase):
     def test_ha(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_horizontal_asymptote"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_horizontal_asymptote"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -249,7 +250,7 @@ class RationalSlantAsymptoteTests(TestCase):
 
     def test_slant(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_slant_asymptote"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_slant_asymptote"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -276,7 +277,7 @@ class RationalSlantAsymptoteTests(TestCase):
 class RationalYInterceptTests(TestCase):
     def test_y_intercept(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_y_intercept"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_y_intercept"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -331,7 +332,7 @@ class RationalInequalityTests(TestCase):
 
     def test_solution_set(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_rational_inequality"]
+        gen = classic(LOCAL_GENERATORS["pc_rational_inequality"])
         holds = {">": lambda g: g > 0, "<": lambda g: g < 0,
                  "\\ge": lambda g: g >= 0, "\\le": lambda g: g <= 0}
         for _ in range(SAMPLES):
@@ -362,7 +363,7 @@ class SinusoidFeaturesTests(TestCase):
 
     def test_features(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_sinusoid_features"]
+        gen = classic(LOCAL_GENERATORS["pc_sinusoid_features"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.EQ.search(problem)
@@ -401,7 +402,7 @@ class SumDifferenceValuesTests(TestCase):
     def test_values(self):
         random.seed(0)
         fns = {"sin": math.sin, "cos": math.cos, "tan": math.tan}
-        gen = LOCAL_GENERATORS["pc_sum_difference_values"]
+        gen = classic(LOCAL_GENERATORS["pc_sum_difference_values"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.P.search(problem)
@@ -424,7 +425,7 @@ class HalfAngleValuesTests(TestCase):
     def test_values(self):
         random.seed(0)
         fns = {"sin": math.sin, "cos": math.cos, "tan": math.tan}
-        gen = LOCAL_GENERATORS["pc_half_angle_values"]
+        gen = classic(LOCAL_GENERATORS["pc_half_angle_values"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.P.search(problem)
@@ -444,7 +445,7 @@ class BinomialTermTests(TestCase):
 
     def test_coefficient(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_binomial_term"]
+        gen = classic(LOCAL_GENERATORS["pc_binomial_term"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             mb = self.BASE.search(problem)
@@ -471,7 +472,7 @@ class DeMoivreTests(TestCase):
 
     def test_rectangular(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_de_moivre"]
+        gen = classic(LOCAL_GENERATORS["pc_de_moivre"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.P.search(problem)
@@ -518,7 +519,7 @@ class SimplifyTrigIdentityTests(TestCase):
 
     def test_identity(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_simplify_trig_identity"]
+        gen = classic(LOCAL_GENERATORS["pc_simplify_trig_identity"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.LHS.search(problem)
@@ -538,7 +539,7 @@ class RecursiveSequenceTermTests(TestCase):
 
     def test_term(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_recursive_sequence_term"]
+        gen = classic(LOCAL_GENERATORS["pc_recursive_sequence_term"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             ma1 = self.A1.search(problem)
@@ -566,7 +567,7 @@ class PartialFractionsTests(TestCase):
 
     def test_numerator(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_partial_fractions"]
+        gen = classic(LOCAL_GENERATORS["pc_partial_fractions"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = _FRAC.search(problem)
@@ -627,7 +628,7 @@ class PolarRectangularEquationTests(TestCase):
 
     def test_conversion(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_polar_rectangular_equation"]
+        gen = classic(LOCAL_GENERATORS["pc_polar_rectangular_equation"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.POLAR.search(problem)
@@ -648,7 +649,7 @@ class OrthogonalProjectionTests(TestCase):
 
     def test_orthogonal_projection(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pc_orthogonal_projection"]
+        gen = classic(LOCAL_GENERATORS["pc_orthogonal_projection"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)

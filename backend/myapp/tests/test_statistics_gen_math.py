@@ -15,6 +15,7 @@ from django.test import TestCase
 # LOCAL_GENERATORS with the stat_* generators.
 from myapp.generators import statistics_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 
 def _half_up(value, places):
@@ -47,7 +48,7 @@ class FiveNumberSummaryTests(TestCase):
     def test_summary_matches_convention(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_five_number_summary"]
+        gen = classic(LOCAL_GENERATORS["stat_five_number_summary"])
         sol_re = re.compile(
             rf"\$(?P<mn>{NUM}), (?P<q1>{NUM}), (?P<med>{NUM}), "
             rf"(?P<q3>{NUM}), (?P<mx>{NUM})\$"
@@ -93,7 +94,7 @@ class ZScoreTests(TestCase):
     def test_z_score(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_z_score"]
+        gen = classic(LOCAL_GENERATORS["stat_z_score"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -123,7 +124,7 @@ class CorrelationCoefficientTests(TestCase):
     def test_correlation(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_correlation_coefficient"]
+        gen = classic(LOCAL_GENERATORS["stat_correlation_coefficient"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             points = _parse_points(problem)
@@ -150,7 +151,7 @@ class RegressionLineTests(TestCase):
     def test_regression(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_regression_line"]
+        gen = classic(LOCAL_GENERATORS["stat_regression_line"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             points = _parse_points(problem)
@@ -187,7 +188,7 @@ class MarginOfErrorTests(TestCase):
     def test_margin_of_error(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_margin_of_error"]
+        gen = classic(LOCAL_GENERATORS["stat_margin_of_error"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -210,7 +211,7 @@ class StandardErrorMeanTests(TestCase):
     def test_standard_error(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_standard_error_mean"]
+        gen = classic(LOCAL_GENERATORS["stat_standard_error_mean"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -234,7 +235,7 @@ class SampleProportionCITests(TestCase):
     def test_confidence_interval(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_sample_proportion_ci"]
+        gen = classic(LOCAL_GENERATORS["stat_sample_proportion_ci"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -261,7 +262,7 @@ class RelativeFrequencyTests(TestCase):
     def test_relative_frequency(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_relative_frequency"]
+        gen = classic(LOCAL_GENERATORS["stat_relative_frequency"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             cm = self.COUNTS.search(problem)
@@ -300,7 +301,7 @@ class NormalProbabilityTests(TestCase):
     def test_normal_probability(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_normal_probability"]
+        gen = classic(LOCAL_GENERATORS["stat_normal_probability"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             pm = self.PARAMS.search(problem)
@@ -340,7 +341,7 @@ class TestStatisticTests(TestCase):
     def test_test_statistic(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_test_statistic"]
+        gen = classic(LOCAL_GENERATORS["stat_test_statistic"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             mm = self.MEAN.search(problem)
@@ -375,7 +376,7 @@ class DiscreteVarianceTests(TestCase):
     def test_variance(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_discrete_variance"]
+        gen = classic(LOCAL_GENERATORS["stat_discrete_variance"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.VALUES.search(problem)
@@ -400,7 +401,7 @@ class PercentileRankTests(TestCase):
     def test_percentile_rank(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_percentile_rank"]
+        gen = classic(LOCAL_GENERATORS["stat_percentile_rank"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             dm = self.DATA.search(problem)
@@ -429,7 +430,7 @@ class CountingProbabilityTests(TestCase):
         import random
         from fractions import Fraction
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_counting_probability"]
+        gen = classic(LOCAL_GENERATORS["stat_counting_probability"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -462,7 +463,7 @@ class OddsProbabilityTests(TestCase):
     def test_odds_probability(self):
         import random
         random.seed(0)
-        gen = LOCAL_GENERATORS["stat_odds_probability"]
+        gen = classic(LOCAL_GENERATORS["stat_odds_probability"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)

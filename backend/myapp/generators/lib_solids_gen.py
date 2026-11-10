@@ -25,6 +25,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num
 from ._steps import Steps, tex_frac
 
@@ -57,6 +58,7 @@ def _lead(value):
 
 
 @register
+@with_variants
 def surface_area_sphere(min_r=2, max_r=20):
     r"""Surface Area of a Sphere
 
@@ -87,6 +89,7 @@ def surface_area_sphere(min_r=2, max_r=20):
 
 
 @register
+@with_variants
 def volume_sphere(min_r=2, max_r=20):
     r"""Volume of a Sphere
 
@@ -117,6 +120,7 @@ def volume_sphere(min_r=2, max_r=20):
 
 
 @register
+@with_variants
 def volume_hemisphere(min_r=2, max_r=20):
     r"""Volume of a Hemisphere
 
@@ -150,6 +154,7 @@ def volume_hemisphere(min_r=2, max_r=20):
 
 
 @register
+@with_variants
 def volume_pyramid(min_dim=2, max_dim=20):
     r"""Volume of a Pyramid
 
@@ -185,6 +190,7 @@ def volume_pyramid(min_dim=2, max_dim=20):
 
 
 @register
+@with_variants
 def curved_surface_area_cylinder(min_r=2, max_r=20, min_h=2, max_h=20):
     r"""Curved Surface Area of a Cylinder
 
@@ -218,6 +224,7 @@ def curved_surface_area_cylinder(min_r=2, max_r=20, min_h=2, max_h=20):
 
 
 @register
+@with_variants
 def cube_root(min_root=1, max_root=20):
     r"""Cube Root
 
@@ -243,6 +250,7 @@ def cube_root(min_root=1, max_root=20):
 
 
 @register
+@with_variants
 def area_of_triangle(min_side=3, max_side=20):
     r"""Area of a Triangle (Heron's Formula)
 
@@ -292,6 +300,7 @@ def area_of_triangle(min_side=3, max_side=20):
 
 
 @register
+@with_variants
 def pythagorean_theorem(min_leg=2, max_leg=15):
     r"""Pythagorean Theorem (Hypotenuse)
 
@@ -325,6 +334,7 @@ def pythagorean_theorem(min_leg=2, max_leg=15):
 
 
 @register
+@with_variants
 def volume_cube(min_side=2, max_side=20):
     r"""Volume of a Cube
 
@@ -349,6 +359,7 @@ def volume_cube(min_side=2, max_side=20):
 
 
 @register
+@with_variants
 def volume_cuboid(min_side=2, max_side=20):
     r"""Volume of a Cuboid
 
@@ -381,6 +392,7 @@ def volume_cuboid(min_side=2, max_side=20):
 
 
 @register
+@with_variants
 def volume_cylinder(min_r=2, max_r=20, min_h=2, max_h=20):
     r"""Volume of a Cylinder
 
@@ -412,6 +424,7 @@ def volume_cylinder(min_r=2, max_r=20, min_h=2, max_h=20):
 
 
 @register
+@with_variants
 def volume_cone(min_r=2, max_r=20, min_h=2, max_h=20):
     r"""Volume of a Cone
 
@@ -443,6 +456,7 @@ def volume_cone(min_r=2, max_r=20, min_h=2, max_h=20):
 
 
 @register
+@with_variants
 def surface_area_cube(min_side=2, max_side=20):
     r"""Surface Area of a Cube
 
@@ -467,6 +481,7 @@ def surface_area_cube(min_side=2, max_side=20):
 
 
 @register
+@with_variants
 def surface_area_cuboid(min_side=2, max_side=20):
     r"""Surface Area of a Cuboid
 
@@ -503,6 +518,7 @@ def surface_area_cuboid(min_side=2, max_side=20):
 
 
 @register
+@with_variants
 def surface_area_cone(min_r=2, max_r=15, max_slant=25):
     r"""Surface Area of a Cone
 
@@ -537,6 +553,7 @@ def surface_area_cone(min_r=2, max_r=15, max_slant=25):
 
 
 @register
+@with_variants
 def surface_area_cylinder(min_r=2, max_r=20, min_h=2, max_h=20):
     r"""Surface Area of a Cylinder
 
@@ -575,6 +592,7 @@ def _pyramid_legs(height, max_half):
 
 
 @register
+@with_variants
 def surface_area_pyramid(min_h=3, max_h=20, max_half=16):
     r"""Surface Area of a Rectangular Pyramid
 

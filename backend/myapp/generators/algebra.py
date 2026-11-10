@@ -2,6 +2,7 @@
 import random
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num
 from ._steps import Steps, paren, tex_frac
 
@@ -38,6 +39,7 @@ def _format_polynomial(terms):
 
 
 @register
+@with_variants
 def vertex_form(min_val=-10, max_val=10, min_a=-5, max_a=5):
     r"""Vertex of a Quadratic in Vertex Form
 
@@ -72,6 +74,7 @@ def vertex_form(min_val=-10, max_val=10, min_a=-5, max_a=5):
 
 
 @register
+@with_variants
 def aroc_over_interval(max_degree=5, max_coefficient=10, min_coefficient=-10):
     r"""Average Rate of Change over an Interval
 

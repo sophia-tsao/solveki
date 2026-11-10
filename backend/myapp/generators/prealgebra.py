@@ -10,6 +10,7 @@ import random
 from fractions import Fraction
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import frac_from, num
 from ._steps import Steps, paren, tex_frac
 from .algebra import _format_polynomial
@@ -162,6 +163,7 @@ def _sign_rule_steps(s, a, b, op):
 # --- Generators -------------------------------------------------------------
 
 @register
+@with_variants
 def pre_unit_rate(min_rate=2, max_rate=30, min_time=2, max_time=12):
     r"""Unit Rate
 
@@ -190,6 +192,7 @@ def pre_unit_rate(min_rate=2, max_rate=30, min_time=2, max_time=12):
 
 
 @register
+@with_variants
 def pre_equivalent_ratio(min_term=1, max_term=9, min_factor=2, max_factor=9):
     r"""Equivalent Ratio
 
@@ -220,6 +223,7 @@ def pre_equivalent_ratio(min_term=1, max_term=9, min_factor=2, max_factor=9):
 
 
 @register
+@with_variants
 def pre_solve_proportion(min_term=1, max_term=12, min_factor=1, max_factor=9):
     r"""Solve a Proportion
 
@@ -250,6 +254,7 @@ def pre_solve_proportion(min_term=1, max_term=12, min_factor=1, max_factor=9):
 
 
 @register
+@with_variants
 def pre_integer_operations(min_val=-20, max_val=20, max_quotient=12):
     r"""Signed Integer Operations
 
@@ -282,6 +287,7 @@ def pre_integer_operations(min_val=-20, max_val=20, max_quotient=12):
 
 
 @register
+@with_variants
 def pre_rational_operations(min_num=-9, max_num=9, min_den=2, max_den=9):
     r"""Signed Fraction Operations
 
@@ -350,6 +356,7 @@ def pre_rational_operations(min_num=-9, max_num=9, min_den=2, max_den=9):
 
 
 @register
+@with_variants
 def pre_absolute_value(min_val=-20, max_val=20):
     r"""Absolute Value Expression
 
@@ -385,6 +392,7 @@ def pre_absolute_value(min_val=-20, max_val=20):
 
 
 @register
+@with_variants
 def pre_one_step_inequality():
     r"""One-Step Inequality
 
@@ -426,6 +434,7 @@ def pre_one_step_inequality():
 
 
 @register
+@with_variants
 def pre_multi_step_inequality():
     r"""Multi-Step Inequality
 
@@ -530,6 +539,7 @@ def _sci_steps(op, m1t, m2t, e1, e2, mant, exp):
 
 
 @register
+@with_variants
 def pre_scientific_notation_ops():
     r"""Scientific Notation Operations
 
@@ -593,6 +603,7 @@ def _normalize_exact(fr):
 
 
 @register
+@with_variants
 def pre_integer_exponent_rules(min_base=2, max_base=9, min_exp=-4, max_exp=4):
     r"""Integer Exponent Rules
 
@@ -641,6 +652,7 @@ def pre_integer_exponent_rules(min_base=2, max_base=9, min_exp=-4, max_exp=4):
 
 
 @register
+@with_variants
 def pre_constant_of_proportionality(max_k=12, min_x=2, max_x=12):
     r"""Constant of Proportionality
 
@@ -686,6 +698,7 @@ def _plug_in(terms, v):
 
 
 @register
+@with_variants
 def pre_evaluate_function(min_coeff=-9, max_coeff=9, min_x=-6, max_x=6):
     r"""Evaluate a Function
 
@@ -725,6 +738,7 @@ def pre_evaluate_function(min_coeff=-9, max_coeff=9, min_x=-6, max_x=6):
 
 
 @register
+@with_variants
 def pre_slope_from_two_points(coord_min=-10, coord_max=10):
     r"""Slope from Two Points
 
@@ -755,6 +769,7 @@ def pre_slope_from_two_points(coord_min=-10, coord_max=10):
 
 
 @register
+@with_variants
 def pre_linear_function_value(min_val=-10, max_val=10):
     r"""Linear Function Value
 
@@ -782,6 +797,7 @@ def pre_linear_function_value(min_val=-10, max_val=10):
 
 
 @register
+@with_variants
 def pre_mean_absolute_deviation(min_val=1, max_val=20):
     r"""Mean Absolute Deviation
 
@@ -828,6 +844,7 @@ def pre_mean_absolute_deviation(min_val=1, max_val=20):
 
 
 @register
+@with_variants
 def pre_range(min_val=1, max_val=50, min_n=4, max_n=7):
     r"""Range of a Data Set
 
@@ -853,6 +870,7 @@ def pre_range(min_val=1, max_val=50, min_n=4, max_n=7):
 
 
 @register
+@with_variants
 def pre_mode(min_val=1, max_val=20, min_others=3, max_others=5):
     r"""Mode of a Data Set
 
@@ -889,6 +907,7 @@ def pre_mode(min_val=1, max_val=20, min_others=3, max_others=5):
 
 
 @register
+@with_variants
 def pre_interquartile_range(min_val=1, max_val=30):
     r"""Interquartile Range
 
@@ -926,6 +945,7 @@ def pre_interquartile_range(min_val=1, max_val=30):
 
 
 @register
+@with_variants
 def pre_approximate_irrational(min_n=2, max_n=120):
     r"""Approximate an Irrational Square Root
 
@@ -967,6 +987,7 @@ def pre_approximate_irrational(min_n=2, max_n=120):
 
 
 @register
+@with_variants
 def pre_area_of_trapezoid(min_base=2, max_base=20, min_height=2, max_height=14):
     r"""Area of a Trapezoid
 
@@ -1019,6 +1040,7 @@ def _fraction_from_parts(s, numerator, denominator):
 
 
 @register
+@with_variants
 def pre_convert_fdp():
     r"""Convert Between Fractions, Decimals, and Percents
 
@@ -1096,6 +1118,7 @@ def pre_convert_fdp():
 
 
 @register
+@with_variants
 def pre_evaluate_expression(min_coeff=2, max_coeff=9, min_const=-9,
                             max_const=9, min_x=-6, max_x=6):
     r"""Evaluate an Algebraic Expression
@@ -1121,6 +1144,7 @@ def pre_evaluate_expression(min_coeff=2, max_coeff=9, min_const=-9,
 
 
 @register
+@with_variants
 def pre_distributive_property(min_a=2, max_a=9, min_b=1, max_b=9,
                               min_c=-9, max_c=9):
     r"""Distributive Property
@@ -1149,6 +1173,7 @@ def pre_distributive_property(min_a=2, max_a=9, min_b=1, max_b=9,
 
 
 @register
+@with_variants
 def pre_order_rational():
     r"""Order Rational Numbers
 
@@ -1213,6 +1238,7 @@ def pre_order_rational():
 
 
 @register
+@with_variants
 def pre_coordinate_distance(coord_min=-10, coord_max=10):
     r"""Coordinate Distance
 
@@ -1259,6 +1285,7 @@ def pre_coordinate_distance(coord_min=-10, coord_max=10):
 
 
 @register
+@with_variants
 def pre_two_step_equation(min_a=2, max_a=9, min_val=-12, max_val=12):
     r"""Two-Step Equation
 
@@ -1282,6 +1309,7 @@ def pre_two_step_equation(min_a=2, max_a=9, min_val=-12, max_val=12):
 
 
 @register
+@with_variants
 def pre_multi_step_equation(min_a=2, max_a=9, min_val=-10, max_val=10):
     r"""Multi-Step Equation
 
@@ -1316,6 +1344,7 @@ def pre_multi_step_equation(min_a=2, max_a=9, min_val=-10, max_val=10):
 
 
 @register
+@with_variants
 def pre_percent_change():
     r"""Percent Increase or Decrease
 
@@ -1366,6 +1395,7 @@ def _dollars(cents):
 
 
 @register
+@with_variants
 def pre_discount_tax_tip(min_price=10, max_price=200):
     r"""Discount, Tax, and Tip
 
@@ -1420,6 +1450,7 @@ def pre_discount_tax_tip(min_price=10, max_price=200):
 
 
 @register
+@with_variants
 def pre_scale_length(min_k=2, max_k=9, min_len=2, max_len=15):
     r"""Scale Factor Length
 
@@ -1458,6 +1489,7 @@ def pre_scale_length(min_k=2, max_k=9, min_len=2, max_len=15):
 
 
 @register
+@with_variants
 def pre_compound_probability(min_total=2, max_total=10):
     r"""Probability of Compound Events
 
@@ -1494,6 +1526,7 @@ def pre_compound_probability(min_total=2, max_total=10):
 
 
 @register
+@with_variants
 def pre_variables_both_sides(min_coeff=-9, max_coeff=9):
     r"""Variables on Both Sides
 
@@ -1543,6 +1576,7 @@ def _line_equation(m, b):
 
 
 @register
+@with_variants
 def pre_slope_intercept_form(min_coeff=-9, max_coeff=9):
     r"""Slope-Intercept Form from Standard Form
 
@@ -1576,6 +1610,7 @@ def pre_slope_intercept_form(min_coeff=-9, max_coeff=9):
 
 
 @register
+@with_variants
 def pre_line_from_slope_point(min_val=-8, max_val=8):
     r"""Line from Slope and a Point
 
@@ -1611,6 +1646,7 @@ def pre_line_from_slope_point(min_val=-8, max_val=8):
 
 
 @register
+@with_variants
 def pre_compare_functions(min_val=-9, max_val=9):
     r"""Compare Two Functions
 
@@ -1673,6 +1709,7 @@ def _classify_system(a1, b1, c1, a2, b2, c2):
 
 
 @register
+@with_variants
 def pre_system_solution_count(min_coeff=2, max_coeff=6):
     r"""Number of Solutions of a Linear System
 

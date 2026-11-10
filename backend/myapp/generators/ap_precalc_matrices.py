@@ -14,6 +14,7 @@ from fractions import Fraction
 from math import cos, hypot, isqrt, radians, sin
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num, frac_from as _frac_from, pair as _pair
 from ._steps import Steps, paren, tex_frac
 
@@ -177,6 +178,7 @@ def _random_matrix(lo, hi, invertible=True):
 # --------------------------------- generators --------------------------------
 
 @register
+@with_variants
 def pc_parametric_position(min_coef=-4, max_coef=4, max_t=5):
     r"""Position of a Parametric Particle
 
@@ -223,6 +225,7 @@ def pc_parametric_position(min_coef=-4, max_coef=4, max_t=5):
 
 
 @register
+@with_variants
 def pc_parametric_rate_of_change(min_coef=-4, max_coef=4, max_t=6):
     r"""Average Rate of Change of a Parametric Function
 
@@ -278,6 +281,7 @@ def pc_parametric_rate_of_change(min_coef=-4, max_coef=4, max_t=6):
 
 
 @register
+@with_variants
 def pc_parametric_circle_line(max_center=6, max_radius=8, max_coord=6):
     r"""Parametric Circles and Line Segments
 
@@ -353,6 +357,7 @@ def _y_factor(root):
 
 
 @register
+@with_variants
 def pc_implicit_curve_points(max_x=5, max_y=6):
     r"""Points on an Implicitly Defined Curve
 
@@ -410,6 +415,7 @@ def pc_implicit_curve_points(max_x=5, max_y=6):
 
 
 @register
+@with_variants
 def pc_classify_conic(max_center=4):
     r"""Classify a Conic from General Form
 
@@ -501,6 +507,7 @@ def _exact_trig(fn, deg):
 
 
 @register
+@with_variants
 def pc_parametrize_ellipse(max_center=5, min_axis=2, max_axis=6):
     r"""Parametrize an Ellipse
 
@@ -558,6 +565,7 @@ def pc_parametrize_ellipse(max_center=5, min_axis=2, max_axis=6):
 
 
 @register
+@with_variants
 def pc_vector_valued_function(min_coef=-4, max_coef=4, max_t=5):
     r"""Vector-Valued Functions
 
@@ -616,6 +624,7 @@ def pc_vector_valued_function(min_coef=-4, max_coef=4, max_t=5):
 
 
 @register
+@with_variants
 def pc_inverse_matrix_entry(min_v=-5, max_v=5):
     r"""Entry of an Inverse Matrix
 
@@ -651,6 +660,7 @@ def pc_inverse_matrix_entry(min_v=-5, max_v=5):
 
 
 @register
+@with_variants
 def pc_matrix_transform_point(min_v=-4, max_v=4, max_coord=5):
     r"""Apply a Matrix Transformation to a Point
 
@@ -684,6 +694,7 @@ def pc_matrix_transform_point(min_v=-4, max_v=4, max_coord=5):
 
 
 @register
+@with_variants
 def pc_matrix_composition(min_v=-3, max_v=3, max_coord=5, max_area=10):
     r"""Composition and Inverse of Matrix Transformations
 
@@ -780,6 +791,7 @@ def _dec(percent):
 
 
 @register
+@with_variants
 def pc_markov_transition(min_stay=50, max_stay=90, max_count=9):
     r"""Two-State Markov Transition
 

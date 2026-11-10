@@ -13,6 +13,7 @@ from math import (acos, asin, atan, atan2, comb, cos, degrees, gcd, hypot, pi,
                   radians, sin, sqrt, tan)
 
 from ._registry import register
+from ._variants import with_variants
 from ._format import num as _num, frac_from as _frac_from
 from ._steps import Steps, paren, tex_frac
 
@@ -316,6 +317,7 @@ def _signed(value):
 
 
 @register
+@with_variants
 def pc_law_of_sines(min_angle=25, max_angle=80, min_side=3, max_side=25):
     r"""Law of Sines (ASA)
 
@@ -345,6 +347,7 @@ def pc_law_of_sines(min_angle=25, max_angle=80, min_side=3, max_side=25):
 
 
 @register
+@with_variants
 def pc_law_of_cosines_side(min_side=3, max_side=20, min_angle=20, max_angle=160):
     r"""Law of Cosines (SAS)
 
@@ -376,6 +379,7 @@ def pc_law_of_cosines_side(min_side=3, max_side=20, min_angle=20, max_angle=160)
 
 
 @register
+@with_variants
 def pc_oblique_triangle_area(min_side=3, max_side=20, min_angle=20, max_angle=160):
     r"""Oblique Triangle Area (SAS)
 
@@ -404,6 +408,7 @@ def pc_oblique_triangle_area(min_side=3, max_side=20, min_angle=20, max_angle=16
 
 
 @register
+@with_variants
 def pc_inverse_trig():
     r"""Inverse Trigonometric Values
 
@@ -447,6 +452,7 @@ def pc_inverse_trig():
 
 
 @register
+@with_variants
 def pc_double_angle():
     r"""Double-Angle Values
 
@@ -515,6 +521,7 @@ def _solve_trig(func_numeric, value, is_tan):
 
 
 @register
+@with_variants
 def pc_solve_trig_equation():
     r"""Solve a Trigonometric Equation
 
@@ -578,6 +585,7 @@ def _pt(value):
 
 
 @register
+@with_variants
 def pc_polar_to_rectangular(max_r=10):
     r"""Polar to Rectangular
 
@@ -615,6 +623,7 @@ def pc_polar_to_rectangular(max_r=10):
 
 
 @register
+@with_variants
 def pc_rectangular_to_polar(max_coord=10):
     r"""Rectangular to Polar
 
@@ -664,6 +673,7 @@ def pc_rectangular_to_polar(max_coord=10):
 
 
 @register
+@with_variants
 def pc_finite_geometric_sum(max_a=6, max_n=8):
     r"""Finite Geometric Series Sum
 
@@ -693,6 +703,7 @@ def pc_finite_geometric_sum(max_a=6, max_n=8):
 
 
 @register
+@with_variants
 def pc_sigma_arithmetic_sum(max_coeff=5, max_const=10, max_n=20):
     r"""Sigma-Notation Arithmetic Sum
 
@@ -737,6 +748,7 @@ def pc_sigma_arithmetic_sum(max_coeff=5, max_const=10, max_n=20):
 
 
 @register
+@with_variants
 def pc_sequence_limit():
     r"""Limit of a Rational Sequence
 
@@ -782,6 +794,7 @@ def pc_sequence_limit():
 
 
 @register
+@with_variants
 def pc_vector_add(max_component=9):
     r"""Vector Operations (2D)
 
@@ -824,6 +837,7 @@ def pc_vector_add(max_component=9):
 
 
 @register
+@with_variants
 def pc_parametric_to_rectangular(max_bd=6):
     r"""Eliminate the Parameter
 
@@ -924,6 +938,7 @@ def _unit_circle_steps(fn, num, den, solution):
 
 
 @register
+@with_variants
 def pc_unit_circle_point():
     r"""Coordinates on the Unit Circle
 
@@ -966,6 +981,7 @@ def pc_unit_circle_point():
 
 
 @register
+@with_variants
 def pc_unit_circle_sin():
     r"""Sine on the Unit Circle
 
@@ -982,6 +998,7 @@ def pc_unit_circle_sin():
 
 
 @register
+@with_variants
 def pc_unit_circle_cos():
     r"""Cosine on the Unit Circle
 
@@ -998,6 +1015,7 @@ def pc_unit_circle_cos():
 
 
 @register
+@with_variants
 def pc_unit_circle_tan():
     r"""Tangent on the Unit Circle
 
@@ -1182,6 +1200,7 @@ def _rational_with_optional_hole():
 
 
 @register
+@with_variants
 def pc_rational_vertical_asymptotes():
     r"""Vertical Asymptotes of a Rational Function
 
@@ -1225,6 +1244,7 @@ def _cancel_steps(s, num_roots, den_roots):
 
 
 @register
+@with_variants
 def pc_rational_zeros():
     r"""Zeros of a Rational Function
 
@@ -1255,6 +1275,7 @@ def pc_rational_zeros():
 
 
 @register
+@with_variants
 def pc_rational_holes():
     r"""Holes of a Rational Function
 
@@ -1309,6 +1330,7 @@ def _at(x_value, root):
 
 
 @register
+@with_variants
 def pc_rational_horizontal_asymptote():
     r"""Horizontal Asymptote of a Rational Function
 
@@ -1361,6 +1383,7 @@ def pc_rational_horizontal_asymptote():
 
 
 @register
+@with_variants
 def pc_rational_slant_asymptote():
     r"""Slant (Oblique) Asymptote of a Rational Function
 
@@ -1401,6 +1424,7 @@ def pc_rational_slant_asymptote():
 
 
 @register
+@with_variants
 def pc_rational_y_intercept():
     r"""Y-Intercept of a Rational Function
 
@@ -1442,6 +1466,7 @@ def pc_rational_y_intercept():
 
 
 @register
+@with_variants
 def pc_rational_inequality():
     r"""Rational Inequality
 
@@ -1496,6 +1521,7 @@ def pc_rational_inequality():
 # --------------------------- sinusoids ---------------------------
 
 @register
+@with_variants
 def pc_sinusoid_features():
     r"""Sinusoid Features
 
@@ -1574,6 +1600,7 @@ _SPECIAL_ANGLES = [30, 45, 60, 90, 120, 135, 150]
 
 
 @register
+@with_variants
 def pc_sum_difference_values():
     r"""Sum and Difference Formula Values
 
@@ -1672,6 +1699,7 @@ _HALF_FULL_ANGLES = [30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330]
 
 
 @register
+@with_variants
 def pc_half_angle_values():
     r"""Half-Angle Formula Values
 
@@ -1749,6 +1777,7 @@ def pc_half_angle_values():
 # --------------------- binomial theorem & complex ---------------------
 
 @register
+@with_variants
 def pc_binomial_term():
     r"""Binomial Theorem Term
 
@@ -1799,6 +1828,7 @@ def _complex_str(a, b):
 
 
 @register
+@with_variants
 def pc_de_moivre():
     r"""De Moivre's Theorem
 
@@ -1869,6 +1899,7 @@ _TRIG_IDENTITIES = [
 
 
 @register
+@with_variants
 def pc_simplify_trig_identity():
     r"""Simplify Using Trig Identities
 
@@ -1947,6 +1978,7 @@ _TRIG_IDENTITY_STEPS = {
 # --------------------- recursive sequences ---------------------
 
 @register
+@with_variants
 def pc_recursive_sequence_term():
     r"""Recursive Sequence Nth Term
 
@@ -1993,6 +2025,7 @@ def pc_recursive_sequence_term():
 # --------------------- partial fractions ---------------------
 
 @register
+@with_variants
 def pc_partial_fractions():
     r"""Partial Fraction Decomposition
 
@@ -2043,6 +2076,7 @@ def pc_partial_fractions():
 # --------------------- polar / rectangular equations ---------------------
 
 @register
+@with_variants
 def pc_polar_rectangular_equation():
     r"""Polar and Rectangular Equation Conversion
 
@@ -2105,6 +2139,7 @@ _INTEGER_NORM_VECTORS = [
 
 
 @register
+@with_variants
 def pc_orthogonal_projection(max_component=8):
     r"""Orthogonal Projection
 

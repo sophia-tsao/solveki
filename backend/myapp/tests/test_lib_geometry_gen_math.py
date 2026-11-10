@@ -17,6 +17,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effects.
 from myapp.generators import lib_geometry_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 500
 
@@ -55,7 +56,7 @@ class AreaOfCircleTests(TestCase):
 
     def test_area_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["area_of_circle"]
+        gen = classic(LOCAL_GENERATORS["area_of_circle"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -73,7 +74,7 @@ class AreaGivenCenterPointTests(TestCase):
 
     def test_area_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["area_of_circle_given_center_and_point"]
+        gen = classic(LOCAL_GENERATORS["area_of_circle_given_center_and_point"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -91,7 +92,7 @@ class CircumferenceTests(TestCase):
 
     def test_circumference_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["circumference"]
+        gen = classic(LOCAL_GENERATORS["circumference"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -108,7 +109,7 @@ class SectorAreaTests(TestCase):
 
     def test_sector_area_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["sector_area"]
+        gen = classic(LOCAL_GENERATORS["sector_area"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -128,7 +129,7 @@ class DistanceTwoPointsTests(TestCase):
 
     def test_distance_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["distance_two_points"]
+        gen = classic(LOCAL_GENERATORS["distance_two_points"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -151,7 +152,7 @@ class MidpointTests(TestCase):
 
     def test_midpoint_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["midpoint_of_two_points"]
+        gen = classic(LOCAL_GENERATORS["midpoint_of_two_points"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -170,7 +171,7 @@ class EuclidianNormTests(TestCase):
 
     def test_norm_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["euclidian_norm"]
+        gen = classic(LOCAL_GENERATORS["euclidian_norm"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -205,7 +206,7 @@ class EquationOfLineTests(TestCase):
 
     def test_line_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["equation_of_line_from_two_points"]
+        gen = classic(LOCAL_GENERATORS["equation_of_line_from_two_points"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -245,7 +246,7 @@ class PerimeterOfPolygonsTests(TestCase):
 
     def test_perimeter_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["perimeter_of_polygons"]
+        gen = classic(LOCAL_GENERATORS["perimeter_of_polygons"])
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)
@@ -263,7 +264,7 @@ class ValidTriangleTests(TestCase):
 
     def test_validity_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["valid_triangle"]
+        gen = classic(LOCAL_GENERATORS["valid_triangle"])
         seen = set()
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
@@ -277,7 +278,7 @@ class ValidTriangleTests(TestCase):
 
     def test_degenerate_triangle_is_no(self):
         with patch("random.randint", side_effect=[3, 4, 7]):
-            self.assertEqual(LOCAL_GENERATORS["valid_triangle"]()[1], "no")
+            self.assertEqual(classic(LOCAL_GENERATORS["valid_triangle"])()[1], "no")
 
 
 class ArcLengthTests(TestCase):
@@ -287,7 +288,7 @@ class ArcLengthTests(TestCase):
 
     def test_arc_length_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["arc_length"]
+        gen = classic(LOCAL_GENERATORS["arc_length"])
         for _ in range(NEW_SAMPLES):
             problem, solution = gen()[:2]
             m = self.PROBLEM.search(problem)

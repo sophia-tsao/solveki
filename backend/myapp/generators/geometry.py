@@ -3,10 +3,12 @@ import random
 from math import gcd
 
 from ._registry import register
+from ._variants import with_variants
 from ._steps import Steps, tex_frac
 
 
 @register
+@with_variants
 def angle_sum():
     r"""Angle Sum
 

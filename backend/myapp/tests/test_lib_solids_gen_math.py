@@ -16,6 +16,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effect.
 from myapp.generators import lib_solids_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 from myapp.generators._format import num
 
 SAMPLES = 2000
@@ -50,7 +51,7 @@ def _assert_typeable(test, problem, solution):
 class SurfaceAreaSphereTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["surface_area_sphere"]
+        gen = classic(LOCAL_GENERATORS["surface_area_sphere"])
         m = re.compile(r"radius \$= (\d+) m\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -63,7 +64,7 @@ class SurfaceAreaSphereTests(TestCase):
 class VolumeSphereTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["volume_sphere"]
+        gen = classic(LOCAL_GENERATORS["volume_sphere"])
         m = re.compile(r"radius \$= (\d+) m\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -76,7 +77,7 @@ class VolumeSphereTests(TestCase):
 class VolumeHemisphereTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["volume_hemisphere"]
+        gen = classic(LOCAL_GENERATORS["volume_hemisphere"])
         m = re.compile(r"radius \$= (\d+) m\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -89,7 +90,7 @@ class VolumeHemisphereTests(TestCase):
 class VolumePyramidTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["volume_pyramid"]
+        gen = classic(LOCAL_GENERATORS["volume_pyramid"])
         m = re.compile(r"base area \$= (\d+) m\^2\$ and height \$= (\d+) m\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -102,7 +103,7 @@ class VolumePyramidTests(TestCase):
 class CurvedSurfaceAreaCylinderTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["curved_surface_area_cylinder"]
+        gen = classic(LOCAL_GENERATORS["curved_surface_area_cylinder"])
         m = re.compile(r"radius \$= (\d+) m\$ and height \$= (\d+) m\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -115,7 +116,7 @@ class CurvedSurfaceAreaCylinderTests(TestCase):
 class CubeRootTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["cube_root"]
+        gen = classic(LOCAL_GENERATORS["cube_root"])
         m = re.compile(r"cube root of \$(\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -130,7 +131,7 @@ class CubeRootTests(TestCase):
 class AreaOfTriangleTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["area_of_triangle"]
+        gen = classic(LOCAL_GENERATORS["area_of_triangle"])
         m = re.compile(
             r"side lengths \$= (\d+) m\$, \$= (\d+) m\$, and \$= (\d+) m\$"
         )
@@ -148,7 +149,7 @@ class AreaOfTriangleTests(TestCase):
 class PythagoreanTheoremTests(TestCase):
     def test_solution(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["pythagorean_theorem"]
+        gen = classic(LOCAL_GENERATORS["pythagorean_theorem"])
         m = re.compile(r"lengths \$= (\d+)\$ and \$= (\d+)\$")
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
@@ -164,7 +165,7 @@ _ROUND_HINT = "Round your answer to the nearest thousandth."
 def _samples(name):
     """Yield ``(problem, solution)`` for SAMPLES seeded runs of a generator."""
     random.seed(0)
-    gen = LOCAL_GENERATORS[name]
+    gen = classic(LOCAL_GENERATORS[name])
     for _ in range(SAMPLES):
         yield gen()[:2]
 

@@ -16,6 +16,7 @@ from django.test import TestCase
 # Importing the module runs its @register side effects.
 from myapp.generators import lib_fractions_gen  # noqa: F401
 from myapp.generators import LOCAL_GENERATORS
+from myapp.generators._variants import classic
 
 SAMPLES = 500
 
@@ -43,7 +44,7 @@ class CommonFactorsTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["common_factors"]
+        gen = classic(LOCAL_GENERATORS["common_factors"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             _assert_typeable(self, solution)
@@ -59,7 +60,7 @@ class FactorsTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["factors"]
+        gen = classic(LOCAL_GENERATORS["factors"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             _assert_typeable(self, solution)
@@ -77,7 +78,7 @@ class FractionMultiplicationTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["fraction_multiplication"]
+        gen = classic(LOCAL_GENERATORS["fraction_multiplication"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             _assert_typeable(self, solution)
@@ -98,7 +99,7 @@ class DivideFractionsTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["divide_fractions"]
+        gen = classic(LOCAL_GENERATORS["divide_fractions"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             _assert_typeable(self, solution)
@@ -119,7 +120,7 @@ class GreatestCommonDivisorTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["greatest_common_divisor"]
+        gen = classic(LOCAL_GENERATORS["greatest_common_divisor"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             _assert_typeable(self, solution)
@@ -138,7 +139,7 @@ class DiceSumProbabilityTests(TestCase):
 
     def test_solution_matches(self):
         random.seed(0)
-        gen = LOCAL_GENERATORS["dice_sum_probability"]
+        gen = classic(LOCAL_GENERATORS["dice_sum_probability"])
         for _ in range(SAMPLES):
             problem, solution = gen()[:2]
             _assert_typeable(self, solution)
