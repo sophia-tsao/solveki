@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
 import { BandBar, BandLegend } from './BandBar.jsx';
+import ConfirmDialog from './ui/ConfirmDialog.jsx';
 import './Teacher.css';
 
 function ClassDetail({ classId, onBack, onOpenStudent }) {
   const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(null); // the student to remove
 
   const classQuery = useQuery({
     queryKey: ['class', classId],
@@ -32,7 +35,10 @@ function ClassDetail({ classId, onBack, onOpenStudent }) {
       if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['class', classId, 'students'] }),
+    onSuccess: () => {
+      setConfirming(null);
+      queryClient.invalidateQueries({ queryKey: ['class', classId, 'students'] });
+    },
   });
 
   const cls = classQuery.data;
@@ -71,7 +77,7 @@ function ClassDetail({ classId, onBack, onOpenStudent }) {
                   <td style={{ minWidth: '160px' }}><BandBar counts={s.proficiency || {}} /></td>
                   <td>{new Date(s.joined_at).toLocaleDateString()}</td>
                   <td>
-                    <button className="teacher-button danger" onClick={() => remove.mutate(s.id)}>Remove</button>
+                    <button className="teacher-button secondary small" onClick={() => setConfirming(s)}>Remove</button>
                   </td>
                 </tr>
               ))}
@@ -79,6 +85,15 @@ function ClassDetail({ classId, onBack, onOpenStudent }) {
           </table>
         </>
       )}
+      <ConfirmDialog
+        open={confirming != null}
+        title={`Remove ${confirming?.name} from this class?`}
+        body="They stop getting this class's assignments. They can rejoin with the join code."
+        confirmLabel="Remove student"
+        busy={remove.isPending}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => remove.mutate(confirming.id)}
+      />
     </div>
   );
 }

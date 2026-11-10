@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
+import { BANDS } from './BandBar.jsx';
 import './Teacher.css';
+
+// How often each band comes back for review, in BANDS order.
+const SCALE_NOTES = ['seen daily', 'every few days', 'a week or two', 'weeks+ apart'];
 
 // A visual "how it works" page for teachers. Brand-new teachers land here on
 // first login (see App.handleRoleChosen); it stays reachable from the nav.
@@ -19,7 +23,7 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
   const hasClasses = (classesQuery.data?.classes?.length || 0) > 0;
 
   return (
-    <div className="teacher-page teacher-guide">
+    <div className="teacher-page teacher-page-narrow teacher-guide">
       <h1>How Solveki works for teachers</h1>
       <p className="guide-lede">
         You create classes, hand out assignments, and Solveki generates fresh
@@ -96,10 +100,11 @@ function TeacherGuide({ onGoToClasses, onGoToAssignments }) {
           progress graphs show the mix shifting toward the right over time:
         </p>
         <div className="tg-scale" aria-label="Proficiency bands by review interval">
-          <span className="tg-scale-seg" style={{ background: '#ef4444' }}>New<small>seen daily</small></span>
-          <span className="tg-scale-seg" style={{ background: '#f59e0b' }}>Learning<small>every few days</small></span>
-          <span className="tg-scale-seg" style={{ background: '#3b82f6' }}>Familiar<small>a week or two</small></span>
-          <span className="tg-scale-seg" style={{ background: '#22c55e' }}>Proficient<small>weeks+ apart</small></span>
+          {BANDS.map((b, i) => (
+            <span key={b.key} className="tg-scale-seg" style={{ background: b.color, color: b.ink }}>
+              {b.label}<small>{SCALE_NOTES[i]}</small>
+            </span>
+          ))}
         </div>
       </section>
 

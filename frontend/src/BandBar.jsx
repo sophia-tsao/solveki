@@ -1,14 +1,19 @@
-import { LEVEL_COLOR } from './TopicProgress.jsx';
 import './Teacher.css';
 
-// The four proficiency bands, in progression order, sharing the dashboard's
-// color system (`young`/`mature` are its internal keys for Familiar/Proficient).
+// The four proficiency bands, in progression order, on the teacher pages' single
+// blue ramp (light → dark), so a level never borrows a status color (red means
+// overdue, amber needs help). Mirrors the --b-* tokens in tokens.css; hex here
+// because SVG fill attributes can't read CSS variables. `ink` is the text color
+// that reads on the band. Student pages keep TopicProgress's colorful palette.
 export const BANDS = [
-  { key: 'new', label: 'New', color: LEVEL_COLOR.new },
-  { key: 'learning', label: 'Learning', color: LEVEL_COLOR.learning },
-  { key: 'familiar', label: 'Familiar', color: LEVEL_COLOR.young },
-  { key: 'proficient', label: 'Proficient', color: LEVEL_COLOR.mature },
+  { key: 'new', label: 'New', color: '#86b6ef', ink: '#0d366b' },
+  { key: 'learning', label: 'Learning', color: '#3987e5', ink: '#ffffff' },
+  { key: 'familiar', label: 'Familiar', color: '#1c5cab', ink: '#ffffff' },
+  { key: 'proficient', label: 'Proficient', color: '#0d366b', ink: '#ffffff' },
 ];
+
+// No data yet (a topic the student hasn't started).
+export const BAND_NONE = { key: 'none', label: 'Not started', color: '#eef2f7', ink: '#94a3b8' };
 
 // Segments narrower than this share of the bar are too thin to fit their label.
 const MIN_LABEL_PCT = 6;
@@ -30,7 +35,7 @@ export function BandBar({ counts, showPercents = false }) {
         return (
           <span key={b.key} className="ad-bandbar-seg" style={{ flexGrow: n, background: b.color }}>
             {showPercents && pct(b) >= MIN_LABEL_PCT && (
-              <span className="ad-bandbar-pct" aria-hidden="true">{pct(b)}%</span>
+              <span className="ad-bandbar-pct" aria-hidden="true" style={{ color: b.ink }}>{pct(b)}%</span>
             )}
           </span>
         );

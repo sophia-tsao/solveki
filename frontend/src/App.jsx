@@ -208,7 +208,6 @@ function App() {
         {/* Shared */}
         {page === "settings" && <Settings onLoggedOut={handleLoggedOut} />}
       </main>
-      <footer className="app-footer" />
     </div>
   );
 }

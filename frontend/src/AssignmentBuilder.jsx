@@ -126,7 +126,7 @@ function AssignmentBuilder({ assignmentId, onDone }) {
   const classes = classesQuery.data?.classes || [];
 
   return (
-    <div className="teacher-page">
+    <div className="teacher-page teacher-page-narrow">
       <h1>{editing ? 'Edit assignment' : 'New assignment'}</h1>
 
       <div className="tg-note info">

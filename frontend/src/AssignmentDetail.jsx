@@ -109,7 +109,7 @@ function AssignmentDetail({ assignmentId, onOpenStudent, onBack }) {
               {students.map((s) => (
                 <tr key={s.student_id}>
                   <td className="clickable" onClick={() => onOpenStudent(s.student_id)}>{s.name}</td>
-                  <td><AssignmentProgress row={s} /></td>
+                  <td><AssignmentProgress row={s} flags /></td>
                   <td style={{ minWidth: '220px', width: '40%' }}>
                     <BandTimeline segments={s.timeline} range={timeline_range} />
                   </td>

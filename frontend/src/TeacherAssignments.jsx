@@ -1,9 +1,13 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './auth.js';
+import ConfirmDialog from './ui/ConfirmDialog.jsx';
+import OverflowMenu from './ui/OverflowMenu.jsx';
 import './Teacher.css';
 
 function TeacherAssignments({ onCreate, onOpen, onEdit }) {
   const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(null); // the assignment to delete
 
   const { data, isPending, error } = useQuery({
     queryKey: ['teacher', 'assignments'],
@@ -20,7 +24,10 @@ function TeacherAssignments({ onCreate, onOpen, onEdit }) {
       if (!res.ok) throw new Error(`HTTP error! Status: ${res.status}`);
       return res.json();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['teacher', 'assignments'] }),
+    onSuccess: () => {
+      setConfirming(null);
+      queryClient.invalidateQueries({ queryKey: ['teacher', 'assignments'] });
+    },
   });
 
   return (
@@ -43,16 +50,30 @@ function TeacherAssignments({ onCreate, onOpen, onEdit }) {
             {data.assignments.map((a) => (
               <tr key={a.id}>
                 <td className="clickable" onClick={() => onOpen(a.id)}>{a.title}</td>
-                <td style={{ display: 'flex', gap: '0.4rem' }}>
-                  <button className="teacher-button secondary" onClick={() => onOpen(a.id)}>Results</button>
-                  <button className="teacher-button secondary" onClick={() => onEdit(a.id)}>Edit</button>
-                  <button className="teacher-button danger" onClick={() => remove.mutate(a.id)}>Delete</button>
+                <td className="num">
+                  <OverflowMenu
+                    label={`Actions for ${a.title}`}
+                    items={[
+                      { label: 'View results', onSelect: () => onOpen(a.id) },
+                      { label: 'Edit', onSelect: () => onEdit(a.id) },
+                      { label: 'Delete', danger: true, onSelect: () => setConfirming(a) },
+                    ]}
+                  />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       ))}
+      <ConfirmDialog
+        open={confirming != null}
+        title={`Delete "${confirming?.title}"?`}
+        body="Students lose this assignment and its results. This can't be undone."
+        confirmLabel="Delete assignment"
+        busy={remove.isPending}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => remove.mutate(confirming.id)}
+      />
     </div>
   );
 }

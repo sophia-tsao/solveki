@@ -1,0 +1,43 @@
+/* Design tokens shared across the app. Pages reference these roles instead of
+   raw hex so the palette changes in one place. */
+:root {
+  --font-sans: Inter, "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: ui-monospace, Consolas, "SF Mono", monospace;
+
+  /* Text, lines and surfaces */
+  --ink: #0f172a;
+  --ink-2: #475569;
+  --ink-3: #64748b;
+  --ink-4: #94a3b8;
+  --line: #e2e8f0;
+  --line-soft: #f1f5f9;
+  --surface: #ffffff;
+  --bg: #f8fafc;
+  --bg-sunken: #eef2f7;
+
+  /* One brand color */
+  --brand: #2563eb;
+  --brand-ink: #1d4ed8;
+  --brand-tint: #eff6ff;
+
+  /* Status: reserved for state, always shown with an icon + label */
+  --ok: #0a7a0a;
+  --ok-bg: #e8f6e8;
+  --warn: #9a6700;
+  --warn-bg: #fff6dd;
+  --warn-fill: #e3a008;
+  --crit: #b42318;
+  --crit-bg: #fdecea;
+
+  /* Teacher proficiency ramp: one hue, light → dark (New → Proficient).
+     Validated as an ordinal ramp: monotone lightness, light end 2.06:1 on white.
+     Student pages keep their own colorful palette (TopicProgress LEVEL_COLOR). */
+  --b-none: #eef2f7;
+  --b-new: #86b6ef;
+  --b-learning: #3987e5;
+  --b-familiar: #1c5cab;
+  --b-proficient: #0d366b;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+}

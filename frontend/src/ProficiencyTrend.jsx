@@ -1,21 +1,10 @@
 import { useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, localDay } from './auth.js';
-import { LEVEL_COLOR } from './TopicProgress.jsx';
+import { BANDS } from './BandBar.jsx';
 import { niceTicks } from './chartTicks.js';
 import './Teacher.css';
 import './ProficiencyTrend.css';
-
-// The four proficiency bands, in progression order, each mapped to the shared
-// proficiency palette so the bars read as the same system as the dashboard
-// donut and status dots. `young`/`mature` are the palette's internal keys for
-// Familiar/Proficient. Stacked from the baseline up in this order.
-const BANDS = [
-  { key: 'new', label: 'New', color: LEVEL_COLOR.new },
-  { key: 'learning', label: 'Learning', color: LEVEL_COLOR.learning },
-  { key: 'familiar', label: 'Familiar', color: LEVEL_COLOR.young },
-  { key: 'proficient', label: 'Proficient', color: LEVEL_COLOR.mature },
-];
 
 // Time frames the viewer can switch between, in days of history.
 export const RANGES = [

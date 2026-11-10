@@ -2,15 +2,12 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, localDay } from './auth.js';
 import AssignmentProgress from './AssignmentProgress.jsx';
+import { AssignmentStatusChips } from './ui/StatusChip.jsx';
 import { TopicDecks } from './TopicProgress.jsx';
 import ProficiencyTrend from './ProficiencyTrend.jsx';
 import StruggledTopics from './StruggledTopics.jsx';
 import './Teacher.css';
 import './Dashboard.css';
-
-function fmtStatus(s) {
-  return s.replace('_', ' ');
-}
 
 function fmtDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -115,7 +112,7 @@ function Assignments({ assignments, onOpenAssignment }) {
               <td className="clickable">{a.title}</td>
               <td>{a.class_name}</td>
               <td>{a.due_at ? fmtDate(a.due_at) : '—'}</td>
-              <td>{fmtStatus(a.status)}</td>
+              <td><AssignmentStatusChips row={a} /></td>
               <td><AssignmentProgress row={a} /></td>
             </tr>
           ))}
@@ -146,11 +143,11 @@ function StudentDetail({ studentId, onOpenAssignment }) {
     enabled: studentId != null,
   });
 
-  if (isPending) return <div className="teacher-page teacher-page-wide"><p>Loading…</p></div>;
-  if (error) return <div className="teacher-page teacher-page-wide"><p className="teacher-error">Failed to load student.</p></div>;
+  if (isPending) return <div className="teacher-page"><p>Loading…</p></div>;
+  if (error) return <div className="teacher-page"><p className="teacher-error">Failed to load student.</p></div>;
 
   return (
-    <div className="teacher-page teacher-page-wide">
+    <div className="teacher-page">
       <h1>{data.student.name}</h1>
       <p className="teacher-card-stat">{data.student.email}</p>
       <Attention assignments={data.assignments} activity={data.activity} />

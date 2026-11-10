@@ -1,6 +1,5 @@
 /* Full-height app shell: header at the top, the page content growing to fill
-   whatever height is left, and the footer pinned to the bottom of the viewport
-   so no page ever leaves a band of blank space above it. */
+   whatever height is left. */
 /* Always reserve the vertical scrollbar's gutter so growing a page's content
    (e.g. expanding the assignment topic picker) never adds a scrollbar that
    re-centers and narrows the fixed-width, margin-auto page. */
@@ -10,6 +9,8 @@ html {
 
 body {
     margin: 0;
+    font-family: var(--font-sans);
+    color: var(--ink);
 }
 
 .app-shell {
@@ -18,21 +19,14 @@ body {
     min-height: 100vh;
 }
 
-/* The page area grows to fill the space between header and footer. It's a flex
+/* The page area grows to fill the space below the header. It's a flex
    column so a page can opt into filling that height (the Dashboard does, via
    flex: 1) instead of sitting at its natural height. */
 .app-main {
     flex: 1 1 auto;
     display: flex;
     flex-direction: column;
-    padding-top: 32px;
-}
-
-/* Blank for now — just the project blue bar anchored to the bottom. */
-.app-footer {
-    flex-shrink: 0;
-    height: 68px;
-    background: #2563eb;
+    padding-top: 8px;
 }
 
 /* Loading state shown while the session check is in flight. Mirrors the inline

@@ -123,9 +123,9 @@ describe('AssignmentDetail', () => {
     expect(screen.getByText(/no late work/)).toBeInTheDocument();
     const row = (name) => screen.getByRole('cell', { name }).closest('tr');
     expect(within(row('Ada')).getByText('40%')).toBeInTheDocument();
-    expect(within(row('Ben')).getByText(/needs help/)).toBeInTheDocument();
-    expect(within(row('Cy')).getByText(/late/)).toBeInTheDocument();
-    expect(within(row('Cy')).queryByText(/needs help/)).not.toBeInTheDocument();
+    expect(within(row('Ben')).getByText('Needs help')).toBeInTheDocument();
+    expect(within(row('Cy')).getByText('Late')).toBeInTheDocument();
+    expect(within(row('Cy')).queryByText('Needs help')).not.toBeInTheDocument();
   });
 
   it('says so when there are no misses yet', async () => {
