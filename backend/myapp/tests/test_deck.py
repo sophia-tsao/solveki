@@ -928,6 +928,23 @@ class CheckAnswerTests(TestCase):
         )
 
     @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$", _STEPS))
+    def test_reload_after_the_reveal_reopens_the_revealed_card(self, mock_gen):
+        self.assertNotIn("revealed", self.client.get("/deck/?today=2026-07-21").json())
+        self._check("3")
+        self.assertNotIn("revealed", self.client.get("/deck/?today=2026-07-21").json())
+        self._check("4")
+        data = self.client.get("/deck/?today=2026-07-21").json()
+        self.assertEqual(data["current_number"], 1)
+        self.assertEqual(data["revealed"], {"solution": "2", "steps": _STEPS})
+        # Moving on clears it for the next card.
+        data = self.client.post(
+            "/deck/advance/?today=2026-07-21",
+            data=json.dumps({"outcome": "incorrect", "from_number": 1}),
+            content_type="application/json",
+        ).json()
+        self.assertNotIn("revealed", data)
+
+    @mock.patch("myapp.views.mathgenerator.gcd", return_value=("$1+1=$", "$2$", _STEPS))
     def test_steps_revealed_with_the_solution(self, mock_gen):
         data = self.client.get("/deck/?today=2026-07-21").json()
         self.assertNotIn("steps", data)

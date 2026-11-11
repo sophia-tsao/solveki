@@ -180,6 +180,36 @@ describe('CourseList', () => {
     );
   });
 
+  it('keeps teacher-assigned topics selected when the whole course is deselected', async () => {
+    apiFetch.mockImplementation((url) => {
+      if (url === '/courses/')
+        return Promise.resolve(jsonResponse({
+          courses: [{ id: 1, course_name: 'Algebra', grade_level: 8, topic_selection_status: 'all' }],
+        }));
+      if (url === '/courses/1/topics')
+        return Promise.resolve(jsonResponse({
+          topics: [
+            { id: 10, topic_name: 'Linear equations', selection_status: 'selected', assigned: true },
+            { id: 11, topic_name: 'Quadratics', selection_status: 'selected' },
+          ],
+        }));
+      return Promise.resolve(jsonResponse({ ok: true }));
+    });
+    const user = userEvent.setup();
+    renderWithClient(<CourseList />);
+    await screen.findByText('Algebra');
+    await user.click(screen.getByText('Algebra'));
+    await screen.findByText('Linear equations');
+
+    const [courseCheckbox] = screen.getAllByRole('checkbox');
+    await user.click(courseCheckbox);
+
+    const checkboxFor = (name) => screen.getByText(name).closest('li').querySelector('input');
+    expect(checkboxFor('Linear equations')).toBeChecked();
+    expect(checkboxFor('Quadratics')).not.toBeChecked();
+    expect(courseCheckbox.indeterminate).toBe(true);
+  });
+
   describe('diagnostic entry button', () => {
     const mockList = () =>
       apiFetch.mockImplementation((url) => {

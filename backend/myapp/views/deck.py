@@ -29,6 +29,7 @@ _OUTCOMES = frozenset(srs.CREDIT)
 #   required - assignment work and due assignment-topic or lapsed reviews,
 #              planned at the start of the day (`_required_plan`)
 #   pool     - the student's own practice, filling up to `questions_per_day`
+#              (not in an open assignment's deck, see `_takes_pool`)
 #   extra    - added during the day: a topic still being learned, or an
 #              assignment that needs more on its last day (`_add_practice`)
 # Cards stored before kinds existed read as pool.
@@ -50,13 +51,14 @@ class DeckScope:
     - the default deck (`assignment_id` None): the student's own practice,
       shown while no assignment is open;
     - an open assignment's deck: that assignment's share of today, plus the
-      usual reviews and pool practice up to `questions_per_day`;
+      student's due reviews and extra practice, all within the assignment's
+      card budget (`_assignment_deck_plan`);
     - a closed assignment's deck (`topic_ids` set): pool practice on just its
       topics, to practice it again after it's done.
 
-    Each deck fills up to the student's setting on its own. Answers count the
-    same whichever deck they're in: toward the topic's day grade and every
-    open assignment on the topic.
+    The default and closed decks fill up to the student's setting on their
+    own. Answers count the same whichever deck they're in: toward the topic's
+    day grade and every open assignment on the topic.
     """
 
     def __init__(self, assignment_id=None, topic_ids=None):
@@ -109,12 +111,19 @@ def _request_scope(request):
 
 
 def _assignment_choices(open_rows):
-    """The open assignments a student picks between, soonest due first (no due date last)."""
+    """The open assignments a student picks between, soonest due first (no due date last).
+
+    That's every upcoming one, plus any past due that still allows late work
+    (flagged `overdue`), as `_open_assignments` keeps them.
+    """
+    now = timezone.now()
     choices = [
         {
             "assignment_id": row.assignment_id,
             "title": row.assignment.title,
+            "class_name": row.classroom.name,
             "due_at": due_at.isoformat() if due_at else None,
+            "overdue": bool(due_at and due_at < now),
             "completion_pct": row.completion_pct,
             "cards_answered": row.cards_answered,
         }
@@ -187,13 +196,29 @@ def _kind(problem):
     return problem.get("kind", _POOL)
 
 
+def _is_open_assignment(scope):
+    """True for an open assignment's deck, which is planned within the assignment's card budget."""
+    return scope.assignment_id is not None and scope.topic_ids is None
+
+
+def _takes_pool(deck):
+    """Whether `deck` fills with pool practice up to `questions_per_day`.
+
+    The default deck and a finished assignment's "practice again" deck do. A
+    deck built while its assignment was open (it has required cards) holds
+    just the assignment's budgeted work, also once the assignment is done.
+    """
+    return deck.assignment_id is None or not any(_kind(p) == _REQUIRED for p in deck.problems)
+
+
 def _deck_size_target(deck, per_day):
     """How many cards the deck should show at `per_day` (before capping to what's stored).
 
-    Everything up to the last required or extra card, and at least `per_day`
-    cards plus one per extra card (extras come on top of the student's
-    setting). Pool cards are always stored after the required ones they were
-    built with, so only unanswered pool cards at the end fall outside this.
+    Everything up to the last required or extra card, and, for a deck that
+    takes pool practice (`_takes_pool`), at least `per_day` cards plus one per
+    extra card (extras come on top of the student's setting). Pool cards are
+    always stored after the required ones they were built with, so only
+    unanswered pool cards at the end fall outside this.
     """
     extra = 0
     last = 0
@@ -203,6 +228,8 @@ def _deck_size_target(deck, per_day):
             last = i + 1
         if kind == _EXTRA:
             extra += 1
+    if not _takes_pool(deck):
+        return last
     return max(per_day + extra, last)
 
 
@@ -233,7 +260,7 @@ def _open_assignments(user, now=None):
     rows = list(
         StudentAssignment.objects.filter(student=user)
         .exclude(status=StudentAssignment.COMPLETED)
-        .select_related("assignment")
+        .select_related("assignment", "classroom")
     )
     if not rows:
         return []
@@ -301,28 +328,107 @@ def _count_assignment_card(user, topic_id, today):
         row.cards_needed = practice.cards_needed(size, row.cards_answered, outcomes)
         done, max_reached = practice.is_complete(size, row.cards_answered, outcomes)
         if done:
-            row.status = StudentAssignment.COMPLETED
-            row.completed_at = now
-            row.completion_pct = 100
-            row.max_reached = max_reached
-            row.late = bool(due_at and due_at < now)
-        else:
-            row.completion_pct = practice.completion_pct(
-                row.cards_answered, row.cards_needed, row.completion_pct
-            )
-        row.save(update_fields=[
-            "cards_answered", "cards_needed", "completion_pct", "status",
-            "completed_at", "max_reached", "late",
-        ])
-        if done:
-            for tid, topic_outcomes in outcomes.items():
-                if topic_outcomes and srs.accuracy(topic_outcomes) >= practice.GRADUATION_ACCURACY:
-                    _graduate_topic(user, tid, today)
-            logger.info(
-                "User %s completed assignment %s after %d cards%s",
-                user.id, row.assignment_id, row.cards_answered,
-                " (max reached)" if max_reached else "",
-            )
+            _complete_assignment(user, row, due_at, outcomes, max_reached, today, now)
+            continue
+        row.completion_pct = practice.completion_pct(
+            row.cards_answered, row.cards_needed, row.completion_pct
+        )
+        row.save(update_fields=["cards_answered", "cards_needed", "completion_pct"])
+
+
+def _complete_assignment(user, row, due_at, outcomes, max_reached, today, now):
+    """Mark `row` completed and lift each topic answered well enough to "familiar".
+
+    `outcomes` maps each of its topics to the answers since it started.
+    """
+    row.status = StudentAssignment.COMPLETED
+    row.completed_at = now
+    row.completion_pct = 100
+    row.max_reached = max_reached
+    row.late = bool(due_at and due_at < now)
+    row.save(update_fields=[
+        "cards_answered", "cards_needed", "completion_pct", "status",
+        "completed_at", "max_reached", "late",
+    ])
+    for tid, topic_outcomes in outcomes.items():
+        if topic_outcomes and srs.accuracy(topic_outcomes) >= practice.GRADUATION_ACCURACY:
+            _graduate_topic(user, tid, today)
+    logger.info(
+        "User %s completed assignment %s after %d cards%s",
+        user.id, row.assignment_id, row.cards_answered,
+        " (max reached)" if max_reached else "",
+    )
+
+
+def _deck_budget(user, deck):
+    """`(student_assignment, topic_ids)` for a deck held to its assignment's card budget, else None.
+
+    That's a deck built while its assignment was open (`_takes_pool` false),
+    whether or not the assignment has finished since.
+    """
+    if _takes_pool(deck):
+        return None
+    row = (
+        StudentAssignment.objects.filter(student=user, assignment_id=deck.assignment_id)
+        .select_related("assignment").first()
+    )
+    if row is None:
+        return None
+    topic_ids = set(
+        AssignmentTopic.objects.filter(assignment_id=deck.assignment_id).values_list("topic_id", flat=True)
+    )
+    return row, topic_ids
+
+
+def _count_deck_card(user, deck, card):
+    """Count a card stepped past in a budgeted assignment deck toward the assignment's budget."""
+    budget = _deck_budget(user, deck)
+    if budget is None:
+        return
+    row, topic_ids = budget
+    row.deck_answered += 1
+    if card.get("topic_id") not in topic_ids:
+        row.review_answered += 1
+    row.save(update_fields=["deck_answered", "review_answered"])
+
+
+def _settle_budget(user, deck, today):
+    """After a card in a budgeted assignment deck: close a spent assignment, trim a finished one.
+
+    An open assignment whose decks have no room left for another session
+    (`practice.budget_spent`), with none of its cards left in this deck (so
+    no extra card was just added either), is completed, at its maximum unless
+    every topic is solid; otherwise it would wait for a session that can't
+    fit. Once it's
+    completed, the deck's unanswered cards on its topics are dropped, unless
+    another open assignment shares the topic; reviews planned within the
+    budget stay.
+    """
+    budget = _deck_budget(user, deck)
+    if budget is None:
+        return
+    row, topic_ids = budget
+    tail = deck.problems[deck.current_index:]
+    now = timezone.now()
+    open_rows = _open_assignments(user, now)
+    if (
+        row.status != StudentAssignment.COMPLETED
+        and practice.budget_spent(row.assignment.deck_size, row.deck_answered)
+        and not any(p.get("topic_id") in topic_ids for p in tail)
+    ):
+        for open_row, ids, due_at in open_rows:
+            if open_row.id == row.id:
+                outcomes = _outcomes_since(user, ids, row.started_at)
+                all_solid = all(practice.is_solid(o) for o in outcomes.values())
+                _complete_assignment(user, row, due_at, outcomes, not all_solid, today, now)
+                break
+    if row.status != StudentAssignment.COMPLETED:
+        return
+    shared = {tid for open_row, ids, _ in open_rows if open_row.id != row.id for tid in ids}
+    kept = [p for p in tail if p.get("topic_id") not in topic_ids or p.get("topic_id") in shared]
+    if len(kept) != len(tail):
+        deck.problems = deck.problems[:deck.current_index] + kept
+        deck.save(update_fields=["problems"])
 
 
 def _graduate_topic(user, topic_id, today):
@@ -604,7 +710,8 @@ def _required_plan(user, today, scope=_DEFAULT_SCOPE):
     Gathers the inputs for `practice.plan_required`:
 
     - each open assignment's share of today (`practice.assignment_cards`), its
-      topics ordered shakiest first (not solid, then lowest ease);
+      topics ordered not yet answered first, then shakiest (not solid, then
+      lowest ease);
     - due reviews of the student's assignment topics, from any assignment;
     - selected topics that lapsed yesterday.
 
@@ -615,7 +722,8 @@ def _required_plan(user, today, scope=_DEFAULT_SCOPE):
 
     Only the assignments `scope`'s deck carries count (`_scope_assignments`).
     A closed assignment's deck has no required work: it's all pool practice on
-    the assignment's topics.
+    the assignment's topics. An open assignment's deck is planned within the
+    assignment's card budget instead (`_assignment_deck_plan`).
     """
     if scope.topic_ids is not None:
         return {}
@@ -627,23 +735,16 @@ def _required_plan(user, today, scope=_DEFAULT_SCOPE):
     eases = dict(
         TopicReview.objects.filter(user=user, topic_id__in=all_topic_ids).values_list("topic_id", "ease")
     )
+    if _is_open_assignment(scope):
+        if not open_rows:
+            return {}
+        row, topic_ids, due_at = open_rows[0]
+        return _assignment_deck_plan(user, today, row, topic_ids, due_at, eases, answered_today)
     assignment_plans = Counter()
     for row, topic_ids, due_at in open_rows:
-        if not topic_ids:
-            continue
-        outcomes = _outcomes_since(user, topic_ids, row.started_at)
-        needed = row.cards_needed or row.assignment.deck_size
-        today_rows = AnswerRecord.objects.filter(user=user, date=today, topic_id__in=topic_ids)
-        if row.started_at is not None:
-            today_rows = today_rows.filter(created_at__gte=row.started_at)
-        remaining = max(0, needed - row.cards_answered) + today_rows.count()
-        ordered = sorted(
-            topic_ids,
-            key=lambda t: (practice.is_solid(outcomes[t]), eases.get(t, srs.INITIAL_EASE), t),
-        )
         # A card counts toward every open assignment on its topic, so two
         # assignments sharing a topic need the larger share, not both.
-        for tid, cards in practice.assignment_cards(remaining, _days_left(row, due_at, today), ordered).items():
+        for tid, cards in _assignment_share(user, today, row, topic_ids, due_at, eases).items():
             assignment_plans[tid] = max(assignment_plans[tid], cards)
 
     selected = set(
@@ -679,6 +780,90 @@ def _required_plan(user, today, scope=_DEFAULT_SCOPE):
     }
 
 
+def _assignment_share(user, today, row, topic_ids, due_at, eases):
+    """An open assignment's share of today's cards, `{topic_id: cards}` (`practice.assignment_cards`).
+
+    Cards already answered today on its topics count as part of today's share,
+    so the share stays put through the day.
+    """
+    if not topic_ids:
+        return {}
+    outcomes = _outcomes_since(user, topic_ids, row.started_at)
+    needed = row.cards_needed or row.assignment.deck_size
+    today_rows = AnswerRecord.objects.filter(user=user, date=today, topic_id__in=topic_ids)
+    if row.started_at is not None:
+        today_rows = today_rows.filter(created_at__gte=row.started_at)
+    remaining = max(0, needed - row.cards_answered) + today_rows.count()
+    # Topics not answered yet come first, so each gets a turn before the
+    # shakiest repeats; a failed topic still comes back as a due review.
+    ordered = sorted(
+        topic_ids,
+        key=lambda t: (
+            bool(outcomes[t]), practice.is_solid(outcomes[t]), eases.get(t, srs.INITIAL_EASE), t,
+        ),
+    )
+    return practice.assignment_cards(remaining, _days_left(row, due_at, today), ordered)
+
+
+def _assignment_deck_plan(user, today, row, topic_ids, due_at, eases, answered_today):
+    """`_required_plan` for an open assignment's deck: its share, then reviews, within its budget.
+
+    The assignment's decks hold at most `practice.max_cards` cards over its
+    life (`deck_answered` counts those already stepped past). Its own topics
+    come first, a due one getting at least a review's worth. The student's
+    other due topics (selected ones, skipping any already in another open
+    assignment's deck today) get a `MIN_SESSION`-card review each, a lapse
+    `LAPSE_REVIEW_CARDS`, most at risk of being forgotten first, while
+    `practice.review_room` allows (`practice.plan_assignment_deck`). The rest
+    stay due until another day.
+    """
+    share = {
+        tid: cards - answered_today[tid]
+        for tid, cards in _assignment_share(user, today, row, topic_ids, due_at, eases).items()
+    }
+    own = set(topic_ids)
+    selected = set(
+        Topic.objects.filter(selections__user=user, generator_name__isnull=False)
+        .values_list("id", flat=True)
+    )
+    failed_yesterday = set(
+        DailyTopicGrade.objects.filter(
+            user=user, date=today - datetime.timedelta(days=1),
+            applied_quality__lt=srs.PASSING_GRADE,
+        ).values_list("topic_id", flat=True)
+    )
+    elsewhere = _planned_elsewhere(user, today, row.assignment_id)
+    due = {}
+    for tid, ease, interval, reps, due_date in TopicReview.objects.filter(
+        user=user, topic_id__in=selected | own, due_date__lte=today
+    ).values_list("topic_id", "ease", "interval", "repetitions", "due_date"):
+        if tid not in own and tid in elsewhere:
+            continue
+        lapsed = tid in failed_yesterday and tid in selected and reps == 0
+        cards = (practice.LAPSE_REVIEW_CARDS if lapsed else practice.MIN_SESSION) - answered_today[tid]
+        due[tid] = (cards, practice.review_urgency(ease, interval, (today - due_date).days, lapsed))
+    size = row.assignment.deck_size
+    still = max(0, (row.cards_needed or size) - row.cards_answered)
+    plan, reviews = practice.plan_assignment_deck(
+        share, due, own,
+        cap=practice.max_cards(size) - row.deck_answered,
+        room=practice.review_room(size, row.deck_answered, row.review_answered, still),
+        still_needed=still,
+    )
+    return {**plan, **reviews}
+
+
+def _planned_elsewhere(user, today, assignment_id):
+    """Topics of the required and extra cards in today's decks for the user's other open assignments."""
+    open_ids = {row.assignment_id for row, _, _ in _open_assignments(user)} - {assignment_id}
+    topics = set()
+    for problems in DailyDeck.objects.filter(
+        user=user, date=today, assignment_id__in=open_ids
+    ).values_list("problems", flat=True):
+        topics.update(p["topic_id"] for p in problems if _kind(p) != _POOL and "topic_id" in p)
+    return topics
+
+
 def _required_problems(plan):
     """Generate the cards for a `_required_plan`, one topic per pass so repeats spread out.
 
@@ -708,9 +893,12 @@ def _build_cards(user, today, kept, scope=_DEFAULT_SCOPE):
     """The cards that follow `kept` (already answered) in today's deck.
 
     The required work comes first, then pool practice filling the deck up to
-    `questions_per_day`, preferring topics not already in it.
+    `questions_per_day`, preferring topics not already in it. An open
+    assignment's deck has no pool: it's just the assignment's budgeted work.
     """
     required = _required_problems(_required_plan(user, today, scope))
+    if _is_open_assignment(scope):
+        return required
     # Extra cards come on top of the setting (see `_deck_size_target`).
     kept_extra = sum(1 for p in kept if _kind(p) == _EXTRA)
     pool_count = Settings.load(user).questions_per_day + kept_extra - len(kept) - len(required)
@@ -809,13 +997,22 @@ def _add_practice(user, deck, topic_id, today, scope=_DEFAULT_SCOPE):
     - it's in the deck's open assignment (`_scope_assignments`), due today, and
       that still needs more cards than the student has answered.
 
-    Only when no unanswered card on the topic is left, and the deck is under
-    `practice.DAILY_CAP`. The card goes one place after the next card, so the
-    student doesn't see the topic twice in a row unless nothing else is left.
+    In a budgeted assignment deck (`_deck_budget`), a review of another topic
+    starts at `MIN_SESSION` cards, so it confirms up to a full review
+    (`practice.review_cards`) instead.
+
+    Only when no unanswered card on the topic is left, and the deck has room:
+    under `practice.DAILY_CAP`, or, in a budgeted assignment deck, within the
+    assignment's budget (`_budget_fits`). The card goes one place after the
+    next card, so the student doesn't see the topic twice in a row unless
+    nothing else is left.
     """
     if any(p.get("topic_id") == topic_id for p in deck.problems[deck.current_index:]):
         return
-    if _visible_total(user, deck) >= practice.DAILY_CAP:
+    budget = _deck_budget(user, deck)
+    if budget is None and _visible_total(user, deck) >= practice.DAILY_CAP:
+        return
+    if budget is not None and not _budget_fits(deck, *budget, topic_id):
         return
     outcomes = list(
         AnswerRecord.objects.filter(user=user, topic_id=topic_id, date=today)
@@ -827,10 +1024,13 @@ def _add_practice(user, deck, topic_id, today, scope=_DEFAULT_SCOPE):
         and not practice.is_enough_today(outcomes)
         and len(outcomes) < practice.MAX_TOPIC_CARDS_PER_DAY
     )
+    review = budget is not None and topic_id not in budget[1]
     confirming = (
         grade is not None and grade.snapshot_repetitions > 0
         and grade.applied_quality <= srs.HARD_QUALITY
-        and len(outcomes) < practice.MIN_SESSION
+        and len(outcomes) < (
+            practice.review_cards(grade.snapshot_ease) if review else practice.MIN_SESSION
+        )
     )
     finishing = any(
         topic_id in topic_ids and _days_left(row, due_at, today) == 1
@@ -846,6 +1046,20 @@ def _add_practice(user, deck, topic_id, today, scope=_DEFAULT_SCOPE):
     problem["kind"] = _EXTRA
     deck.problems.insert(min(len(deck.problems), deck.current_index + 1), problem)
     deck.save(update_fields=["problems"])
+
+
+def _budget_fits(deck, row, topic_ids, topic_id):
+    """True if a budgeted assignment deck can take one more card on `topic_id` (`practice.extra_fits`)."""
+    tail = deck.problems[deck.current_index:]
+    tail_reviews = sum(1 for p in tail if p.get("topic_id") not in topic_ids)
+    still = 0
+    if row.status != StudentAssignment.COMPLETED:
+        needed = row.cards_needed or row.assignment.deck_size
+        still = max(0, needed - row.cards_answered - (len(tail) - tail_reviews))
+    return practice.extra_fits(
+        row.assignment.deck_size, row.deck_answered + len(tail),
+        row.review_answered + tail_reviews, still, review=topic_id not in topic_ids,
+    )
 
 
 def _get_or_create_today_deck(user, today, scope=_DEFAULT_SCOPE):
@@ -890,8 +1104,11 @@ def _top_up_pool(user, deck, per_day, today, scope=_DEFAULT_SCOPE):
     """Append pool cards until the deck can show what `per_day` calls for.
 
     Missing cards are the `_deck_size_target` beyond what's stored, i.e. the
-    pool's shortfall; required and extra cards never need topping up here.
+    pool's shortfall; required and extra cards never need topping up here. A
+    deck without pool practice (`_takes_pool`) is left alone.
     """
+    if _is_open_assignment(scope) or not _takes_pool(deck):
+        return
     missing = _deck_size_target(deck, per_day) - len(deck.problems)
     if missing <= 0:
         return
@@ -1064,7 +1281,7 @@ def _deck_state(user, deck, scope):
     # The solution is deliberately left out: anything here is readable in the
     # browser's dev tools. Answers are graded by `check_answer` instead, which
     # reveals the solution only once the card's attempts are used up.
-    return {
+    state = {
         "problem": current["problem"],
         "topic_name": topic["topic_name"] if topic else None,
         "learn_more_url": (topic["learn_more_url"] or None) if topic else None,
@@ -1074,6 +1291,15 @@ def _deck_state(user, deck, scope):
         # handing out fresh attempts.
         "attempt": min(deck.attempts + 1, _MAX_ATTEMPTS),
     }
+    # A card whose attempts are used up was already revealed by `check_answer`,
+    # so it carries the same reveal: a reload (or leaving the page and coming
+    # back) reopens it on its incorrect back face rather than the problem.
+    if deck.attempts >= _MAX_ATTEMPTS:
+        state["revealed"] = {
+            "solution": _normalize_solution(current["solution"]),
+            "steps": current.get("steps", []),
+        }
+    return state
 
 
 def _topic_meta(topic_id):
@@ -1183,9 +1409,11 @@ def advance_deck(request):
         deck.current_index += 1
         deck.attempts = 0
         deck.save(update_fields=["current_index", "attempts"])
+        _count_deck_card(request.user, deck, card)
         if graded:
             _count_assignment_card(request.user, topic_id, today)
             _add_practice(request.user, deck, topic_id, today, scope)
+        _settle_budget(request.user, deck, today)
         _record_practice(request.user, today)
         # Grading may have moved a topic between bands; recapture today's mix.
         _snapshot_proficiency(request.user, today)

@@ -12,6 +12,25 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('deck');
 
+// The student's last wrong answer on a revealed card, kept in sessionStorage so
+// a report filed after leaving the page and coming back still carries it. Keyed
+// by the deck and card so it never rides along with a report on another card.
+const LAST_ANSWER_KEY = 'solveki.lastAnswer';
+const answerCardKey = (day, scopeId, number) => `${day}:${scopeId ?? ''}:${number}`;
+function saveLastAnswer(card, answer) {
+  try {
+    sessionStorage.setItem(LAST_ANSWER_KEY, JSON.stringify({ card, answer }));
+  } catch { /* storage unavailable: the report just goes without it */ }
+}
+function loadLastAnswer(card) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(LAST_ANSWER_KEY));
+    return saved?.card === card ? saved.answer : '';
+  } catch {
+    return '';
+  }
+}
+
 function InlineMath({ math }) {
   const html = katex.renderToString(math, { throwOnError: false });
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
@@ -236,7 +255,17 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
     setOverriding(false);
     setReporting(false);
     setReported(false);
-    setFlipped(false);
+    if (result.revealed) {
+      // Its attempts were used up before the student left the page: reopen it
+      // on the incorrect back face, solution and steps showing, as they left it.
+      setResult('incorrect');
+      setResultAnswer(result.revealed.solution?.replace(/\$/g, ''));
+      setResultSteps(result.revealed.steps ?? []);
+      lastAnswerRef.current = loadLastAnswer(cardKeyRef.current(result.current_number));
+      setFlipped(true);
+    } else {
+      setFlipped(false);
+    }
     setStatus('active');
     shownAtRef.current = Date.now();
   }, [celebrate]);
@@ -257,15 +286,27 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
   // stays on it even if it's the one open assignment that just got finished.
   const scopeId = assignmentId ?? deckAssignment?.id ?? null;
   const scopeParam = scopeId != null ? `&assignment=${scopeId}` : '';
+  // The current card's key for the saved last answer (see saveLastAnswer). A
+  // ref so applyDeck, defined above, reads the current deck rather than a stale one.
+  const cardKeyRef = useRef(null);
+  cardKeyRef.current = (number) => answerCardKey(day, scopeId, number);
 
   const deckQuery = useQuery({
     queryKey: ['deck', day, assignmentId],
     queryFn: async () => {
       const scope = assignmentId != null ? `&assignment=${assignmentId}` : '';
       const response = await apiFetch(`/deck/?today=${day}${scope}`);
-      if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+      if (!response.ok) {
+        const err = new Error(`HTTP error! Status: ${response.status}`);
+        err.status = response.status;
+        throw err;
+      }
       return response.json();
     },
+    // Don't keep the deck cached once the page is left: advances and answer
+    // checks don't update it, so coming back would briefly show a card from
+    // the first load before the refetch lands on the one the student left.
+    gcTime: 0,
   });
 
   // Feed each loaded deck into the card state. A passive load — mount, a day
@@ -276,11 +317,17 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
   }, [deckQuery.data, applyDeck]);
 
   useEffect(() => {
-    if (deckQuery.error) {
-      log.error('Failed to load deck:', deckQuery.error.message);
-      setError(deckQuery.error.message);
+    if (!deckQuery.error) return;
+    // An assignment that's gone (or never reached the student), e.g. a deck the
+    // Practice link remembered: fall back to the practice page's own deck.
+    if (deckQuery.error.status === 404 && assignmentId != null && onOpenAssignment) {
+      log.warn(`Assignment ${assignmentId} not found; opening the practice page`);
+      onOpenAssignment(null);
+      return;
     }
-  }, [deckQuery.error]);
+    log.error('Failed to load deck:', deckQuery.error.message);
+    setError(deckQuery.error.message);
+  }, [deckQuery.error, assignmentId, onOpenAssignment]);
 
   // `outcome` reports how the card being left was answered ('correct_first' |
   // 'correct_second' | 'incorrect') so the backend can update that topic's
@@ -432,6 +479,7 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
       // miss, so the back face keeps showing them while the card rotates to the
       // next problem.
       stopCardTimer();
+      saveLastAnswer(cardKeyRef.current(currentNumber), lastAnswerRef.current);
       setResult('incorrect');
       setResultAnswer(check.solution?.replace(/\$/g, ''));
       setResultSteps(check.steps ?? []);
@@ -491,7 +539,7 @@ function MathProblem({ assignmentId = null, onOpenAssignment, onExit }) {
         className="math-problem-scope-back"
         onClick={() => (onlyOpen ? onExit() : onOpenAssignment(null))}
       >
-        {choosing ? 'All assignments' : 'Exit assignment'}
+        {choosing ? 'Back to assignments' : 'Exit assignment'}
       </button>
     </div>
   );

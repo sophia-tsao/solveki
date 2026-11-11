@@ -254,7 +254,9 @@ a student who gets an assignment all right is "familiar" (6+ days) when they
 finish it and isn't due back the next day; a topic answered mostly wrong is due
 the next day with at least 5 cards; and a single mistake in a day is never
 punished. `tests/test_deck_simulation.py` re-runs that simulation on the real
-functions and asserts the constraints.
+functions and asserts the constraints. The simulation itself lives in
+`tests/deck_sim.py` (`python -m myapp.tests.deck_sim` from `backend/` prints
+the comparison below).
 
 Each stored card has a `kind`:
 
@@ -262,26 +264,31 @@ Each stored card has a `kind`:
   `practice.plan_required`, and placed first:
   - *assignment cards*: each open assignment spreads its remaining cards over
     the days until it's due (`practice.assignment_cards`), at least 4 per topic
-    practised (with one or two cards a single slip is half the evidence), its
-    shakiest topics first. Two assignments sharing a topic take the larger
-    share, since a card counts toward both;
+    practised (with one or two cards a single slip is half the evidence). Topics
+    not answered yet come first, so each gets a turn before any repeats, then
+    the shakiest; a topic that's failing still comes back as a due review. Two
+    assignments sharing a topic take the larger share, since a card counts
+    toward both;
   - *assignment-topic reviews*: a due topic from any of the student's
     assignments gets `20 / ease` cards (8 at the starting ease, 15 at the
     floor), so a topic the student struggles with gets more practice;
   - *lapses*: a selected topic that lapsed yesterday gets its review ahead of
     the rest.
 
-  The required total is capped at 80 cards: assignment cards always fit;
-  yesterday's lapses get their full review if it fits, else 5 cards, never past
-  a hard ceiling of 100; other reviews share what's left, lowest ease first,
-  and any that don't fit stay due until tomorrow.
+  In the default deck the required total is capped at 80 cards: assignment
+  cards always fit; yesterday's lapses get their full review if it fits, else
+  5 cards, never past a hard ceiling of 100; other reviews share what's left,
+  lowest ease first, and any that don't fit stay due until tomorrow. An open
+  assignment's deck is planned within the assignment's card budget instead
+  (below).
 - **pool** — the student's own practice, filling the deck up to
   `questions_per_day` after the required cards. `_generate_problems` weights how
   much of the pool each selected topic gets by *how overdue* it is
   (`_due_weight`): every topic keeps at least one slot (a variety floor) and the
   rest are split by weight with the largest-remainder method, preferring topics
   not already in the deck. So a self-directed student's deck size is still their
-  setting; assignments add to it.
+  setting. Only the default deck and a finished assignment's "practice again"
+  deck take pool cards (`_takes_pool`); an open assignment's deck doesn't.
 - **extra** — added one at a time during the day by `_add_practice`, right
   after the next card, when an answer shows the topic needs more today:
   - a topic that started the day new or lapsed keeps coming back until 3 of its
@@ -291,13 +298,83 @@ Each stored card has a `kind`:
     (a *confirming* card), so one slip on a lone card can't reset it;
   - an assignment due today that still needs cards keeps adding them.
 
-  Extras stop when the deck shows 80 cards.
+  Extras stop when the deck shows 80 cards, or, in an assignment's deck, at its
+  budget.
 
 The deck shows (`_visible_total`) everything up to the last required or extra
-card, and at least `questions_per_day` plus one per extra. Pool cards come after
+card, and, in a deck that takes pool cards, at least `questions_per_day` plus
+one per extra. Pool cards come after
 the required ones they were built with, so lowering the setting mid-day hides
 only unanswered pool cards at the end — display-only, so raising it again shows
 them without regenerating.
+
+### An assignment's card budget
+
+An assignment of N cards never puts more than `practice.max_cards(N)` =
+⌈1.5·N⌉ cards in front of the student in its own decks, over its whole life
+and on any topic (`StudentAssignment.deck_answered` counts them). While an
+assignment is open, its deck is the only one the practice page shows, so it
+also has to carry the student's reviews of older topics, or they'd go
+undone. `_assignment_deck_plan` / `practice.plan_assignment_deck` fill it in
+priority order:
+
+1. **The assignment's own share** (`practice.assignment_cards`). An own topic
+   that's due gets at least a review's worth (a lapse, 5 cards). These count
+   toward the assignment, so they never take room from reviews it would
+   otherwise have.
+2. **Reviews of the student's other due topics**, a 4-card session each (a
+   lapse, 5 cards), most at risk of being forgotten first
+   (`practice.review_urgency`: yesterday's lapses, then days overdue ÷
+   interval, then lowest ease). Reviews may use what the assignment doesn't
+   still need, but never more than ¾ of the extra 0.5·N over its life
+   (`practice.review_room`, `REVIEW_RESERVE`): the other ¼ is kept for a
+   student who struggles on the assignment itself. A topic already planned
+   in another open assignment's deck that day is left to that deck. Reviews
+   that don't fit stay due; the next day's plan takes the most urgent first.
+3. **Extra cards** (learning, confirming, finishing) only while the budget has
+   room (`practice.extra_fits`). A review that grades below a normal pass on
+   its 4 cards gets confirming cards up to a full review (`20 / ease`).
+
+A topic that can't get its full count gets at least 4 cards or none (with
+two, one slip is a lapse), unless the whole deck can't hold 4: a 2-card
+assignment's deck holds 3. Once less than a session of budget is left, and
+none of the assignment's cards are still in the deck (no extra card was just
+added), the assignment completes, at its maximum
+(`max_reached`, "needs help") unless every topic is solid
+(`practice.budget_spent`, `_settle_budget`). Once it completes, its leftover
+cards leave the deck; reviews already planned stay.
+
+**How the rule was chosen.** The simulation (above) was extended to one deck
+per open assignment, multi-topic and overlapping assignments, and a backlog
+of 20 older topics, then run over several candidate policies. With the
+backlog, two weeks, averaged over every teacher pattern and student:
+
+| Policy | Over 1.5·N | C3 misses | Topics overdue at the end | Mean days late | Recall at the end | Cards/day | Strugglers at max |
+|---|---|---|---|---|---|---|---|
+| No budget (before) | 1620 assignments, up to 7.6× | 0 | 0.2 | 0.9 | 0.62 | 39 | 10% |
+| Shared, assignment first | 0 | 26 | 5.8 | 3.7 | 0.57 | 30 | 30% |
+| Half the extra reserved | 0 | 24 | 5.8 | 3.9 | 0.57 | 28 | 16% |
+| **¼ reserved, 4-card reviews (shipped)** | **0** | **23** | **4.8** | **3.5** | **0.58** | **28** | **10%** |
+| Per-day cap (1.5 × the day's share) | 121 | 185 | 10.4 | 6.2 | 0.50 | 23 | 8% |
+
+C3 misses are out of about 880 failed topic-days. "Recall at the end" is the
+simulated student's chance of answering each topic correctly on day 14. Reserving ¾ starved reviews (8.5 topics overdue);
+spreading reviews evenly over the days was worse than doing them as soon as
+they fall due. The budget costs some retention against unlimited reviews
+(0.58 vs 0.62) because reviews can wait a few days, but none are skipped.
+C3 can't always hold under the budget: a student who keeps failing a small
+assignment can spend its whole ⌈1.5·N⌉ in a few days, and then a failed
+topic waits for the assignment to complete; most of the remaining C3 misses
+are that.
+
+How this sits with SM-2: each topic is still graded once a day from that
+day's accuracy, so more or fewer cards change only how reliable the grade
+is, and 4 cards is the fewest where one slip still grades as a normal pass.
+The departure is timing: SM-2 assumes every review happens on its due day,
+and under the budget some are late. A late pass grows the interval from the
+scheduled interval, not the days actually elapsed, and a late lapse costs
+ease like any other, so the algorithm can't tell "forgotten because it
+waited" from "hard".
 
 ### Regenerating on selection changes: the dirty flag
 
@@ -449,8 +526,9 @@ deck (`DeckScope` in `views/deck.py`). Which one the practice page shows
   The Assignments page opens a specific one the same way.
 
 An open assignment's deck holds *its* share of today (other open assignments'
-cards stay in their own decks), the usual reviews and lapses, and pool practice
-up to `questions_per_day`: each deck fills up to the setting on its own. A
+cards stay in their own decks), plus the student's due reviews and extra
+practice, all within the assignment's card budget (see "An assignment's card
+budget"); it takes no pool practice, so `questions_per_day` doesn't apply. A
 finished assignment's deck ("Practice again") is pool practice on just its
 topics, up to `questions_per_day`, with no required cards. The payload of an
 assignment's deck names it (`assignment`, with `open` false when it's done) and

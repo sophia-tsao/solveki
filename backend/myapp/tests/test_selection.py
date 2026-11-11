@@ -5,7 +5,10 @@ from unittest import mock
 from django.test import TestCase, Client
 from django.utils import timezone
 
-from myapp.models import UserTopicSelection, Settings, DailyDeck
+from myapp.models import (
+    Assignment, AssignmentClass, AssignmentTopic, ClassEnrollment, Classroom,
+    UserTopicSelection, Settings, DailyDeck,
+)
 from .factories import make_user, make_course, make_topic, select
 
 
@@ -191,6 +194,63 @@ class SetCourseTopicsSelectedTests(TestCase):
     def test_nonexistent_course(self):
         response = self._set(99999, True)
         self.assertEqual(response.status_code, 404)
+
+
+class AssignedTopicsLockedTests(TestCase):
+    """Topics a teacher assigned can't be deselected by the student."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = make_user()
+        self.client.force_login(self.user)
+        self.course = make_course(course_name="Geometry", grade_level=9)
+        self.assigned = make_topic(self.course, topic_name="Triangles")
+        self.own = make_topic(self.course, topic_name="Circles")
+        teacher = make_user()
+        classroom = Classroom.objects.create(teacher=teacher, name="Period 1", join_code="LOCK01")
+        ClassEnrollment.objects.create(classroom=classroom, student=self.user)
+        assignment = Assignment.objects.create(teacher=teacher, title="HW")
+        AssignmentTopic.objects.create(assignment=assignment, topic=self.assigned)
+        AssignmentClass.objects.create(assignment=assignment, classroom=classroom)
+        select(self.user, self.assigned)
+        select(self.user, self.own)
+
+    def _patch(self, url, is_selected):
+        return self.client.patch(
+            url, data=json.dumps({"is_selected": is_selected}), content_type="application/json",
+        )
+
+    def _selected_ids(self):
+        return set(
+            UserTopicSelection.objects.filter(user=self.user).values_list("topic_id", flat=True)
+        )
+
+    def test_topic_lists_flag_assigned_topics(self):
+        for url in ("/topics/", f"/courses/{self.course.id}/topics"):
+            by_id = {t["id"]: t for t in self.client.get(url).json()["topics"]}
+            self.assertTrue(by_id[self.assigned.id]["assigned"])
+            self.assertFalse(by_id[self.own.id]["assigned"])
+
+    def test_deselecting_assigned_topic_is_refused(self):
+        response = self._patch(f"/topics/{self.assigned.id}/select", False)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn(self.assigned.id, self._selected_ids())
+
+    def test_unassigned_topic_can_still_be_deselected(self):
+        response = self._patch(f"/topics/{self.own.id}/select", False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._selected_ids(), {self.assigned.id})
+
+    def test_deselecting_course_keeps_assigned_topics(self):
+        response = self._patch(f"/courses/{self.course.id}/select", False)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._selected_ids(), {self.assigned.id})
+
+    def test_topic_unlocks_after_leaving_the_class(self):
+        ClassEnrollment.objects.filter(student=self.user).delete()
+        response = self._patch(f"/topics/{self.assigned.id}/select", False)
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(self.assigned.id, self._selected_ids())
 
 
 class TopicToggleDeckRegenerationTests(TestCase):

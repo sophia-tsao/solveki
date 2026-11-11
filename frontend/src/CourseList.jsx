@@ -170,12 +170,15 @@ function CourseList({ onStartDiagnostic, userId }) {
     // the prior header state (from the courses cache) to restore on failure.
     const prevCourse = courses.find(c => c.id === courseID);
     const prevTopics = topicsMap[courseID];
-    patchCourseSelection(courseID, newValue ? 'all' : 'none'); // whole-course toggle -> no mixed state
     if (prevTopics) {
-      setTopicsMap(prev => ({
-        ...prev,
-        [courseID]: prevTopics.map(t => ({ ...t, selection_status: newValue ? 'selected' : 'unselected' })),
+      // Teacher-assigned topics stay selected through a course-wide deselect.
+      const updatedTopics = prevTopics.map(t => ({
+        ...t, selection_status: newValue || t.assigned ? 'selected' : 'unselected',
       }));
+      setTopicsMap(prev => ({ ...prev, [courseID]: updatedTopics }));
+      applyCourseStateFromTopics(courseID, updatedTopics);
+    } else {
+      patchCourseSelection(courseID, newValue ? 'all' : 'none');
     }
     setPendingKey(key, true);
     try {
@@ -186,6 +189,9 @@ function CourseList({ onStartDiagnostic, userId }) {
       });
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       log.info(`Course ${courseID} ${newValue ? 'selected' : 'deselected'}`);
+      // Without its topics loaded we can't tell whether assigned topics kept
+      // the course partially selected, so refetch the real status.
+      if (!prevTopics) queryClient.invalidateQueries({ queryKey: ['courses'] });
     } catch (err) {
       if (prevCourse) patchCourseSelection(courseID, prevCourse.topic_selection_status);
       if (prevTopics) setTopicsMap(prev => ({ ...prev, [courseID]: prevTopics })); // roll back
@@ -225,7 +231,8 @@ function CourseList({ onStartDiagnostic, userId }) {
         <h1 className="course-list-title">Choose what to review</h1>
         <p className="course-list-subtitle">
           Select the courses and topics that you would like to review.
-          Selecting a course selects all of the topics within it.
+          Selecting a course selects all of the topics within it. Topics your
+          teacher assigned stay selected.
         </p>
         {onStartDiagnostic && (
           <button className="course-list-diagnostic" onClick={onStartDiagnostic}>

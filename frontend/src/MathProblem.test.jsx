@@ -62,6 +62,7 @@ beforeEach(() => {
   localDay.mockReset();
   localDay.mockReturnValue('2026-07-20');
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe('MathProblem — initial load', () => {
@@ -289,6 +290,53 @@ describe('MathProblem — answering', () => {
         }),
       { timeout: 2500 },
     );
+  });
+
+  it('reopens a revealed card on its back face after leaving the page', async () => {
+    const steps = [{ text: 'Add the ones' }];
+    apiFetch
+      .mockResolvedValueOnce(deckResponse(ACTIVE_DECK))
+      .mockResolvedValueOnce(CHECK_MISS)
+      .mockResolvedValueOnce(deckResponse({ correct: false, attempts_left: 0, solution: '4', steps }))
+      // Coming back: the backend still has the card's attempts used up.
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, attempt: 2, revealed: { solution: '$4$', steps } }))
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
+    const user = userEvent.setup();
+    const first = renderWithClient(<MathProblem />);
+    await findQuestion(1, 3);
+    await missTwice(user);
+    first.unmount(); // the student changes page...
+
+    const { container } = renderWithClient(<MathProblem />); // ...and comes back
+    expect(await screen.findByText('Incorrect...')).toBeInTheDocument();
+    expect(screen.getByText('The answer is 4')).toBeInTheDocument();
+    expect(container.querySelector('.math-problem-flipper')).toHaveClass('flipped');
+    await user.click(screen.getByRole('button', { name: /step-by-step/i }));
+    expect(screen.getByText(/Add the ones/)).toBeInTheDocument();
+
+    // A report filed now still carries the answer they gave before leaving.
+    await user.click(screen.getByRole('button', { name: 'Report issue' }));
+    await user.click(screen.getByRole('radio', { name: /marked incorrect/ }));
+    await user.click(screen.getByRole('button', { name: 'Submit report' }));
+    await waitFor(
+      () => expect(advanceBody()).toMatchObject({ from_number: 1, report: { user_answer: '98' } }),
+      { timeout: 2500 },
+    );
+  });
+
+  it('opens a card loaded with a reveal on its back face, and Continue moves on', async () => {
+    apiFetch
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, attempt: 2, revealed: { solution: '4', steps: [] } }))
+      .mockResolvedValueOnce(deckResponse({ ...ACTIVE_DECK, current_number: 2 }));
+    const user = userEvent.setup();
+    const { container } = renderWithClient(<MathProblem />);
+    expect(await screen.findByText('The answer is 4')).toBeInTheDocument();
+    expect(container.querySelector('.math-problem-flipper')).toHaveClass('flipped');
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await waitFor(() => expect(advanceBody()).toMatchObject({ outcome: 'incorrect', from_number: 1 }));
+    await findQuestion(2, 3);
+    expect(container.querySelector('.math-problem-flipper')).not.toHaveClass('flipped');
   });
 
   it('requires a description for an "Other" report, and can be cancelled', async () => {
@@ -651,8 +699,8 @@ describe('MathProblem — assignment decks', () => {
   });
 
   const CHOICES = [
-    { assignment_id: 7, title: 'Unit 3', due_at: null, completion_pct: 40, cards_answered: 2 },
-    { assignment_id: 9, title: 'Quiz prep', due_at: null, completion_pct: 0, cards_answered: 0 },
+    { assignment_id: 7, title: 'Unit 3', class_name: 'Period 1', due_at: null, completion_pct: 40, cards_answered: 2 },
+    { assignment_id: 9, title: 'Quiz prep', due_at: null, completion_pct: 0, cards_answered: 0, overdue: true },
   ];
 
   it('lists the open assignments to pick from when there are several', async () => {
@@ -663,6 +711,10 @@ describe('MathProblem — assignment decks', () => {
 
     expect(await screen.findByText('Choose an assignment')).toBeInTheDocument();
     expect(screen.getByText('Unit 3')).toBeInTheDocument();
+    expect(screen.getByText(/^Period 1 · No due date/)).toBeInTheDocument();
+    // A late one (late work allowed) is listed, flagged overdue.
+    expect(screen.getByText(/40% done$/)).toBeInTheDocument();
+    expect(screen.getByText(/0% done · overdue$/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Begin' }));
     expect(onOpenAssignment).toHaveBeenCalledWith(9);
@@ -679,7 +731,7 @@ describe('MathProblem — assignment decks', () => {
     await findQuestion(1, 3);
     expect(apiFetch).toHaveBeenCalledWith('/deck/?today=2026-07-20&assignment=7');
     expect(screen.getByText('Unit 3')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'All assignments' }));
+    await user.click(screen.getByRole('button', { name: 'Back to assignments' }));
     expect(onOpenAssignment).toHaveBeenCalledWith(null);
   });
 
@@ -719,7 +771,7 @@ describe('MathProblem — assignment decks', () => {
     await findQuestion(1, 3);
     // The card names the assignment; with only one open there's no list to go back to.
     expect(screen.getByText('Unit 3')).toHaveClass('math-problem-assignment');
-    expect(screen.queryByRole('button', { name: 'All assignments' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to assignments' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Exit assignment' })).toBeInTheDocument();
 
     await user.type(screen.getByRole('textbox'), '4');
@@ -742,6 +794,14 @@ describe('MathProblem — assignment decks', () => {
     await user.click(screen.getByRole('button', { name: 'Finish it now' }));
     expect(apiFetch).toHaveBeenCalledWith('/deck/finish-now/?today=2026-07-20&assignment=7', { method: 'POST' });
     await findQuestion(5, 12);
+  });
+
+  it("falls back to the practice page when the assignment isn't found", async () => {
+    const onOpenAssignment = vi.fn();
+    apiFetch.mockResolvedValueOnce(deckResponse({ error: 'Assignment not found' }, { ok: false, status: 404 }));
+    renderWithClient(<MathProblem assignmentId={99} onOpenAssignment={onOpenAssignment} />);
+    await waitFor(() => expect(onOpenAssignment).toHaveBeenCalledWith(null));
+    expect(screen.queryByText(/Error:/)).not.toBeInTheDocument();
   });
 
   it('offers nothing more when the assignment has no cards left', async () => {

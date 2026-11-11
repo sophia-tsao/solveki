@@ -61,6 +61,20 @@ def _ensure_selected(student_ids, topics):
     return {row.user_id for row in to_create}
 
 
+def _assigned_topic_ids(student):
+    """Ids of topics a teacher assigned to `student`, which they can't deselect.
+
+    A topic counts as assigned while it's in an assignment given to a class the
+    student is enrolled in (the same reach as `my_assignments`).
+    """
+    class_ids = ClassEnrollment.objects.filter(student=student).values_list("classroom_id", flat=True)
+    return set(
+        AssignmentTopic.objects.filter(
+            assignment__class_links__classroom_id__in=class_ids
+        ).values_list("topic_id", flat=True)
+    )
+
+
 def _start_assignment_for(assignment, classroom_id, student_ids):
     """Put `assignment` into each student's practice (idempotent).
 

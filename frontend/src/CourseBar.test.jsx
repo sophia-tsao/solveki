@@ -59,6 +59,19 @@ describe('CourseBar', () => {
     expect(props.onItemClick).not.toHaveBeenCalled();
   });
 
+  it('locks a teacher-assigned topic so it cannot be deselected', async () => {
+    const { props, user } = setup({
+      topics: [{ id: 1, topic_name: 'Addition', selection_status: 'selected', assigned: true }],
+    });
+    const li = screen.getByText('Addition').closest('li');
+    expect(li).toHaveTextContent('Assigned');
+    const checkbox = li.querySelector('input');
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBeDisabled();
+    await user.click(checkbox);
+    expect(props.onTopicToggle).not.toHaveBeenCalled();
+  });
+
   it('reflects the course-selected checkbox state', () => {
     setup({ courseSelection: 'all' });
     const [courseCheckbox] = screen.getAllByRole('checkbox');

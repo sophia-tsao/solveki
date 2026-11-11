@@ -97,11 +97,16 @@ function CourseBar(props) {
                 {group.topics.map((topic) => (
                   <li key={topic.id}>
                     <span className="topic-name">{topic.topic_name}</span>
+                    {topic.assigned && (
+                      <span className="topic-assigned">Assigned</span>
+                    )}
                     <input
                       type="checkbox"
                       className="topic-checkbox"
                       checked={topic.selection_status === 'selected'}
-                      disabled={props.isTopicPending?.(topic.id)}
+                      // Teacher-assigned topics can't be deselected.
+                      disabled={topic.assigned || props.isTopicPending?.(topic.id)}
+                      title={topic.assigned ? 'Assigned by your teacher' : undefined}
                       onChange={(e) => handleTopicCheckbox(e, topic.id)}
                       onClick={(e) => e.stopPropagation()}
                     />

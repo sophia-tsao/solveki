@@ -9,7 +9,10 @@ from unittest import mock
 
 from django.test import TestCase, SimpleTestCase, Client
 
-from myapp.models import UserTopicSelection, TopicReview
+from myapp.models import (
+    Assignment, AssignmentClass, AssignmentTopic, ClassEnrollment, Classroom,
+    UserTopicSelection, TopicReview,
+)
 from myapp.diagnostic_config import (
     COURSE_UNITS,
     aggregate_learned_band,
@@ -373,4 +376,21 @@ class DiagnosticSubmitTests(TestCase):
         self._submit({"current_course_id": self.courses["Grade 8"].id, "current_unit_key": "g8-u2"})
         self.assertFalse(
             UserTopicSelection.objects.filter(user=self.user, topic=stray_topic).exists()
+        )
+
+    def test_retake_keeps_teacher_assigned_topics(self):
+        # A topic a teacher assigned isn't the diagnostic's to clear.
+        algebra2 = make_course(course_name="Algebra II", grade_level=11)
+        assigned = make_topic(algebra2, topic_name="Logarithm", generator_name="gcd")
+        teacher = make_user()
+        classroom = Classroom.objects.create(teacher=teacher, name="Period 1", join_code="DIAG01")
+        ClassEnrollment.objects.create(classroom=classroom, student=self.user)
+        assignment = Assignment.objects.create(teacher=teacher, title="HW")
+        AssignmentTopic.objects.create(assignment=assignment, topic=assigned)
+        AssignmentClass.objects.create(assignment=assignment, classroom=classroom)
+        UserTopicSelection.objects.create(user=self.user, topic=assigned)
+
+        self._submit({"current_course_id": self.courses["Grade 8"].id, "current_unit_key": "g8-u2"})
+        self.assertTrue(
+            UserTopicSelection.objects.filter(user=self.user, topic=assigned).exists()
         )

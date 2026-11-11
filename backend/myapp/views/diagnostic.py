@@ -34,6 +34,7 @@ from ..diagnostic_config import (
 from .common import _require_auth
 from .problems import _make_problem_for_topic
 from .deck import _regenerate_deck_tail, _client_today
+from .assignments import _assigned_topic_ids
 
 logger = logging.getLogger(__name__)
 
@@ -243,10 +244,13 @@ def diagnostic_submit(request):
             _seed(prior, sorted(_usable_topics(prior), key=lambda t: t.id), "proficient")
 
     # Reset to a clean slate so a retake reflects only the new results (any topics
-    # selected before — by a prior diagnostic or by hand — are cleared). Review
-    # history is left untouched: _seed_reviews skips topics that already have a
-    # schedule, so genuine practice progress survives a retake.
-    UserTopicSelection.objects.filter(user=user).delete()
+    # selected before — by a prior diagnostic or by hand — are cleared), except
+    # topics a teacher assigned, which stay selected. Review history is left
+    # untouched: _seed_reviews skips topics that already have a schedule, so
+    # genuine practice progress survives a retake.
+    UserTopicSelection.objects.filter(user=user).exclude(
+        topic_id__in=_assigned_topic_ids(user)
+    ).delete()
     UserTopicSelection.objects.bulk_create(selections, ignore_conflicts=True)
     _seed_reviews(user, seeds)
 

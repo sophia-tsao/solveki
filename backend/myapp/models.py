@@ -400,6 +400,11 @@ class StudentAssignment(models.Model):
     # The day the student chose "Finish it now": it counts as the assignment's
     # last day, so all its remaining cards are due then (see `deck._days_left`).
     finish_on = models.DateField(blank=True, null=True)
+    # Cards the student has stepped past in this assignment's own decks, on any
+    # topic, and the reviews of other topics among them: the assignment's
+    # decks hold at most `practice.max_cards` cards over its life.
+    deck_answered = models.IntegerField(default=0)
+    review_answered = models.IntegerField(default=0)
 
     class Meta:
         constraints = [

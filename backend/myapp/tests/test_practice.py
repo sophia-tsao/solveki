@@ -139,3 +139,65 @@ class PlanRequiredTests(SimpleTestCase):
         self.assertEqual({plan[t] for t in plan if t != 1}, {practice.LAPSE_REVIEW_CARDS})
         self.assertLessEqual(sum(plan.values()), practice.HARD_CAP)
         self.assertGreater(sum(plan.values()), practice.DAILY_CAP)
+
+
+class AssignmentBudgetTests(SimpleTestCase):
+    """An open assignment's decks hold at most max_cards cards; its own topics come first."""
+
+    def test_review_limit_leaves_a_reserve_for_the_assignment(self):
+        # N=20: 30 cards in all, 10 beyond the count; reviews get 3/4 of those.
+        self.assertEqual(practice.review_limit(20), 7)
+        self.assertEqual(practice.review_room(20, 0, 0, 20), 7)
+
+    def test_review_room_shrinks_as_the_assignment_needs_more(self):
+        self.assertEqual(practice.review_room(20, 10, 0, 18), 2)  # 30 - 10 - 18
+        self.assertEqual(practice.review_room(20, 10, 0, 25), 0)
+        self.assertEqual(practice.review_room(20, 5, 7, 0), 0)  # review limit used up
+
+    def test_extra_fits_never_past_max_cards(self):
+        self.assertTrue(practice.extra_fits(10, 14, 0, 0, review=False))
+        self.assertFalse(practice.extra_fits(10, 15, 0, 0, review=False))
+        # A review card also needs review room.
+        self.assertFalse(practice.extra_fits(10, 10, 3, 0, review=True))
+        self.assertTrue(practice.extra_fits(10, 10, 2, 0, review=True))
+
+    def test_budget_spent_once_a_session_no_longer_fits(self):
+        self.assertFalse(practice.budget_spent(10, 11))
+        self.assertTrue(practice.budget_spent(10, 12))
+
+    def test_urgency_puts_lapses_then_the_most_overdue_for_their_interval_first(self):
+        keys = {
+            "lapsed": practice.review_urgency(2.5, 1, 0, True),
+            "3 late on 2": practice.review_urgency(2.5, 2, 3, False),
+            "3 late on 30": practice.review_urgency(1.3, 30, 3, False),
+        }
+        self.assertEqual(sorted(keys, key=keys.get), ["lapsed", "3 late on 2", "3 late on 30"])
+
+    def test_plan_keeps_within_the_cap_and_reviews_the_most_urgent(self):
+        due = {t: (4, practice.review_urgency(2.0, 3, t, False)) for t in range(10, 30)}
+        plan, reviews = practice.plan_assignment_deck({1: 4}, due, {1}, cap=18, room=6, still_needed=12)
+        self.assertEqual(plan, {1: 4})
+        self.assertEqual(list(reviews), [29])  # most overdue; one 4-card review fits 6
+        self.assertLessEqual(sum(plan.values()) + sum(reviews.values()), 18)
+
+    def test_own_due_topic_gets_a_lapse_review_without_spending_review_room(self):
+        due = {1: (practice.LAPSE_REVIEW_CARDS, practice.review_urgency(1.7, 1, 0, True)),
+               2: (4, practice.review_urgency(2.5, 3, 1, False))}
+        plan, reviews = practice.plan_assignment_deck({1: 4}, due, {1}, cap=20, room=4, still_needed=10)
+        self.assertEqual(plan, {1: 5})
+        self.assertEqual(reviews, {2: 4})
+
+    def test_trim_never_leaves_a_topic_under_a_session(self):
+        plan, reviews = practice.plan_assignment_deck({1: 4, 2: 4}, {}, {1, 2}, cap=6, room=0, still_needed=8)
+        self.assertEqual(plan, {1: 4})
+        self.assertEqual(reviews, {})
+
+    def test_a_deck_too_small_for_a_session_still_gets_what_fits(self):
+        # A 2-card assignment holds 3 cards: a 4-card sitting is cut to 3.
+        plan, _ = practice.plan_assignment_deck({1: 4}, {}, {1}, cap=3, room=0, still_needed=2)
+        self.assertEqual(plan, {1: 3})
+
+    def test_a_lapse_that_does_not_fully_fit_gets_a_session(self):
+        due = {1: (practice.LAPSE_REVIEW_CARDS, practice.review_urgency(1.7, 1, 0, True))}
+        plan, _ = practice.plan_assignment_deck({2: 4}, due, {1, 2}, cap=8, room=0, still_needed=4)
+        self.assertEqual(plan, {2: 4, 1: 4})

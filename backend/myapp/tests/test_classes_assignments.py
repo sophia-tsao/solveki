@@ -481,6 +481,87 @@ class StartAssignmentTests(TestCase):
         # The deck kept going past the teacher's 4 to give the extra practice.
         self.assertGreaterEqual(DailyDeck.objects.get(user=self.student).current_index, 6)
 
+    def test_failing_topic_does_not_crowd_out_the_others(self, _gen):
+        # 8 cards over a week is one 4-card topic a day. Missing the first
+        # topic mustn't keep the share on it: the other topic gets its turn,
+        # and the failed one comes back as a due review.
+        other = make_topic(self.course, topic_name="Other", generator_name="gcd")
+        due = timezone.localtime() + timezone.timedelta(days=6)
+        a, _ = self._setup_assignment(deck_size=8, topics=[self.picked, other], due_at=due)
+        self.client.post(f"/assignments/{a['id']}/play/")
+        deck = DailyDeck.objects.get(user=self.student, assignment_id=a["id"])
+        required = {p["topic_id"] for p in deck.problems if p.get("kind") == "required"}
+        self.assertEqual(required, {self.picked.id})
+        for _ in range(4):
+            self._advance("incorrect", a)
+
+        from myapp.views.deck import DeckScope, _required_plan
+        tomorrow = timezone.localdate() + timezone.timedelta(days=1)
+        plan = _required_plan(self.student, tomorrow, DeckScope(a["id"]))
+        self.assertEqual(plan[other.id], 4)
+        # The 12-card budget has 8 left, so the lapse review gets the other 4.
+        self.assertEqual(plan[self.picked.id], 4)
+
+    def test_assignment_deck_never_holds_more_than_max_cards(self, _gen):
+        # 25 cards over 5 topics, due today, every answer wrong: learning
+        # cards on each topic used to grow the deck to 75.
+        topics = [self.picked] + [
+            make_topic(self.course, topic_name=f"T{i}", generator_name="gcd") for i in range(4)
+        ]
+        a, _ = self._setup_assignment(deck_size=25, topics=topics, due_at=self._due_today())
+        self.client.post(f"/assignments/{a['id']}/play/")
+        for _ in range(100):
+            data = self._advance("incorrect", a)
+            self.assertLessEqual(data.get("total", 0), 38)
+            if data.get("completed"):
+                break
+        sa = self._row(a)
+        self.assertEqual(sa.status, StudentAssignment.COMPLETED)
+        self.assertTrue(sa.max_reached)
+        self.assertLessEqual(sa.deck_answered, 38)
+        deck = DailyDeck.objects.get(user=self.student, assignment_id=a["id"])
+        self.assertLessEqual(len(deck.problems), 38)
+
+    def _backlog(self, count):
+        """`count` older selected topics due for review, the higher the index the more overdue."""
+        today = timezone.localdate()
+        topics = []
+        for i in range(count):
+            topic = make_topic(self.course, topic_name=f"Old{i}", generator_name="gcd")
+            select(self.student, topic)
+            TopicReview.objects.create(
+                user=self.student, topic=topic, ease=2.0, interval=4, repetitions=2,
+                due_date=today - timezone.timedelta(days=i),
+            )
+            topics.append(topic)
+        return topics
+
+    def test_reviews_of_older_topics_fit_the_assignments_budget(self, _gen):
+        backlog = self._backlog(20)
+        week = timezone.localtime() + timezone.timedelta(days=6)
+        a, _ = self._setup_assignment(deck_size=12, due_at=week)
+        self.client.post(f"/assignments/{a['id']}/play/")
+        deck = DailyDeck.objects.get(user=self.student, assignment_id=a["id"])
+        self.assertLessEqual(len(deck.problems), 18)
+        self.assertFalse(any(p["kind"] == "pool" for p in deck.problems))
+        reviewed = {p["topic_id"] for p in deck.problems} - {self.picked.id}
+        # The most overdue topic gets the one review that fits; the rest stay due.
+        self.assertEqual(reviewed, {backlog[-1].id})
+        self.assertEqual(
+            TopicReview.objects.filter(user=self.student, due_date__lte=timezone.localdate()).count(), 20,
+        )
+
+    def test_two_open_assignments_never_share_a_review(self, _gen):
+        backlog = self._backlog(4)
+        week = timezone.localtime() + timezone.timedelta(days=6)
+        first, _ = self._setup_assignment(deck_size=12, due_at=week)
+        other = make_topic(self.course, topic_name="Other", generator_name="gcd")
+        second, _ = self._setup_assignment(deck_size=12, topics=[other], due_at=week)
+        self._deck(first)
+        self._deck(second)
+        reviews = [self._deck_topics(x) - {self.picked.id, other.id} for x in (first, second)]
+        self.assertEqual(reviews, [{backlog[3].id}, {backlog[2].id}])
+
     def test_student_who_recovers_finishes_before_the_maximum(self, _gen):
         a, _ = self._setup_assignment(deck_size=4, due_at=self._due_today())
         self.client.post(f"/assignments/{a['id']}/play/")
@@ -640,7 +721,8 @@ class StartAssignmentTests(TestCase):
 
         small, _ = self._setup_assignment(deck_size=2)
         big, _ = self._setup_assignment(deck_size=4)
-        self.assertEqual(self._deck(small)["total"], 4)
+        # A sitting is 4 cards, but a 2-card assignment's decks hold at most 3.
+        self.assertEqual(self._deck(small)["total"], 3)
         for _ in range(2):
             self._advance(assignment=small)
         statuses = dict(
@@ -688,6 +770,18 @@ class StartAssignmentTests(TestCase):
         # Its deck opens from the list like any open assignment's.
         self.assertEqual(self._deck(fresh)["assignment"]["id"], fresh["id"])
 
+    def test_late_assignments_are_listed_only_when_late_work_is_allowed(self, _gen):
+        past = timezone.now() - timezone.timedelta(days=1)
+        upcoming, _ = self._setup_assignment(due_at=timezone.now() + timezone.timedelta(days=2))
+        undated, _ = self._setup_assignment()
+        lenient, _ = self._setup_assignment(due_at=past, allow_late=True)
+        self._setup_assignment(due_at=past, allow_late=False)
+        by_id = {c["assignment_id"]: c for c in self._deck()["choose"]}
+        self.assertEqual(set(by_id), {upcoming["id"], undated["id"], lenient["id"]})
+        self.assertTrue(by_id[lenient["id"]]["overdue"])
+        self.assertFalse(by_id[upcoming["id"]]["overdue"])
+        self.assertEqual(by_id[upcoming["id"]]["class_name"], "A")
+
     def test_an_assignments_deck_carries_only_its_own_cards(self, _gen):
         settings = Settings.load(self.student)
         settings.questions_per_day = 1
@@ -706,14 +800,18 @@ class StartAssignmentTests(TestCase):
         self.assertEqual(self._deck(a)["current_number"], 2)
         self.assertEqual(self._deck(b)["current_number"], 1)
 
-    def test_each_deck_fills_up_to_the_daily_setting(self, _gen):
+    def test_assignment_decks_take_no_pool_practice(self, _gen):
         settings = Settings.load(self.student)
         settings.questions_per_day = 10
         settings.save(update_fields=["questions_per_day"])
         a, _ = self._setup_assignment(deck_size=2)
         b, _ = self._setup_assignment(deck_size=2)
-        self.assertEqual(self._deck(a)["total"], 10)
-        self.assertEqual(self._deck(b)["total"], 10)
+        # Each holds just its budgeted work, at most 1.5 x 2 cards, not the
+        # daily setting.
+        self.assertEqual(self._deck(a)["total"], 3)
+        self.assertEqual(self._deck(b)["total"], 3)
+        deck = DailyDeck.objects.get(user=self.student, assignment_id=a["id"])
+        self.assertFalse(any(p["kind"] == "pool" for p in deck.problems))
 
     def test_finished_assignment_practices_again_on_its_topics(self, _gen):
         settings = Settings.load(self.student)

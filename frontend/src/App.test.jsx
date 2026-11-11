@@ -12,7 +12,16 @@ vi.mock('./auth.js', () => ({ fetchMe: vi.fn() }));
 vi.mock('./logger.js', () => ({
   createLogger: () => ({ debug() {}, info() {}, warn() {}, error() {} }),
 }));
-vi.mock('./MathProblem.jsx', () => ({ default: () => <div>math-page</div> }));
+vi.mock('./MathProblem.jsx', () => ({
+  default: ({ assignmentId, onOpenAssignment }) => (
+    <div>
+      math-page
+      <span>deck-{assignmentId ?? 'none'}</span>
+      <button onClick={() => onOpenAssignment(7)}>open-deck-7</button>
+      <button onClick={() => onOpenAssignment(null)}>back-to-list</button>
+    </div>
+  ),
+}));
 vi.mock('./Dashboard.jsx', () => ({ default: () => <div>dashboard-page</div> }));
 vi.mock('./CourseList.jsx', () => ({ default: () => <div>courses-page</div> }));
 vi.mock('./Settings.jsx', () => ({
@@ -157,6 +166,25 @@ describe('App — routing', () => {
     await user.click(screen.getByText('go-dashboard'));
     expect(screen.getByText('dashboard-page')).toBeInTheDocument();
     expect(window.location.hash).toBe('#/dashboard');
+  });
+
+  it("returns the Practice link to the assignment deck the student left", async () => {
+    fetchMe.mockResolvedValue(AUTHED);
+    const user = userEvent.setup();
+    renderWithClient(<App />);
+    await user.click(await screen.findByText('open-deck-7'));
+    expect(window.location.hash).toBe('#/math/7');
+
+    await user.click(screen.getByText('go-dashboard'));
+    await user.click(screen.getByText('go-math'));
+    expect(screen.getByText('deck-7')).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/math/7');
+
+    // Going back to the list forgets the deck.
+    await user.click(screen.getByText('back-to-list'));
+    await user.click(screen.getByText('go-dashboard'));
+    await user.click(screen.getByText('go-math'));
+    expect(screen.getByText('deck-none')).toBeInTheDocument();
   });
 
   it('follows browser hashchange events (back/forward)', async () => {

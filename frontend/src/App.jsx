@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import CourseList from './CourseList.jsx';
 import MathProblem from './MathProblem.jsx';
@@ -105,6 +105,15 @@ function App() {
     }
   }, [user, route]);
 
+  // The assignment deck the practice page last showed (null for the review deck
+  // or the assignment list), so the header's Practice link returns the student
+  // to the card they left rather than the list. Leaving a deck through its own
+  // "Back to assignments" / "Exit assignment" button resets it.
+  const practiceDeck = useRef(null);
+  useEffect(() => {
+    if (route.page === "math") practiceDeck.current = route.id;
+  }, [route]);
+
   // `params` adds page context to the hash (e.g. { class: 3 }). `forRole`
   // overrides the current role for the page-validity check. It's needed right
   // after a role is chosen, when the ['me'] session update hasn't propagated
@@ -144,6 +153,7 @@ function App() {
 
   function handleLoggedOut() {
     setSession(null);
+    practiceDeck.current = null;
     window.location.hash = "#/";
     setRoute({ page: "math", id: null, params: {} });
   }
@@ -170,7 +180,11 @@ function App() {
   const paramId = (key) => (params[key] && /^\d+$/.test(params[key]) ? Number(params[key]) : null);
   return (
     <div className="app-shell">
-      <Header currentPage={page} role={role} linkClicked={(p) => navigate(p)} />
+      <Header
+        currentPage={page}
+        role={role}
+        linkClicked={(p) => navigate(p, p === "math" ? practiceDeck.current : null)}
+      />
       <main className="app-main">
         {/* Student pages */}
         {page === "math" && (

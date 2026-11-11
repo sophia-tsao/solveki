@@ -14,6 +14,10 @@ student types (see DESIGN.md, "Deck sizing").
   `HARD_CAP`); reviews that don't fit stay due until tomorrow.
 - An assignment needs at least its card count `N`, then more while any of its
   topics isn't solid, up to `MAX_CARDS_MULTIPLIER * N`.
+- An open assignment's decks hold at most `MAX_CARDS_MULTIPLIER * N` cards over
+  its life, on any topic. Its own topics come first; reviews of the student's
+  other due topics, most at risk of being forgotten first, use what's left, up
+  to `1 - REVIEW_RESERVE` of the extra `N / 2` (`plan_assignment_deck`).
 """
 import math
 
@@ -34,6 +38,9 @@ HARD_CAP = 100
 MAX_TOPIC_CARDS_PER_DAY = 15
 # An assignment never asks for more than this multiple of its card count.
 MAX_CARDS_MULTIPLIER = 1.5
+# Share of an assignment's extra cards (beyond its count) kept for its own
+# topics; reviews of the student's other topics may use the rest.
+REVIEW_RESERVE = 0.25
 # Assignments with no due date are spread over this many days.
 DEFAULT_ASSIGNMENT_DAYS = 7
 # Finishing an assignment at this accuracy on a topic lifts the topic to at
@@ -90,6 +97,108 @@ def cards_to_solid(outcomes):
 def max_cards(deck_size):
     """The most cards an assignment of `deck_size` can ask for."""
     return math.ceil(MAX_CARDS_MULTIPLIER * deck_size)
+
+
+def review_limit(deck_size):
+    """Most cards an assignment's decks give to reviews of other topics over its life."""
+    return int((max_cards(deck_size) - deck_size) * (1 - REVIEW_RESERVE))
+
+
+def review_room(deck_size, deck_cards, review_cards_so_far, still_needed):
+    """Cards reviews of other topics may still take in an assignment's decks.
+
+    `deck_cards` is the cards its decks hold so far (answered, plus reviews
+    planned but not answered yet), `review_cards_so_far` the reviews among them,
+    and `still_needed` the cards on its own topics it still needs. Those come
+    first: reviews get what's left of `max_cards` after them, and no more than
+    `review_limit` in all, so a struggling student keeps room to practise.
+    """
+    flex = max_cards(deck_size) - deck_cards - still_needed
+    return max(0, min(flex, review_limit(deck_size) - review_cards_so_far))
+
+
+def extra_fits(deck_size, deck_cards, review_cards_so_far, still_needed, review):
+    """True if an assignment's decks can take one more extra card.
+
+    Never past `max_cards`; a card reviewing another topic (`review`) also
+    needs `review_room`. Arguments as for `review_room`, counting every card
+    in the decks, answered or not.
+    """
+    if deck_cards >= max_cards(deck_size):
+        return False
+    return not review or review_room(deck_size, deck_cards, review_cards_so_far, still_needed) > 0
+
+
+def budget_spent(deck_size, deck_cards):
+    """True once an assignment's decks have no room left for a whole session."""
+    return max_cards(deck_size) - deck_cards < MIN_SESSION
+
+
+def review_urgency(ease, interval, days_overdue, lapsed):
+    """Sort key putting the reviews most at risk of being forgotten first.
+
+    A topic that lapsed yesterday leads (it's being relearned), then the most
+    overdue relative to its interval (3 days late on a 2-day interval is
+    riskier than on a 30-day one), then the lowest ease.
+    """
+    return (not lapsed, -days_overdue / max(1, interval), ease)
+
+
+def plan_assignment_deck(share, due, own, cap, room, still_needed):
+    """Cards an open assignment's deck needs today: `(own_plan, review_plan)`.
+
+    - `share`: `{topic_id: cards}` of today's share (`assignment_cards`), in
+      priority order, less what's already answered today.
+    - `due`: `{topic_id: (cards, urgency)}` for the due topics the deck may
+      review, `cards` being a review's worth less what's answered today
+      (`LAPSE_REVIEW_CARDS` for a lapse, else `MIN_SESSION`).
+    - `own`: the assignment's topic ids.
+    - `cap`: cards the deck may still hold (`max_cards` less what its decks
+      already held); `room`: `review_room`; `still_needed` as there.
+
+    An own topic that's due gets up to a review's worth, which counts toward
+    the assignment, so only cards beyond `still_needed` come out of `room`.
+    The plan is trimmed to `cap` from its lowest-priority end. Other due
+    topics follow, most urgent first, while they fit `room` and `cap`; the
+    rest stay due until another day. A topic that doesn't get its full
+    count still gets at least `MIN_SESSION` cards, or none (one slip on two
+    cards would be half the evidence), unless the deck can't hold a session
+    at all.
+    """
+    plan = {tid: cards for tid, cards in share.items() if cards > 0}
+    ordered = sorted(due, key=lambda t: (due[t][1], t))
+    floor = min(MIN_SESSION, cap)
+
+    def flex(on_topic):
+        return max(0, on_topic - still_needed)
+
+    for tid in ordered:
+        want = due[tid][0] - plan.get(tid, 0)
+        if tid not in own or want <= 0:
+            continue
+        total = sum(plan.values())
+        extra = min(want, cap - total)
+        if extra <= 0 or plan.get(tid, 0) + extra < min(floor, due[tid][0]):
+            continue
+        room = max(0, room - (flex(total + extra) - flex(total)))
+        plan[tid] = plan.get(tid, 0) + extra
+    while sum(plan.values()) > cap:
+        last = next(reversed(plan))
+        cut = plan[last] - (sum(plan.values()) - cap)
+        if cut >= floor:
+            plan[last] = cut
+        else:
+            del plan[last]
+    reviews = {}
+    for tid in ordered:
+        if tid in own:
+            continue
+        cards = min(due[tid][0], room, cap - sum(plan.values()) - sum(reviews.values()))
+        if cards <= 0 or cards < min(floor, due[tid][0]):
+            continue
+        reviews[tid] = cards
+        room -= cards
+    return plan, reviews
 
 
 def cards_needed(deck_size, answered, outcomes_by_topic):

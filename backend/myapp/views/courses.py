@@ -9,6 +9,7 @@ from ..models import Course, Topic, UserTopicSelection
 from ..diagnostic_config import topic_order_key, unit_for_topic
 from .common import _require_auth
 from .deck import _mark_deck_stale, _client_today
+from .assignments import _assigned_topic_ids
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ def view_topics(request):
     selected_ids = set(
         UserTopicSelection.objects.filter(user=request.user).values_list("topic_id", flat=True)
     )
+    assigned_ids = _assigned_topic_ids(request.user)
     # Group by course, then order within a course by its unit taxonomy so topics
     # read in curriculum unit order rather than insertion (id) order.
     ordered = sorted(
@@ -78,6 +80,8 @@ def view_topics(request):
             "topic_name": topic.topic_name,
             "course_id": topic.course_id,
             "selection_status": "selected" if topic.id in selected_ids else "unselected",
+            # Assigned by a teacher: stays selected, and the student can't deselect it.
+            "assigned": topic.id in assigned_ids,
             "unit_key": unit["key"] if unit else None,
             "unit_name": unit["name"] if unit else None,
         })
@@ -92,6 +96,7 @@ def view_course_topics(request, courseID):
     selected_ids = set(
         UserTopicSelection.objects.filter(user=request.user).values_list("topic_id", flat=True)
     )
+    assigned_ids = _assigned_topic_ids(request.user)
     course = Course.objects.get(id=courseID)
     # List topics in curriculum unit order (unit 1's topics first, …), not the
     # order they happened to be inserted.
@@ -108,6 +113,8 @@ def view_course_topics(request, courseID):
             "course_id": topic.course_id,
             "generator_name": topic.generator_name,
             "selection_status": "selected" if topic.id in selected_ids else "unselected",
+            # Assigned by a teacher: stays selected, and the student can't deselect it.
+            "assigned": topic.id in assigned_ids,
             "unit_key": unit["key"] if unit else None,
             "unit_name": unit["name"] if unit else None,
         })
@@ -126,6 +133,11 @@ def toggle_topic(request, topicID):
         return JsonResponse({"error": "Topic not found"}, status=404)
     body = json.loads(request.body)
     is_selected = body["is_selected"]
+    if not is_selected and topic.id in _assigned_topic_ids(request.user):
+        return JsonResponse(
+            {"error": "This topic was assigned by your teacher and can't be deselected."},
+            status=403,
+        )
     if is_selected:
         UserTopicSelection.objects.get_or_create(user=request.user, topic=topic)
     else:
@@ -160,7 +172,10 @@ def set_course_topics_selected(request, courseID):
             ignore_conflicts=True,
         )
     else:
-        UserTopicSelection.objects.filter(user=request.user, topic__in=topics).delete()
+        # Topics a teacher assigned stay selected; only the rest are cleared.
+        UserTopicSelection.objects.filter(user=request.user, topic__in=topics).exclude(
+            topic_id__in=_assigned_topic_ids(request.user)
+        ).delete()
     logger.info(
         "User %s %s all %d topics in course %s", request.user.id,
         "selected" if new_value else "deselected", len(topics), courseID,

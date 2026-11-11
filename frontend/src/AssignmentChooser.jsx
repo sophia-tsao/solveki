@@ -3,7 +3,8 @@ import './Assignments.css';
 
 // The practice page when several assignments are open: each has its own deck
 // for the day, so the student picks which one to work on. `choices` come from
-// the deck endpoint's `choose` payload, soonest due first.
+// the deck endpoint's `choose` payload, soonest due first: every upcoming
+// assignment, plus past-due ones that still allow late work (`overdue`).
 function AssignmentChooser({ choices, onOpen }) {
   return (
     <div className="assignments-page">
@@ -14,8 +15,10 @@ function AssignmentChooser({ choices, onOpen }) {
             <div className="assignments-item-main">
               <span className="assignments-item-title">{a.title}</span>
               <span className="assignments-item-meta">
+                {a.class_name && `${a.class_name} · `}
                 {formatDue(a.due_at)}
                 {` · ${a.completion_pct ?? 0}% done`}
+                {a.overdue && ' · overdue'}
               </span>
             </div>
             <button className="assignments-item-action" onClick={() => onOpen(a.assignment_id)}>
